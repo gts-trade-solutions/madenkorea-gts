@@ -251,6 +251,43 @@ function Editor({ productId }: Props) {
   const pendingPatchRef = useRef<Partial<StoryBlock> | null>(null);
   const pendingTargetRef = useRef<string | null>(null);
 
+  // Debounced cache-bust for the public product page. The customer page
+  // wraps the block fetch in `unstable_cache` and the route in
+  // `revalidate = 300`, so without this every admin edit lingers on the
+  // storefront for up to five minutes.
+  const revalidateTimerRef = useRef<number | null>(null);
+  const requestRevalidate = useCallback(() => {
+    if (revalidateTimerRef.current) {
+      window.clearTimeout(revalidateTimerRef.current);
+    }
+    revalidateTimerRef.current = window.setTimeout(async () => {
+      revalidateTimerRef.current = null;
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const token = s?.session?.access_token;
+        await fetch("/api/admin/story-blocks/revalidate", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ productId }),
+        });
+      } catch {
+        // Best-effort — admin still saw their change locally.
+      }
+    }, 1500);
+  }, [productId]);
+
+  useEffect(() => {
+    return () => {
+      if (revalidateTimerRef.current) {
+        window.clearTimeout(revalidateTimerRef.current);
+      }
+    };
+  }, []);
+
   // Load blocks
   useEffect(() => {
     let cancelled = false;
@@ -331,7 +368,8 @@ function Editor({ productId }: Props) {
     window.setTimeout(() => {
       setSaveStatus((s) => (s === "saved" ? "idle" : s));
     }, 1200);
-  }, []);
+    requestRevalidate();
+  }, [requestRevalidate]);
 
   const queuePatch = useCallback(
     (id: string, patch: Partial<StoryBlock>) => {
@@ -471,8 +509,9 @@ function Editor({ productId }: Props) {
       setServerSnapshot((prev) => ({ ...prev, [created.id]: created }));
       setSelectedId(created.id);
       setPickerOpen(false);
+      requestRevalidate();
     },
-    [blocks.length, productId]
+    [blocks.length, productId, requestRevalidate]
   );
 
   // ── Delete block ──────────────────────────────────────────────────
@@ -541,7 +580,8 @@ function Editor({ productId }: Props) {
     );
 
     toast.success("Block deleted");
-  }, [blocks, confirmDelete, selectedId]);
+    requestRevalidate();
+  }, [blocks, confirmDelete, selectedId, requestRevalidate]);
 
   // ── Reorder ───────────────────────────────────────────────────────
   const sensors = useSensors(
@@ -581,9 +621,11 @@ function Editor({ productId }: Props) {
       const firstError = results.find((r) => r.error)?.error;
       if (firstError) {
         toast.error(`Reorder failed: ${firstError.message}`);
+      } else {
+        requestRevalidate();
       }
     },
-    [blocks]
+    [blocks, requestRevalidate]
   );
 
   /** Apply a tidy-grid reorder produced by lib/gridPacker. */
@@ -618,9 +660,10 @@ function Editor({ productId }: Props) {
         toast.error(`Tidy failed: ${firstError.message}`);
       } else {
         toast.success("Grid tidied");
+        requestRevalidate();
       }
     },
-    [blocks]
+    [blocks, requestRevalidate]
   );
 
   // ── Upload helper ─────────────────────────────────────────────────

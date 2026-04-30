@@ -5,8 +5,24 @@ export const MEMBERSHIP_PLAN_NAME = "K-Plus";
 export const MEMBERSHIP_PRICE = 199;
 export const MEMBERSHIP_DURATION_DAYS = 90;
 
+/**
+ * Hard-coded fallbacks. Live values are stored in `public.store_settings`
+ * and read via `lib/storeSettings.ts` (server) or `useShippingConfig`
+ * (client). These constants are only used when the DB is unreachable
+ * or the row is missing.
+ */
 export const DELIVERY_THRESHOLD = 2000;
 export const DEFAULT_SHIPPING_FEE = 149;
+
+export type ShippingConfig = {
+  deliveryThreshold: number;
+  defaultShippingFee: number;
+};
+
+export const DEFAULT_SHIPPING_CONFIG: ShippingConfig = {
+  deliveryThreshold: DELIVERY_THRESHOLD,
+  defaultShippingFee: DEFAULT_SHIPPING_FEE,
+};
 
 export type MembershipRow = {
   id?: string;
@@ -39,26 +55,28 @@ export function hasActiveMembership(
 
 export function computeShippingFee(
   subtotal: number,
-  membership?: Pick<MembershipRow, "status" | "ends_at"> | null
+  membership?: Pick<MembershipRow, "status" | "ends_at"> | null,
+  config: ShippingConfig = DEFAULT_SHIPPING_CONFIG
 ) {
   if (hasActiveMembership(membership)) return 0;
-  if (subtotal >= DELIVERY_THRESHOLD) return 0;
-  return DEFAULT_SHIPPING_FEE;
+  if (subtotal >= config.deliveryThreshold) return 0;
+  return config.defaultShippingFee;
 }
 
 export function shippingMessage(
   subtotal: number,
-  membership?: Pick<MembershipRow, "status" | "ends_at"> | null
+  membership?: Pick<MembershipRow, "status" | "ends_at"> | null,
+  config: ShippingConfig = DEFAULT_SHIPPING_CONFIG
 ) {
   if (hasActiveMembership(membership)) {
     return `${MEMBERSHIP_PLAN_NAME} benefit applied: Free delivery`;
   }
 
-  if (subtotal >= DELIVERY_THRESHOLD) {
+  if (subtotal >= config.deliveryThreshold) {
     return "Free delivery applied";
   }
 
-  return `Free delivery on orders above ₹${DELIVERY_THRESHOLD.toLocaleString(
+  return `Free delivery on orders above ₹${config.deliveryThreshold.toLocaleString(
     "en-IN"
   )}`;
 }

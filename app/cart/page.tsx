@@ -19,12 +19,12 @@ import { useCart } from "@/lib/contexts/CartContext";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import {
   computeShippingFee,
-  DELIVERY_THRESHOLD,
   shippingMessage,
   hasActiveMembership,
   getActiveMembership,
   type MembershipRow,
 } from "@/lib/membership";
+import { useShippingConfig } from "@/lib/hooks/useShippingConfig";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import Image from "next/image";
@@ -113,6 +113,7 @@ export default function CartPage() {
   const router = useRouter();
   const { ready: cartReady, loading, items, setQty, removeItem } = useCart();
   const { isAuthenticated } = useAuth();
+  const shippingConfig = useShippingConfig();
 
   const [membership, setMembership] = useState<MembershipRow | null>(null);
 
@@ -276,7 +277,7 @@ export default function CartPage() {
 
   const baseSubtotal = rows.reduce((acc, r) => acc + r.lineTotal, 0);
 
-  const shippingFee = computeShippingFee(baseSubtotal, membership);
+  const shippingFee = computeShippingFee(baseSubtotal, membership, shippingConfig);
 
   const qtySig = useMemo(
     () =>
@@ -656,20 +657,20 @@ async function clearPromo() {
 
                 {membershipActive ? (
                   <p className="text-sm text-muted-foreground">
-                    {shippingMessage(displaySubtotal, membership)}
+                    {shippingMessage(displaySubtotal, membership, shippingConfig)}
                   </p>
-                ) : displaySubtotal < DELIVERY_THRESHOLD ? (
+                ) : displaySubtotal < shippingConfig.deliveryThreshold ? (
                   <p className="text-sm text-muted-foreground">
                     Add{" "}
                     {formatINR(
-                      DELIVERY_THRESHOLD - displaySubtotal,
+                      shippingConfig.deliveryThreshold - displaySubtotal,
                       displayCurrency,
                     )}{" "}
                     more for FREE shipping
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    {shippingMessage(displaySubtotal, membership)}
+                    {shippingMessage(displaySubtotal, membership, shippingConfig)}
                   </p>
                 )}
 

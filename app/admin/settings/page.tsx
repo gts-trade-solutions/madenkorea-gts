@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { supabase } from '@/lib/supabaseClient';
+import { invalidateShippingConfigCache } from '@/lib/hooks/useShippingConfig';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -26,6 +28,7 @@ export default function AdminSettingsPage() {
     currency: 'INR',
     timezone: 'Asia/Kolkata',
     freeShippingThreshold: 2000,
+    defaultShippingFee: 149,
     codEnabled: true,
     taxInclusive: true,
     lowStockThreshold: 10,
@@ -34,6 +37,8 @@ export default function AdminSettingsPage() {
     maintenanceMode: false,
   });
 
+  const [savingShipping, setSavingShipping] = useState(false);
+
   useEffect(() => {
     if (!hasRole('admin')) {
       router.push('/admin');
@@ -41,8 +46,32 @@ export default function AdminSettingsPage() {
     }
     const stored = localStorage.getItem('storeSettings');
     if (stored) {
-      setSettings(JSON.parse(stored));
+      try {
+        const parsed = JSON.parse(stored);
+        setSettings((prev) => ({ ...prev, ...parsed }));
+      } catch {}
     }
+
+    // Pull the live shipping values from the backend so the form
+    // reflects what's actually being applied at checkout.
+    (async () => {
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const token = s?.session?.access_token;
+        const res = await fetch('/api/admin/settings/shipping', {
+          credentials: 'include',
+          headers: token ? { authorization: `Bearer ${token}` } : undefined,
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setSettings((prev) => ({
+          ...prev,
+          freeShippingThreshold: Number(data.deliveryThreshold) || prev.freeShippingThreshold,
+          defaultShippingFee: Number(data.defaultShippingFee) || prev.defaultShippingFee,
+        }));
+      } catch {}
+    })();
   }, [hasRole, router]);
 
   if (!hasRole('admin')) {
@@ -55,9 +84,40 @@ export default function AdminSettingsPage() {
     router.push('/');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // Other tabs are still localStorage-only (placeholders). Shipping
+    // is the one that's wired to a real backend.
     localStorage.setItem('storeSettings', JSON.stringify(settings));
-    toast.success('Settings saved successfully');
+
+    setSavingShipping(true);
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      const res = await fetch('/api/admin/settings/shipping', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'content-type': 'application/json',
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          deliveryThreshold: settings.freeShippingThreshold,
+          defaultShippingFee: settings.defaultShippingFee,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body.ok === false) {
+        toast.error(body.error || 'Failed to save shipping settings');
+        return;
+      }
+      // Drop the client-side cache so cart/checkout previews refetch.
+      invalidateShippingConfigCache();
+      toast.success('Settings saved successfully');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to save shipping settings');
+    } finally {
+      setSavingShipping(false);
+    }
   };
 
   return (
@@ -71,9 +131,9 @@ export default function AdminSettingsPage() {
             <h1 className="text-2xl font-bold">Store Settings</h1>
           </div>
           <div className="flex items-center gap-4">
-            <Button onClick={handleSave}>
+            <Button onClick={handleSave} disabled={savingShipping}>
               <Save className="mr-2 h-4 w-4" />
-              Save Changes
+              {savingShipping ? 'Saving…' : 'Save Changes'}
             </Button>
             <span className="text-sm text-muted-foreground">{user?.name}</span>
             <Button variant="outline" size="sm" onClick={handleLogout}>
@@ -232,15 +292,30 @@ export default function AdminSettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-2">
+                  <Label htmlFor="defaultShippingFee">Default Shipping Fee (₹)</Label>
+                  <Input
+                    id="defaultShippingFee"
+                    type="number"
+                    min={0}
+                    value={settings.defaultShippingFee}
+                    onChange={(e) => setSettings({ ...settings, defaultShippingFee: parseInt(e.target.value) || 0 })}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Flat shipping fee charged when the cart is below the free-shipping threshold and the customer is not a K-Plus member.
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
                   <Label htmlFor="freeShippingThreshold">Free Shipping Threshold (₹)</Label>
                   <Input
                     id="freeShippingThreshold"
                     type="number"
+                    min={0}
                     value={settings.freeShippingThreshold}
                     onChange={(e) => setSettings({ ...settings, freeShippingThreshold: parseInt(e.target.value) || 0 })}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Offer free shipping for orders above this amount
+                    Offer free shipping for orders above this amount.
                   </p>
                 </div>
 

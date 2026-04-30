@@ -4,6 +4,7 @@ import { supabaseRouteClient } from "@/lib/supabaseRoute";
 import { getPromoCodeFromCookie } from "@/lib/promo-cookie";
 import { roundMoney } from "@/lib/currency";
 import { computeShippingFee } from "@/lib/membership";
+import { getShippingConfig } from "@/lib/storeSettings";
 
 type LineInput = { product_id: string; qty: number };
 
@@ -219,8 +220,9 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
     activeMembership = membership ?? null;
   }
 
+ const shippingConfig = await getShippingConfig();
  const shipping_fee = roundMoney(
-   computeShippingFee(subtotal, activeMembership)
+   computeShippingFee(subtotal, activeMembership, shippingConfig)
  );
 
 const total = roundMoney(subtotal + shipping_fee - discount_total);

@@ -17,12 +17,12 @@ import { supabase } from "@/lib/supabaseClient";
 import { useRazorpayCheckout } from "@/lib/hooks/useRazorpayCheckout";
 import {
   computeShippingFee,
-  DELIVERY_THRESHOLD,
   shippingMessage,
   hasActiveMembership,
   getActiveMembership,
   type MembershipRow,
 } from "@/lib/membership";
+import { useShippingConfig } from "@/lib/hooks/useShippingConfig";
 
 type DbProduct = {
   id: string;
@@ -104,6 +104,7 @@ export default function CheckoutPage() {
   const { items } = useCart();
   const { isAuthenticated, ready } = useAuth();
   const { start } = useRazorpayCheckout();
+  const shippingConfig = useShippingConfig();
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [dbProducts, setDbProducts] = useState<Record<string, DbProduct>>({});
@@ -261,7 +262,7 @@ export default function CheckoutPage() {
     [lines]
   );
 
-  const shippingCost = computeShippingFee(localSubtotal, membership);
+  const shippingCost = computeShippingFee(localSubtotal, membership, shippingConfig);
   const membershipActive = hasActiveMembership(membership);
 
   const askTotals = async (reason: string) => {
@@ -710,9 +711,9 @@ export default function CheckoutPage() {
                       <div className="flex justify-between">
                         <span>
                           Shipping{" "}
-                          {calc.subtotal < DELIVERY_THRESHOLD && !membershipActive && (
+                          {calc.subtotal < shippingConfig.deliveryThreshold && !membershipActive && (
                             <span className="text-xs text-muted-foreground">
-                              (Free over ₹2,000)
+                              (Free over ₹{shippingConfig.deliveryThreshold.toLocaleString("en-IN")})
                             </span>
                           )}
                         </span>
@@ -724,7 +725,7 @@ export default function CheckoutPage() {
                       </div>
 
                       <div className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-muted-foreground">
-                        {shippingMessage(calc.subtotal, membership)}
+                        {shippingMessage(calc.subtotal, membership, shippingConfig)}
                       </div>
 
                       {calc.sale_savings && calc.sale_savings > 0 && (
