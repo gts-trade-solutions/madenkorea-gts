@@ -1,0 +1,264 @@
+﻿// app/c/[slug]/page.tsx
+import { notFound } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
+import { CustomerLayout } from "@/components/CustomerLayout";
+import { ProductCard } from "@/components/ProductCard";
+
+export const revalidate = 300; // ISR: refresh every 5 minutes
+
+type CategoryRow = {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  // Optional if you add later:
+  // hero_banner_url?: string | null;
+};
+
+type ProductRow = {
+  id: string;
+  slug: string;
+  name: string;
+  price?: number | null;
+  currency?: string | null;
+  compare_at_price?: number | null;
+  sale_price?: number | null;
+  sale_starts_at?: string | null;
+  sale_ends_at?: string | null;
+  short_description?: string | null;
+  volume_ml?: number | null;
+  net_weight_g?: number | null;
+  country_of_origin?: string | null;
+  hero_image_path?: string | null;
+  created_at?: string | null;
+  stock_qty?: number | null;
+  is_featured?: boolean | null;
+  is_trending?: boolean | null;
+  brands?: { name?: string | null; slug?: string | null } | null;
+};
+
+function supabaseServer() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
+
+function storagePublicUrl(path?: string | null) {
+  if (!path) return null;
+  const supabase = supabaseServer();
+  const { data } = supabase.storage.from("product-media").getPublicUrl(path);
+  return data.publicUrl ?? null;
+}
+
+export async function generateStaticParams() {
+  const supabase = supabaseServer();
+  const { data } = await supabase
+    .from("categories")
+    .select("slug")
+    .order("slug")
+    .limit(50);
+  return (data ?? []).map((c) => ({ slug: c.slug }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { slug: string };
+}) {
+  const supabase = supabaseServer();
+  const { data: category } = await supabase
+    .from("categories")
+    .select("name, description")
+    .eq("slug", params.slug)
+    .maybeSingle<CategoryRow>();
+
+  if (!category) {
+    return { title: "Category Not Found | MadenKorea" };
+  }
+
+  return {
+    title: `${category.name} | MadenKorea`,
+    description: category.description ?? undefined,
+    alternates: { canonical: `/c/${params.slug}` },
+    openGraph: {
+      title: `${category.name} | MadenKorea`,
+      description: category.description ?? undefined,
+      url: `/c/${params.slug}`,
+      type: "website",
+    },
+  };
+}
+
+export default async function CategoryPage({
+  params,
+  searchParams,
+}: {
+  params: { slug: string };
+  searchParams?: {
+    sort?: string;
+    price?: string;
+    in_stock?: string;
+    brand?: string;
+  };
+}) {
+  const supabase = supabaseServer();
+
+  // 1) Category lookup
+  const { data: category, error: catErr } = await supabase
+    .from("categories")
+    .select("*")
+    .eq("slug", params.slug)
+    .maybeSingle<CategoryRow>();
+
+  if (catErr || !category) {
+    notFound();
+  }
+
+  // 2) Products in this category (published only)
+  const { data: products } = await supabase
+    .from("products")
+    .select(
+      `
+      id, slug, name,
+      price, currency,
+      compare_at_price, sale_price, sale_starts_at, sale_ends_at,
+      short_description, volume_ml, net_weight_g, country_of_origin,
+      hero_image_path, created_at, stock_qty, is_featured, is_trending,
+      brands ( name, slug )
+    `
+    )
+    .eq("category_id", category.id)
+    .eq("is_published", true)
+    .returns<ProductRow[]>();
+
+  // 3) Compute public URLs on the server (faster cards)
+  const items = (products ?? []).map((p) => ({
+    ...p,
+    hero_image_url: storagePublicUrl(p.hero_image_path) ?? undefined,
+  }));
+
+  const selectedSort = searchParams?.sort || "newest";
+  const selectedPrice = searchParams?.price || "all";
+  const inStockOnly = searchParams?.in_stock === "1";
+  const selectedBrand = searchParams?.brand || "all";
+
+  const brandOptions = Array.from(
+    new Map(
+      items
+        .filter((p) => p.brands?.name)
+        .map((p) => [p.brands?.slug || p.brands?.name || "", p.brands])
+    ).values()
+  );
+
+  const filteredItems = items.filter((p) => {
+    const effectivePrice = p.sale_price ?? p.price ?? 0;
+    const passPrice =
+      selectedPrice === "all"
+        ? true
+        : selectedPrice === "0-5000"
+        ? effectivePrice >= 0 && effectivePrice <= 5000
+        : selectedPrice === "5000-10000"
+        ? effectivePrice > 5000 && effectivePrice <= 10000
+        : selectedPrice === "10000+"
+        ? effectivePrice > 10000
+        : true;
+    const passStock = inStockOnly ? (p.stock_qty ?? 0) > 0 : true;
+    const brandKey = p.brands?.slug || p.brands?.name || "";
+    const passBrand = selectedBrand === "all" ? true : brandKey === selectedBrand;
+    return passPrice && passStock && passBrand;
+  });
+
+  const sortedItems = filteredItems.slice().sort((a, b) => {
+    const aPrice = a.sale_price ?? a.price ?? 0;
+    const bPrice = b.sale_price ?? b.price ?? 0;
+    if (selectedSort === "price_asc") return aPrice - bPrice;
+    if (selectedSort === "price_desc") return bPrice - aPrice;
+    if (selectedSort === "popular") {
+      const scoreA = (a.is_trending ? 2 : 0) + (a.is_featured ? 1 : 0);
+      const scoreB = (b.is_trending ? 2 : 0) + (b.is_featured ? 1 : 0);
+      if (scoreA !== scoreB) return scoreB - scoreA;
+    }
+    return (
+      new Date(b.created_at ?? 0).getTime() -
+      new Date(a.created_at ?? 0).getTime()
+    );
+  });
+
+  return (
+    <CustomerLayout>
+      {/* Optional banner if you later add categories.hero_banner_url */}
+      {/* {category.hero_banner_url && (
+        <div className="relative w-full aspect-[21/7] bg-muted mb-8">
+          <img src={category.hero_banner_url} alt={category.name} className="w-full h-full object-cover" />
+        </div>
+      )} */}
+
+      <div className="container mx-auto py-8">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold mb-2">{category.name}</h1>
+          {category.description && (
+            <p className="text-lg text-muted-foreground">
+              {category.description}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between mb-6">
+          <p className="text-muted-foreground">
+            {sortedItems.length} {sortedItems.length === 1 ? "product" : "products"}
+          </p>
+          <form className="flex items-center gap-2" method="get">
+            <select name="sort" defaultValue={selectedSort} className="h-9 rounded-md border bg-background px-2 text-sm">
+              <option value="newest">Newest</option>
+              <option value="price_asc">Price: Low to high</option>
+              <option value="price_desc">Price: High to low</option>
+              <option value="popular">Most Popular</option>
+            </select>
+            <select name="price" defaultValue={selectedPrice} className="h-9 rounded-md border bg-background px-2 text-sm">
+              <option value="all">All prices</option>
+              <option value="0-5000">INR 0 - INR 5,000</option>
+              <option value="5000-10000">INR 5,000 - INR 10,000</option>
+              <option value="10000+">INR 10,000+</option>
+            </select>
+            <select name="brand" defaultValue={selectedBrand} className="h-9 rounded-md border bg-background px-2 text-sm">
+              <option value="all">All brands</option>
+              {brandOptions.map((b) => {
+                const value = b?.slug || b?.name || "";
+                if (!value) return null;
+                return (
+                  <option key={value} value={value}>
+                    {b?.name}
+                  </option>
+                );
+              })}
+            </select>
+            <label className="inline-flex items-center gap-2 rounded-md border px-2 h-9 text-sm">
+              <input type="checkbox" name="in_stock" value="1" defaultChecked={inStockOnly} />
+              In stock only
+            </label>
+            <button className="h-9 rounded-md border px-3 text-sm" type="submit">
+              Apply
+            </button>
+          </form>
+        </div>
+
+        {sortedItems.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">
+              No products found in this category.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+  {sortedItems.map((product) => (
+    <ProductCard key={product.id} product={product as any} />
+  ))}
+</div>
+
+        )}
+      </div>
+    </CustomerLayout>
+  );
+}
+
