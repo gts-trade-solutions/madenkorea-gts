@@ -15,7 +15,7 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 import { ShoppingBag, Heart, User, LogOut, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { ProductCard } from "@/components/ProductCard";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseClient";
 import AccountMembershipCard from "@/components/AccountMembershipCard";
 
 type DbProduct = {
@@ -32,12 +32,6 @@ type DbProduct = {
   stock_qty?: number | null;
   brands?: { name?: string | null } | null;
 };
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: true, autoRefreshToken: true } }
-);
 
 function storagePublicUrl(path?: string | null) {
   if (!path) return null;

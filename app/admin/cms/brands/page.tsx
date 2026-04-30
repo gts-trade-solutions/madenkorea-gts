@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -55,12 +55,6 @@ type DbBrand = {
   position?: number;
   created_at?: string | null;
 };
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: true, autoRefreshToken: true } }
-);
 
 const BUCKET = "site-assets"; // or 'product-media'
 const pathFor = (id: string, file: File, kind: "thumb") => {

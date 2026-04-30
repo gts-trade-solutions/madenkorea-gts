@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from "@/lib/supabaseClient";
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -15,12 +15,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Filter, Edit, Trash2, Save, Eye, EyeOff, LogOut } from 'lucide-react';
 
 // If you already have a Supabase client wrapper, replace this with your import.
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: true, autoRefreshToken: true } }
-);
-
 type ProductRow = {
   id: string;
   slug: string;

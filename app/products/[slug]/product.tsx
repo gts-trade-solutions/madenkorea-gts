@@ -58,7 +58,7 @@ import { toast } from "sonner";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductStorySection } from "@/components/products/ProductStorySection";
 import type { StoryBlock } from "@/lib/types/productStory";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseClient";
 
 type Brand = { name?: string | null; slug?: string | null };
 type Product = {
@@ -137,12 +137,6 @@ type ReviewStats = {
   stars_2: number;
   stars_1: number;
 };
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: true, autoRefreshToken: true } }
-);
 
 function storagePublicUrl(
   path?: string | null,

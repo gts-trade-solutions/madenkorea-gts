@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseClient";
 import {
   ArrowRight,
   Gift,
@@ -25,12 +25,6 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 type Status = "none" | "pending" | "rejected" | "influencer" | "admin";
 
 // ✅ Same pattern as your /auth/login and /account pages (persist session in localStorage)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: true, autoRefreshToken: true } }
-);
-
 export default function PartnerProgramPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();

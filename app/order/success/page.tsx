@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle } from 'lucide-react';
 import { CustomerLayout } from '@/components/CustomerLayout';
@@ -34,7 +34,33 @@ function formatMoney(v?: number | null, currency?: string | null) {
   }
 }
 
+function SuccessFallback() {
+  return (
+    <CustomerLayout>
+      <div className="container mx-auto py-16">
+        <Card className="max-w-2xl mx-auto text-center">
+          <CardHeader>
+            <CheckCircle className="h-20 w-20 mx-auto text-green-500 mb-4" />
+            <CardTitle className="text-3xl">Order Placed Successfully!</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">Loading your order...</p>
+          </CardContent>
+        </Card>
+      </div>
+    </CustomerLayout>
+  );
+}
+
 export default function OrderSuccessPage() {
+  return (
+    <Suspense fallback={<SuccessFallback />}>
+      <OrderSuccessInner />
+    </Suspense>
+  );
+}
+
+function OrderSuccessInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { ready, isAuthenticated } = useAuth();

@@ -17,7 +17,7 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCart } from "@/lib/contexts/CartContext";
 import { Package, ChevronRight, Download, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseClient";
 
 type Order = {
   id: string;
@@ -38,12 +38,6 @@ type OrderItem = {
   quantity: number;
   unit_price: number;
 };
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: true, autoRefreshToken: true } }
-);
 
 export default function OrdersPage() {
   const router = useRouter();

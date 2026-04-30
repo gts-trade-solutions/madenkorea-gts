@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import {
   Card,
@@ -34,12 +34,6 @@ type VendorInfo = {
   rejected_reason?: string | null;
   email?: string | null; // business email if stored on vendors row
 };
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: true, autoRefreshToken: true } }
-);
 
 // RPC that RETURNS TABLE comes back as an array. Normalize to single object.
 function coerceVendor(data: any): VendorInfo | null {

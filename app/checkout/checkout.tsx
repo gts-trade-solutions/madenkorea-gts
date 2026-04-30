@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/lib/contexts/CartContext";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { toast } from "sonner";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseClient";
 import { useRazorpayCheckout } from "@/lib/hooks/useRazorpayCheckout";
 import {
   computeShippingFee,
@@ -64,12 +64,6 @@ type CalcTotals = {
     discount_percent?: number;
   };
 };
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: true, autoRefreshToken: true } }
-);
 
 function isSaleActive(start?: string | null, end?: string | null) {
   const now = new Date();
