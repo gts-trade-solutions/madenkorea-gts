@@ -38,7 +38,8 @@ export function useRazorpayCheckout() {
     address: AddressSnapshot = null,
     attribution: AttributionSnapshot = null,
     uiTotal?: number | null,
-    uiShippingFee?: number | null
+    uiShippingFee?: number | null,
+    onConfirming?: () => void
   ) => {
     if (busyRef.current) return;
     busyRef.current = true;
@@ -114,6 +115,15 @@ export function useRazorpayCheckout() {
         },
         notes: { app_order_id: info.order_id },
         handler: async (resp: any) => {
+          // Fire as soon as Razorpay returns control. Verify can take a
+          // few seconds (signature check + payments row + emails); this
+          // lets the host page draw a full-screen "Confirming…" overlay
+          // immediately so the checkout UI doesn't appear stuck.
+          try {
+            onConfirming?.();
+          } catch (e) {
+            console.warn("[PAY] onConfirming callback threw", e);
+          }
           try {
             const verify = await fetch("/api/razorpay/verify", {
               method: "POST",

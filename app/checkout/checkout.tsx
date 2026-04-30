@@ -107,6 +107,7 @@ export default function CheckoutPage() {
   const shippingConfig = useShippingConfig();
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [dbProducts, setDbProducts] = useState<Record<string, DbProduct>>({});
   const [loadingProducts, setLoadingProducts] = useState(true);
 
@@ -472,7 +473,8 @@ export default function CheckoutPage() {
         addressSnapshot,
         calc?.applied ?? null,
         calc?.total ?? null,
-        calc?.shipping_fee ?? shippingCost
+        calc?.shipping_fee ?? shippingCost,
+        () => setConfirmingPayment(true)
       );
     } finally {
       setIsProcessing(false);
@@ -503,6 +505,24 @@ export default function CheckoutPage() {
         src="https://checkout.razorpay.com/v1/checkout.js"
         strategy="afterInteractive"
       />
+
+      {confirmingPayment && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-sm"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="flex flex-col items-center gap-4 px-6 text-center">
+            <div className="h-12 w-12 animate-spin rounded-full border-4 border-muted border-t-primary" />
+            <div>
+              <p className="text-lg font-semibold">Confirming your payment…</p>
+              <p className="text-sm text-muted-foreground">
+                Please don&apos;t close or refresh this page.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="container mx-auto py-8">
         <div className="mb-2 flex items-center justify-between">
