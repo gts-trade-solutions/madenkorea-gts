@@ -126,7 +126,6 @@ export default function CartPage() {
 
   const [totals, setTotals] = useState<TotalsResponse>(null);
   const [loadingTotals, setLoadingTotals] = useState(false);
-  const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
   const [qtyUpdating, setQtyUpdating] = useState<Record<string, boolean>>({});
   const [removing, setRemoving] = useState<Record<string, boolean>>({});
 
@@ -440,14 +439,6 @@ async function clearPromo() {
         <h1 className="text-3xl font-bold mb-8">
           Shopping Cart ({rows.reduce((n, r) => n + r.quantity, 0)} items)
         </h1>
-        {checkoutNotice && (
-          <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            {checkoutNotice}{" "}
-            <Link className="underline font-medium" href="/auth/login?redirect=/checkout">
-              Sign in
-            </Link>
-          </div>
-        )}
         {unavailableCount > 0 && (
           <div className="mb-4 rounded-md border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
             {unavailableCount} item{unavailableCount === 1 ? "" : "s"} in your cart {unavailableCount === 1 ? "is" : "are"} no longer available and excluded from totals.
@@ -694,7 +685,13 @@ async function clearPromo() {
                       return;
                     }
                     if (!isAuthenticated) {
-                      setCheckoutNotice("Sign in or create an account to continue. Your cart will be preserved.");
+                      toast.message("Sign in to continue", {
+                        description: "Your cart will be preserved.",
+                        action: {
+                          label: "Sign in",
+                          onClick: () => router.push("/auth/login?redirect=/checkout"),
+                        },
+                      });
                       return;
                     }
                     router.push("/checkout");
