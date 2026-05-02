@@ -43,6 +43,18 @@ export default function AuthCallbackPage() {
         }
 
         await attachAfterAuth();
+
+        // Stitch pre-auth anonymous events onto the user_id and emit a
+        // `login` marker. OAuth flow doesn't easily distinguish first-
+        // time vs returning users from the client, so we always say
+        // login here — minor analytics drift, acceptable.
+        void fetch("/api/events/identify", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind: "login" }),
+        }).catch(() => {});
+
         router.replace(redirect);
       } catch (err) {
         console.error(err);

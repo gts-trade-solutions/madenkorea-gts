@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import { getVisitorIdentity } from "@/lib/analytics/identity";
+
+// Verify is the heaviest critical path: signature check, Razorpay API
+// fetch, multiple DB writes, optional DTDC create, and two SES emails.
+// Without this hint Netlify caps the function at 10s and a slow run
+// shows the customer "Payment failed" even though the order was already
+// marked paid. Give it room.
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const ses = new SESClient({
   region: process.env.SES_REGION || "ap-south-1",
@@ -353,6 +362,60 @@ export async function POST(req: NextRequest) {
       dbg.push({ step: "payments.insert", error: err?.message });
     }
 
+    // Server-side `order_placed` event — the denominator-correct truth.
+    // Client-emitted `payment_succeeded` can be lost to a closed tab during
+    // verify, so we double-write here from the server.
+    //
+    // Use the BROWSER's session/anon cookies (not the Razorpay order id) so
+    // this row sits in the same funnel session as the preceding page_view,
+    // add_to_cart, pay_clicked, etc. Otherwise it lands in a phantom one-row
+    // session and inflates the Purchased stage.
+    try {
+      let consentOk = true;
+      if (order.user_id) {
+        const { data: prof } = await admin
+          .from("profiles")
+          .select("tracking_consent")
+          .eq("id", order.user_id)
+          .maybeSingle();
+        if (prof && prof.tracking_consent === false) consentOk = false;
+      }
+
+      if (consentOk) {
+        let anonId: string | null = null;
+        let sessionId: string | null = null;
+        try {
+          const ident = getVisitorIdentity();
+          anonId = ident.anonId ?? null;
+          sessionId = ident.sessionId ?? null;
+        } catch (e: any) {
+          dbg.push({ step: "events.identity.error", error: e?.message });
+        }
+
+        await admin.from("events").insert({
+          user_id: order.user_id ?? null,
+          anon_id: anonId,
+          session_id: sessionId,
+          event_name: "order_placed",
+          path: "/api/razorpay/verify",
+          props: {
+            order_id: order.id,
+            order_number: order.order_number ?? null,
+            subtotal: order.subtotal,
+            shipping_fee: order.shipping_fee,
+            discount_total: discountAmount,
+            total: paidAmount,
+            provider_payment_id: razorpay_payment_id,
+            provider_order_id: razorpay_order_id,
+          },
+        });
+      } else {
+        dbg.push({ step: "events.order_placed.skip", reason: "no consent" });
+      }
+    } catch (err: any) {
+      dbg.push({ step: "events.order_placed", error: err?.message });
+    }
+
     // C-13/C-14 prep — Track D: auto-create DTDC shipment on payment
     // verify. Gated by env flag so it stays off until the merchant is
     // comfortable. Failure here must not roll back the payment.
@@ -417,7 +480,12 @@ export async function POST(req: NextRequest) {
       dbg.push({ step: "cart.clear", error: cleared.error?.message });
     }
 
-    // 9) Send confirmation emails (best-effort; failures won't affect order success)
+    // 9) Send confirmation emails (best-effort; failures won't affect
+    // order success). Both emails are kicked off in parallel via
+    // Promise.allSettled below to keep the route under the function
+    // timeout — sequential awaits added ~3-5s and were causing
+    // "Payment failed" toasts even on successful payments.
+    const emailPromises: Promise<unknown>[] = [];
     try {
       const orderNumber = order.order_number ?? order.id;
       const currency = order.currency || "INR";
@@ -737,22 +805,35 @@ export async function POST(req: NextRequest) {
           "Team MadenKorea",
         ].join("\n");
 
-        await ses.send(
-          new SendEmailCommand({
-            Source: FROM_EMAIL,
-            Destination: { ToAddresses: [userEmail] },
-            Message: {
-              Subject: { Data: subject },
-              Body: {
-                Html: { Data: userHtml },
-                Text: { Data: userText },
+        emailPromises.push(
+          ses
+            .send(
+              new SendEmailCommand({
+                Source: FROM_EMAIL,
+                Destination: { ToAddresses: [userEmail] },
+                Message: {
+                  Subject: { Data: subject },
+                  Body: {
+                    Html: { Data: userHtml },
+                    Text: { Data: userText },
+                  },
+                },
+              })
+            )
+            .then(
+              () => {
+                console.log("SES: user email sent OK", { to: userEmail });
+                dbg.push({ step: "email.user.ok", to: userEmail });
               },
-            },
-          })
+              (e) => {
+                console.error("SES: user email failed", e);
+                dbg.push({
+                  step: "email.user.error",
+                  error: e?.message || String(e),
+                });
+              }
+            )
         );
-
-        console.log("SES: user email sent OK", { to: userEmail });
-        dbg.push({ step: "email.user.ok", to: userEmail });
       } else {
         console.log("SES: skipping user email – no userEmail resolved", {
           userId: order.user_id,
@@ -959,28 +1040,47 @@ export async function POST(req: NextRequest) {
         subject: adminSubject,
       });
 
-      await ses.send(
-        new SendEmailCommand({
-          Source: FROM_EMAIL,
-          Destination: {
-            ToAddresses: ADMIN_EMAILS,
-            CcAddresses: [FROM_EMAIL],
-          },
-          Message: {
-            Subject: { Data: adminSubject },
-            Body: {
-              Html: { Data: adminHtml },
-              Text: { Data: adminText },
+      emailPromises.push(
+        ses
+          .send(
+            new SendEmailCommand({
+              Source: FROM_EMAIL,
+              Destination: {
+                ToAddresses: ADMIN_EMAILS,
+                CcAddresses: [FROM_EMAIL],
+              },
+              Message: {
+                Subject: { Data: adminSubject },
+                Body: {
+                  Html: { Data: adminHtml },
+                  Text: { Data: adminText },
+                },
+              },
+            })
+          )
+          .then(
+            () => {
+              console.log("SES: admin email sent OK", { to: ADMIN_EMAILS });
+              dbg.push({ step: "email.admin.ok", to: ADMIN_EMAILS });
             },
-          },
-        })
+            (e) => {
+              console.error("SES: admin email failed", e);
+              dbg.push({
+                step: "email.admin.error",
+                error: e?.message || String(e),
+              });
+            }
+          )
       );
-
-      console.log("SES: admin email sent OK", { to: ADMIN_EMAILS });
-      dbg.push({ step: "email.admin.ok", to: ADMIN_EMAILS });
     } catch (e: any) {
-      console.error("SES: email sending failed", e);
+      console.error("SES: email setup failed", e);
       dbg.push({ step: "email.error", error: e?.message || String(e) });
+    }
+
+    // Wait for both SES sends in parallel — total cost is the slower of
+    // the two, not the sum.
+    if (emailPromises.length) {
+      await Promise.allSettled(emailPromises);
     }
 
     const res = {

@@ -21,6 +21,8 @@ import {
   Megaphone,
   Facebook,
   Instagram,
+  Activity,
+  Filter,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -364,6 +366,48 @@ export default function AdminDashboard() {
                 onClick={() => router.push("/admin/analytics")}
               >
                 View Analytics
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Conversion funnel */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <Filter className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>Conversion Funnel</CardTitle>
+              <CardDescription>Where visitors drop off</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Stage-by-stage breakdown from page view → cart → payment.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/analytics/funnel")}
+              >
+                Open Funnel
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* User sessions */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <Activity className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>User Sessions</CardTitle>
+              <CardDescription>Drill into individual visits</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                See exactly what each visitor did and where they bailed out.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/analytics/sessions")}
+              >
+                Open Sessions
               </Button>
             </CardContent>
           </Card>

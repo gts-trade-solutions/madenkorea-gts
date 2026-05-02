@@ -118,6 +118,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    // Fire the analytics marker first; once we sign out the auth cookies
+    // are gone and the track route would record this as anonymous.
+    try {
+      const { trackEvent } = await import("@/lib/analytics/track");
+      trackEvent("logout", {}, { immediate: true });
+    } catch {}
     await supabase.auth.signOut();
     setUser(null);
     setReady(true);

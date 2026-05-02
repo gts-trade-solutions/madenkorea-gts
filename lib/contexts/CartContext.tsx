@@ -149,10 +149,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       else list.push({ id: productId, product_id: productId, quantity: qty });
       writeGuest(list);
       setItems(list);
-      return;
+    } else {
+      await rpcAddToCart(productId, qty);
+      await refresh();
     }
-    await rpcAddToCart(productId, qty);
-    await refresh();
+    try {
+      const { trackEvent } = await import("@/lib/analytics/track");
+      trackEvent("add_to_cart", { product_id: productId, qty });
+    } catch {}
   };
 
   const setQty = async (itemId: string, qty: number) => {
@@ -172,14 +176,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const removeItem = async (itemId: string) => {
+    const productId =
+      items.find((i) => i.id === itemId)?.product_id ?? itemId;
     if (!isAuthenticated) {
       const list = readGuest().filter((i) => i.id !== itemId);
       writeGuest(list);
       setItems(list);
-      return;
+    } else {
+      await rpcRemoveItem(itemId);
+      await refresh();
     }
-    await rpcRemoveItem(itemId);
-    await refresh();
+    try {
+      const { trackEvent } = await import("@/lib/analytics/track");
+      trackEvent("remove_from_cart", { product_id: productId });
+    } catch {}
   };
 
   const clearGuest = () => {

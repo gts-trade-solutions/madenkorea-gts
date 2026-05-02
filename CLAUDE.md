@@ -7,6 +7,7 @@ Orientation for Claude Code working in this repository. Keep this file lean: dee
 - [CODEBASE_REFERENCE.md](CODEBASE_REFERENCE.md) — authoritative map of the live code: routes, APIs, RPCs, tables, env vars, dead-code queue. Last verified 2026-04-24.
 - [ISSUE_REGISTER.md](ISSUE_REGISTER.md) — enriched issue register (audit findings, fix status, confidence markers). Treat as a planning doc; re-verify items marked `[INFERRED]` or `[UNVERIFIED]` before acting.
 - [REQUIREMENTS.md](REQUIREMENTS.md) — original product requirements. Some sections are dated; trust CODEBASE_REFERENCE over REQUIREMENTS when they conflict.
+- [ANALYTICS.md](ANALYTICS.md) — first-party event log + conversion funnel (admin pages at `/admin/analytics/funnel` and `/admin/analytics/sessions`). Lists every captured event, where it fires from, the props payload, and the privacy/PII posture. Read before adding new events.
 - [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) — historical milestone log (2025-10). Mostly historical; do not assume it reflects current state.
 
 When you fix an issue, update both the issue register status and any relevant notes in CODEBASE_REFERENCE.md.

@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+import { trackEvent } from "@/lib/analytics/track";
 
 export type AttributionSnapshot = null | {
   type: "promo" | "link";
@@ -124,6 +125,12 @@ export function useRazorpayCheckout() {
           } catch (e) {
             console.warn("[PAY] onConfirming callback threw", e);
           }
+          trackEvent("payment_succeeded", {
+            order_id: info.order_id,
+            razorpay_order_id: resp?.razorpay_order_id ?? null,
+            razorpay_payment_id: resp?.razorpay_payment_id ?? null,
+            amount: razorpay_order.amount / 100,
+          });
           try {
             const verify = await fetch("/api/razorpay/verify", {
               method: "POST",
@@ -185,6 +192,10 @@ export function useRazorpayCheckout() {
         modal: {
           ondismiss() {
             toast.info("Payment cancelled");
+            trackEvent("payment_cancelled", {
+              order_id: info.order_id,
+              razorpay_order_id: razorpay_order.id,
+            });
             router.replace(
               `/order/failure?reason=cancelled&order_id=${encodeURIComponent(
                 info.order_id
@@ -201,6 +212,14 @@ export function useRazorpayCheckout() {
         toast.error(
           resp?.error?.description || resp?.error?.reason || "Payment failed"
         );
+        trackEvent("payment_failed", {
+          order_id: info.order_id,
+          razorpay_order_id: razorpay_order.id,
+          reason: resp?.error?.reason ?? null,
+          description: resp?.error?.description ?? null,
+          step: resp?.error?.step ?? null,
+          source: resp?.error?.source ?? null,
+        });
         router.replace(
           `/order/failure?reason=failed&order_id=${encodeURIComponent(
             info.order_id
@@ -209,6 +228,11 @@ export function useRazorpayCheckout() {
         busyRef.current = false;
       });
 
+      trackEvent("payment_modal_opened", {
+        order_id: info.order_id,
+        razorpay_order_id: razorpay_order.id,
+        amount: razorpay_order.amount / 100,
+      });
       rzp.open();
     } catch (e: any) {
       console.error("[RZP] checkout start failed", e);

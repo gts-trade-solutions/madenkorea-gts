@@ -23,6 +23,7 @@ import {
   type MembershipRow,
 } from "@/lib/membership";
 import { useShippingConfig } from "@/lib/hooks/useShippingConfig";
+import { trackEvent } from "@/lib/analytics/track";
 
 type DbProduct = {
   id: string;
@@ -132,6 +133,15 @@ export default function CheckoutPage() {
     if (!ready) return;
     if (!isAuthenticated) router.replace("/auth/login?redirect=/checkout");
   }, [ready, isAuthenticated, router]);
+
+  const checkoutStartedFiredRef = useRef(false);
+  useEffect(() => {
+    if (!ready || !isAuthenticated) return;
+    if (items.length === 0) return;
+    if (checkoutStartedFiredRef.current) return;
+    checkoutStartedFiredRef.current = true;
+    trackEvent("checkout_started", { item_count: items.length });
+  }, [ready, isAuthenticated, items.length]);
 
   useEffect(() => {
     if (items.length === 0 && ready && isAuthenticated) {
@@ -412,6 +422,15 @@ export default function CheckoutPage() {
     }
 
     setIsProcessing(true);
+
+    trackEvent("pay_clicked", {
+      subtotal: calc.subtotal,
+      shipping_fee: calc.shipping_fee,
+      discount_total: calc.discount_total,
+      total: calc.total,
+      item_count: items.length,
+      promo_code: calc.applied?.code ?? null,
+    });
 
     const addressSnapshot = {
       name: formData.name,

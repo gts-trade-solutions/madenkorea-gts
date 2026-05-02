@@ -209,6 +209,15 @@ export default function RegisterPage() {
 
       await attachAfterAuth();
 
+      // Stitch pre-signup anonymous activity onto the new user_id and
+      // emit a `signup` event so the funnel can show signup placement.
+      void fetch("/api/events/identify", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "signup" }),
+      }).catch(() => {});
+
       toast.success("Account created!");
       router.replace(mode === "influencer" ? "/influencer-request" : redirect);
     } catch (err: any) {

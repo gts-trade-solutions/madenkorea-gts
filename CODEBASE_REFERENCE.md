@@ -188,8 +188,11 @@ Main admin areas:
 - `/admin/vendors`: vendor list.
 - `/admin/vendors/[id]`: vendor profile and approval/management.
 - `/admin/influencers`: influencer requests, profiles, payouts.
-- `/admin/analytics`: analytics dashboard.
-- `/admin/settings`: store settings surface.
+- `/admin/analytics`: legacy analytics dashboard with mock recharts data.
+- `/admin/analytics/funnel`: live conversion funnel built on the `events` table — see [ANALYTICS.md](ANALYTICS.md).
+- `/admin/analytics/sessions`: list of recent sessions sorted by abandoned-checkout first.
+- `/admin/analytics/sessions/[id]`: per-session event timeline with delta times and props.
+- `/admin/settings`: store settings surface (Shipping tab is wired to `store_settings`; other tabs still localStorage-only).
 
 CMS:
 
@@ -356,6 +359,30 @@ Tables:
 - `dtdc_api_logs`
 
 Note: auto-create shipment after payment is present but commented out in `app/api/razorpay/verify/route.ts`.
+
+## Analytics / Conversion Funnel
+
+First-party event log on Supabase. Full reference in [ANALYTICS.md](ANALYTICS.md).
+
+Code:
+
+- `lib/analytics/events.ts`: event-name whitelist (`KNOWN_EVENTS`) and funnel stage definitions.
+- `lib/analytics/track.ts`: client `trackEvent()` with batching + sendBeacon flush on tab close.
+- `lib/analytics/identity.ts`: `mik_anon_id` / `mik_session_id` cookie helpers (server).
+- `lib/analytics/ip.ts`: IP truncation (/24 v4, /48 v6) + UA → device parser.
+- `components/AnalyticsBootstrap.tsx`: mounted in root layout; emits `page_view` on every route change.
+
+APIs:
+
+- `POST /api/events/track`: ingest endpoint. Strips PII, drops unknown event names, honors `profiles.tracking_consent`.
+- `GET /api/admin/analytics/funnel?range={1d|7d|30d|90d}`: per-session funnel pivot.
+- `GET /api/admin/analytics/sessions?range&filter={abandoned|purchased|failed|all}`: session summaries with name/email lookup for logged-in users.
+- `GET /api/admin/analytics/sessions/[id]`: per-session event timeline with product-name resolution.
+
+Tables:
+
+- `events` — append-only event log (admin-read RLS, service-role write only).
+- `profiles.tracking_consent` — per-user opt-out flag (default true).
 
 ## Supabase Clients
 

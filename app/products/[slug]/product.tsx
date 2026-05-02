@@ -452,6 +452,18 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
         ].slice(0, 10);
         localStorage.setItem("recentlyViewed", JSON.stringify(updated));
       } catch {}
+
+      try {
+        const { trackEvent } = await import("@/lib/analytics/track");
+        trackEvent("product_view", {
+          product_id: prod.id,
+          slug: prod.slug,
+          name: prod.name,
+          price: prod.price,
+          sale_price: prod.sale_price ?? null,
+          brand: (prod as any)?.brands?.name ?? null,
+        });
+      } catch {}
     }
 
     if (slug) run();

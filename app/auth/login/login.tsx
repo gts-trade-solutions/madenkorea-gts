@@ -88,6 +88,15 @@ const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | null>(n
       await attachAfterAuth();
     }
 
+    // Fire-and-forget: stitch pre-login anonymous activity onto the new
+    // user_id and emit a `login` event for funnel attribution.
+    void fetch("/api/events/identify", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "login" }),
+    }).catch(() => {});
+
     setSubmitting(false);
     toast.success("Signed in");
     router.replace(redirect);

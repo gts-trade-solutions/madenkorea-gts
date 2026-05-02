@@ -1,4 +1,5 @@
 import "./globals.css";
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
@@ -8,6 +9,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "next-themes";
 import Script from "next/script";
 import { FloatingWhatsApp } from "@/components/FloatingWhatsApp";
+import { AnalyticsBootstrap } from "@/components/AnalyticsBootstrap";
 import {
   WHATSAPP_DEFAULT_MESSAGE,
   WHATSAPP_PHONE_NUMBER,
@@ -48,6 +50,9 @@ export default function RootLayout({
           <AuthProvider>
             <CartProvider>
               <WishlistProvider>
+                <Suspense fallback={null}>
+                  <AnalyticsBootstrap />
+                </Suspense>
                 {children}
                 <FloatingWhatsApp
                   phoneNumber={WHATSAPP_PHONE_NUMBER}
