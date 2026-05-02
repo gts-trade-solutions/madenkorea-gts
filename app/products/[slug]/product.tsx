@@ -16,7 +16,7 @@ import {
   RotateCcw,
   Shield,
   Share2,
-  ZoomIn,
+  Maximize2,
   Plane,
   Leaf,
   HeartHandshake,
@@ -1085,7 +1085,28 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
               {/* GALLERY */}
               <div>
-                <div className="relative aspect-square mb-4 bg-muted rounded-lg overflow-hidden group">
+                <div
+                  className={`relative aspect-square mb-4 bg-muted rounded-lg overflow-hidden group ${
+                    !isVideoSelected ? "cursor-zoom-in" : ""
+                  }`}
+                  onClick={() => {
+                    if (!isVideoSelected) setShowZoom(true);
+                  }}
+                  role={!isVideoSelected ? "button" : undefined}
+                  tabIndex={!isVideoSelected ? 0 : undefined}
+                  onKeyDown={(e) => {
+                    if (
+                      !isVideoSelected &&
+                      (e.key === "Enter" || e.key === " ")
+                    ) {
+                      e.preventDefault();
+                      setShowZoom(true);
+                    }
+                  }}
+                  aria-label={
+                    !isVideoSelected ? "Open expanded image viewer" : undefined
+                  }
+                >
                   {isVideoSelected && videoUrl ? (
                     <video
                       key={videoUrl} /* force refresh when switching */
@@ -1115,16 +1136,15 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     </Badge>
                   )}
 
-                  {/* Hide zoom on video; keep it for images */}
+                  {/* Visual hint that the image expands. The whole image
+                      is the click target — this badge is just affordance. */}
                   {!isVideoSelected && (
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => setShowZoom(true)}
+                    <div
+                      className="absolute top-4 right-4 rounded-md bg-background/90 p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                      aria-hidden="true"
                     >
-                      <ZoomIn className="h-5 w-5" />
-                    </Button>
+                      <Maximize2 className="h-5 w-5" />
+                    </div>
                   )}
                 </div>
 
@@ -1793,34 +1813,116 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
         )}
       </div>
 
-      {/* ZOOM DIALOG (unchanged) */}
+      {/* LIGHTBOX — proper image viewer with prev/next + keyboard nav */}
       <Dialog open={showZoom} onOpenChange={setShowZoom}>
-        <DialogContent className="max-w-4xl w-full p-0">
-          <DialogHeader className="p-4 pb-0">
-            <DialogTitle>Product Image</DialogTitle>
+        <DialogContent
+          // Lock the dialog to nearly the full viewport so the expanded
+          // image actually feels expanded vs the inline gallery. Use an
+          // explicit grid template so shadcn's default `sm:max-w-lg` and
+          // grid layout don't shrink-wrap the image area.
+          //
+          // Width is capped by the available image-area height so square
+          // photos fill the dialog cleanly without flanking white space
+          // on wide monitors. The min() picks whichever is smaller —
+          // 95vw on phones (portrait, width-bound), ~85vh on desktops
+          // (landscape, height-bound). Header + thumbnail strip take
+          // ~10vh, leaving ~85vh of square image space.
+          className="!w-[min(95vw,85vh)] !max-w-[min(95vw,85vh)] sm:!max-w-[min(95vw,85vh)] h-[95vh] max-h-[95vh] p-0 grid grid-rows-[auto_1fr_auto] gap-0"
+          onKeyDown={(e) => {
+            if (imageUrls.length < 2) return;
+            // Clamp to image-only navigation; the video tile (if any)
+            // sits past the end of imageUrls and we don't show it in
+            // the lightbox.
+            if (e.key === "ArrowRight") {
+              e.preventDefault();
+              setSelectedImage((i) =>
+                Math.min(imageUrls.length - 1, i + 1) === i
+                  ? 0
+                  : Math.min(imageUrls.length - 1, i + 1)
+              );
+            } else if (e.key === "ArrowLeft") {
+              e.preventDefault();
+              setSelectedImage((i) =>
+                Math.max(0, i - 1) === i ? imageUrls.length - 1 : i - 1
+              );
+            }
+          }}
+        >
+          <DialogHeader className="p-4 pb-2 shrink-0 flex flex-row items-center justify-between gap-3">
+            <DialogTitle className="truncate">
+              {product?.name || "Product Image"}
+            </DialogTitle>
+            {imageUrls.length > 1 && (
+              <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                {Math.min(selectedImage, imageUrls.length - 1) + 1} /{" "}
+                {imageUrls.length}
+              </span>
+            )}
           </DialogHeader>
-          <div className="relative aspect-square w-full">
+
+          {/* Image area — fills the middle row (1fr) of the dialog grid,
+              so it grows to occupy all the screen except the header and
+              thumbnail strip. Click on the image itself does nothing;
+              close is via Esc, the X button, or clicking the backdrop
+              outside the dialog. */}
+          <div className="relative bg-muted/30 min-h-0 overflow-hidden">
             {imageUrls[selectedImage] ? (
               <Image
                 src={imageUrls[selectedImage]}
                 alt={product?.name || "Product image"}
                 fill
-                className="object-contain"
+                className="object-contain select-none"
+                sizes="95vw"
+                draggable={false}
+                priority
               />
             ) : (
               <div className="w-full h-full bg-muted" />
             )}
+
+            {imageUrls.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Previous image"
+                  onClick={() =>
+                    setSelectedImage((i) =>
+                      i <= 0 ? imageUrls.length - 1 : i - 1
+                    )
+                  }
+                  className="absolute left-2 top-1/2 -translate-y-1/2 z-10 rounded-full bg-background/90 hover:bg-background shadow-md p-2 md:p-3 transition-colors"
+                >
+                  <ChevronLeft className="h-5 w-5 md:h-6 md:w-6" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next image"
+                  onClick={() =>
+                    setSelectedImage((i) =>
+                      i >= imageUrls.length - 1 ? 0 : i + 1
+                    )
+                  }
+                  className="absolute right-2 top-1/2 -translate-y-1/2 z-10 rounded-full bg-background/90 hover:bg-background shadow-md p-2 md:p-3 transition-colors"
+                >
+                  <ChevronRight className="h-5 w-5 md:h-6 md:w-6" />
+                </button>
+              </>
+            )}
           </div>
+
           {imageUrls.length > 1 && (
-            <div className="p-4 grid grid-cols-6 gap-2">
+            <div className="p-3 border-t bg-background flex gap-2 shrink-0 overflow-x-auto">
               {imageUrls.map((src, idx) => (
                 <button
                   key={idx}
+                  type="button"
                   onClick={() => setSelectedImage(idx)}
-                  className={`relative aspect-square rounded border-2 overflow-hidden ${
+                  aria-label={`View image ${idx + 1}`}
+                  aria-current={selectedImage === idx ? "true" : undefined}
+                  className={`relative shrink-0 w-16 h-16 md:w-20 md:h-20 rounded border-2 overflow-hidden transition-colors ${
                     selectedImage === idx
                       ? "border-primary"
-                      : "border-transparent"
+                      : "border-transparent hover:border-muted-foreground/40"
                   }`}
                 >
                   <Image

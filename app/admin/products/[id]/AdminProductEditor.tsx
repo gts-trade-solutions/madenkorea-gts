@@ -377,6 +377,24 @@ export function AdminProductEditor({ productId }: { productId: string }) {
         if (setVidErr) throw new Error(setVidErr.message);
       }
 
+      // Invalidate Next.js caches so the public storefront reflects the
+      // change immediately (instead of waiting up to 5 minutes for ISR).
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const token = s?.session?.access_token;
+        await fetch("/api/admin/products/revalidate", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ productId: model.id }),
+        });
+      } catch {
+        // Best-effort — admin still saw the save succeed locally.
+      }
+
       toast.success("Saved");
       if (backAfter) router.push("/admin/products");
     } catch (e: any) {

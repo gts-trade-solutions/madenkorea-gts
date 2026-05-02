@@ -23,7 +23,8 @@
       "PowerShell($path = 'DISCOVER_BACKLOG.md'; $c = [System.IO.File]::ReadAllText\\(\\(Resolve-Path $path\\)\\); $items = [ordered]@{ A=8; B=6; C=5; D=7; E=10; F=6; G=3; H=4 }; foreach \\($section in $items.Keys\\) { for \\($n=1; $n -le $items[$section]; $n++\\) { $id = \"$section$n\"; $newId = \"DISC-$id\"; $c = $c -replace \"\\(?<![A-Za-z0-9-]\\)$id\\(?![A-Za-z0-9]\\)\", $newId } }; [System.IO.File]::WriteAllText\\(\\(Resolve-Path $path\\), $c, [System.Text.UTF8Encoding]::new\\($false\\)\\); Write-Output 'prose rename done')",
       "Bash(grep -E \"^\\(ISSUE_REGISTER|CODEBASE_REFERENCE\\)\\\\.md$\")",
       "Bash(xargs grep *)",
-      "Bash(grep -vE \"^\\\\s*$\")"
+      "Bash(grep -vE \"^\\\\s*$\")",
+      "mcp__claude_ai_Supabase__list_migrations"
     ]
   }
 }

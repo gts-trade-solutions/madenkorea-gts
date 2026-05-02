@@ -88,7 +88,10 @@ const getPublishedProductBySlug = unstable_cache(
     return data ?? null;
   },
   ['published-product-by-slug'],
-  { revalidate: 300 }
+  // Tag with both a global "products" key and a per-slug key so the
+  // admin save handler can invalidate just the affected product without
+  // wiping every product cache.
+  { revalidate: 300, tags: ['products'] }
 );
 
 // ----------------- Metadata -----------------
