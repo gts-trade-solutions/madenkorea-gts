@@ -550,7 +550,7 @@ async function clearPromo() {
           </div>
 
           <div className="lg:col-span-1">
-            <Card className="sticky top-20">
+            <Card className="lg:sticky lg:top-20">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <span>Order Summary</span>

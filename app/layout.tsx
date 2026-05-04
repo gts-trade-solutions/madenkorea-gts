@@ -40,7 +40,7 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className={inter.className}>
+      <body className={`${inter.className} overflow-x-clip`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

@@ -4,6 +4,7 @@ import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { ProductCard } from "@/components/ProductCard";
+import { ProductFilters } from "@/components/ProductFilters";
 
 export const revalidate = 300; // ISR: refresh every 5 minutes
 
@@ -208,41 +209,12 @@ export default async function BrandPage({
           </div>
         </div>
 
-        {/* Count + future filters */}
-        <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            {sortedItems.length} {sortedItems.length === 1 ? "product" : "products"}
-          </p>
-          <form className="flex items-center gap-2" method="get">
-            <select
-              name="sort"
-              defaultValue={selectedSort}
-              className="h-9 rounded-md border bg-background px-2 text-sm"
-            >
-              <option value="newest">Newest</option>
-              <option value="price_asc">Price: Low to high</option>
-              <option value="price_desc">Price: High to low</option>
-              <option value="popular">Most Popular</option>
-            </select>
-            <select
-              name="price"
-              defaultValue={selectedPrice}
-              className="h-9 rounded-md border bg-background px-2 text-sm"
-            >
-              <option value="all">All prices</option>
-              <option value="0-5000">INR 0 - INR 5,000</option>
-              <option value="5000-10000">INR 5,000 - INR 10,000</option>
-              <option value="10000+">INR 10,000+</option>
-            </select>
-            <label className="inline-flex items-center gap-2 rounded-md border px-2 h-9 text-sm">
-              <input type="checkbox" name="in_stock" value="1" defaultChecked={inStockOnly} />
-              In stock only
-            </label>
-            <button className="h-9 rounded-md border px-3 text-sm" type="submit">
-              Apply
-            </button>
-          </form>
-        </div>
+        <ProductFilters
+          itemCount={sortedItems.length}
+          selectedSort={selectedSort}
+          selectedPrice={selectedPrice}
+          inStockOnly={inStockOnly}
+        />
 
         {/* Products grid */}
         {/* Products grid */}
@@ -253,7 +225,7 @@ export default async function BrandPage({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-6">
             {sortedItems.map((product) => (
               <ProductCard key={product.id} product={product as any} />
             ))}

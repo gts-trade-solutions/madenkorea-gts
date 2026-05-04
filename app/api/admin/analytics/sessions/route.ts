@@ -47,7 +47,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const range = url.searchParams.get("range") || "7d";
   const filter = url.searchParams.get("filter") || "all";
-  const limit = Math.min(Number(url.searchParams.get("limit") || 50), 200);
+  const limit = Math.min(Number(url.searchParams.get("limit") || 50), 1000);
 
   const days = RANGE_DAYS[range] ?? 7;
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -172,12 +172,19 @@ export async function GET(req: Request) {
   const sessions = Array.from(bySession.values()).map((s) => {
     let highest = "—";
     for (const st of STAGE_ORDER) if (s.stages.has(st)) highest = st;
-    const abandoned =
-      (s.stages.has("checkout_started") || s.stages.has("pay_clicked") || s.stages.has("payment_modal_opened")) &&
-      !s.stages.has("order_placed");
+    // Per-funnel-stage flags so the public response can be filtered
+    // 1:1 with the funnel page without recomputing from raw events.
+    const visited = s.stages.has("page_view");
+    const viewed_product = s.stages.has("product_view");
+    const added_to_cart = s.stages.has("add_to_cart");
+    const started_checkout = s.stages.has("checkout_started");
+    const clicked_pay = s.stages.has("pay_clicked");
+    const opened_modal = s.stages.has("payment_modal_opened");
     const purchased = s.stages.has("order_placed");
     const failed = s.stages.has("payment_failed");
     const cancelled = s.stages.has("payment_cancelled");
+    const abandoned =
+      (started_checkout || clicked_pay || opened_modal) && !purchased;
 
     const profile = s.user_id ? profileMap[s.user_id] ?? null : null;
 
@@ -196,8 +203,14 @@ export async function GET(req: Request) {
       pages_count: s.pages_count,
       products_viewed_count: s.products_viewed.size,
       highest_stage: highest,
-      abandoned,
+      visited,
+      viewed_product,
+      added_to_cart,
+      started_checkout,
+      clicked_pay,
+      opened_modal,
       purchased,
+      abandoned,
       failed,
       cancelled,
       device_type: s.device_type,
@@ -207,12 +220,36 @@ export async function GET(req: Request) {
     };
   });
 
-  // Sort: abandoned (most actionable) first, then by recency.
+  // Filter values map 1:1 to the funnel stage keys (so the funnel page
+  // can deep-link via /admin/analytics/sessions?filter=<stage>) plus
+  // the semantic outcome filters. Each "reached at least" predicate
+  // uses the same boolean flags the funnel pivot uses, so counts here
+  // match the funnel exactly.
   const filtered = sessions.filter((s) => {
-    if (filter === "abandoned") return s.abandoned;
-    if (filter === "purchased") return s.purchased;
-    if (filter === "failed") return s.failed || s.cancelled;
-    return true;
+    switch (filter) {
+      case "all":
+        return true;
+      case "visited":
+        return s.visited;
+      case "viewed_product":
+        return s.viewed_product;
+      case "added_to_cart":
+        return s.added_to_cart;
+      case "started_checkout":
+        return s.started_checkout;
+      case "clicked_pay":
+        return s.clicked_pay;
+      case "opened_modal":
+        return s.opened_modal;
+      case "purchased":
+        return s.purchased;
+      case "abandoned":
+        return s.abandoned;
+      case "failed":
+        return s.failed || s.cancelled;
+      default:
+        return true;
+    }
   });
 
   filtered.sort((a, b) => {

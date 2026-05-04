@@ -110,7 +110,7 @@ export default function AccountPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader>
               <ShoppingBag className="h-8 w-8 mb-2 text-primary" />

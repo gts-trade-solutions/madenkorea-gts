@@ -10,8 +10,8 @@ export function Footer() {
       style={{ backgroundColor: "rgb(53,159,217)" }}
     >
       <div className="container mx-auto py-12 px-4">
-        {/* ⬇️ 5 columns on large screens */}
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-5">
+        {/* 2 cols phone, 3 cols tablet, 5 cols desktop */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-3 lg:grid-cols-5">
           {/* Column 1: About */}
           <div>
             <h3 className="text-lg font-semibold mb-4">MadenKorea</h3>

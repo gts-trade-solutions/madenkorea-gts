@@ -214,7 +214,7 @@ export function ProductCard({ product }: ProductCardProps) {
   return (
     <Link
       href={`/products/${product.slug}`}
-      className="group block"
+      className="group flex h-full flex-col"
       prefetch={false}
     >
       
@@ -225,35 +225,88 @@ export function ProductCard({ product }: ProductCardProps) {
               alt={product.name}
               fill
               className="object-cover transition-transform duration-300 group-hover:scale-105"
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 33vw, 25vw"
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               priority={false}
             />
           ) : (
             <div className="h-full w-full animate-pulse bg-muted" />
           )}
 
-          <div className="absolute top-2 left-2 flex flex-col gap-1">
-            {discountPct > 0 && (
-              <Badge variant="destructive">{discountPct}% OFF</Badge>
-            )}
-            {isOut && <Badge variant="secondary">Out of stock</Badge>}
-            {!isOut && isLow && <Badge variant="outline">Low stock</Badge>}
-            {product.is_featured ? <Badge>Featured</Badge> : null}
-            {product.is_trending ? <Badge>Trending</Badge> : null}
-            {isNew ? <Badge>New</Badge> : null}
-          </div>
+          {/* Badge stack. On mobile we keep the informational badges
+              (discount + stock state) at compact sizing AND show at
+              most ONE marketing badge — picked by priority `New >
+              Trending > Featured` so the most time-sensitive /
+              behavioural signal wins. On sm:+ we show all marketing
+              badges since there's room. */}
+          {(() => {
+            const mobileMarketingBadge = isNew
+              ? "New"
+              : product.is_trending
+                ? "Trending"
+                : product.is_featured
+                  ? "Featured"
+                  : null;
+            return (
+              <div className="absolute top-2 left-2 flex flex-col items-start gap-1">
+                {discountPct > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="px-1.5 py-0 text-[10px] sm:px-2.5 sm:py-0.5 sm:text-xs"
+                  >
+                    {discountPct}% OFF
+                  </Badge>
+                )}
+                {isOut && (
+                  <Badge
+                    variant="secondary"
+                    className="px-1.5 py-0 text-[10px] sm:px-2.5 sm:py-0.5 sm:text-xs"
+                  >
+                    Out of stock
+                  </Badge>
+                )}
+                {!isOut && isLow && (
+                  <Badge
+                    variant="outline"
+                    className="px-1.5 py-0 text-[10px] sm:px-2.5 sm:py-0.5 sm:text-xs"
+                  >
+                    Low stock
+                  </Badge>
+                )}
+
+                {/* Mobile: at most one marketing badge, compact */}
+                {mobileMarketingBadge && (
+                  <Badge className="px-1.5 py-0 text-[10px] sm:hidden">
+                    {mobileMarketingBadge}
+                  </Badge>
+                )}
+
+                {/* Tablet+: full marketing badge stack */}
+                {product.is_featured && (
+                  <Badge className="hidden sm:inline-flex">Featured</Badge>
+                )}
+                {product.is_trending && (
+                  <Badge className="hidden sm:inline-flex">Trending</Badge>
+                )}
+                {isNew && (
+                  <Badge className="hidden sm:inline-flex">New</Badge>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="absolute top-2 right-2 z-10">
-            <Button
-              size="icon"
-              variant="secondary"
+            <button
+              type="button"
               onClick={onWishlistToggle}
               aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"}
+              className="inline-flex items-center justify-center rounded-full h-8 w-8 sm:h-10 sm:w-10 bg-background/70 backdrop-blur-sm shadow-sm hover:bg-background sm:bg-secondary sm:hover:bg-secondary/80 transition-colors"
             >
               <Heart
-                className={`h-4 w-4 ${inWishlist ? "fill-current text-red-500" : ""}`}
+                className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${
+                  inWishlist ? "fill-current text-red-500" : ""
+                }`}
               />
-            </Button>
+            </button>
           </div>
 
           <div className="absolute bottom-2 right-2 hidden sm:block opacity-0 transition-opacity group-hover:opacity-100">
@@ -272,16 +325,24 @@ export function ProductCard({ product }: ProductCardProps) {
           </div>
         </div>
 
-        <div className="space-y-1">
+        {/* Card body fills remaining grid-cell height. Title is forced
+            to two lines so all cards in a row align regardless of name
+            length. The price + CTA block uses `mt-auto` so it always
+            sits flush with the bottom of the card — adjacent cards
+            with longer or shorter copy still have their prices
+            horizontally aligned. */}
+        <div className="flex flex-1 flex-col space-y-1">
           {brandName && (
-            <p className="text-xs sm:text-sm text-muted-foreground">
+            <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">
               {brandName}
             </p>
           )}
 
-          <h3 className="font-medium transition-colors group-hover:text-primary
-             overflow-hidden text-ellipsis whitespace-nowrap
-             whitespace-normal md:line-clamp-2">
+          {/* Always reserve 2 lines worth of height so 1-line and
+              2-line product names produce identical card heights.
+              `leading-snug` locks line-height at 1.375 so the math is
+              predictable across browsers. 2 lines × 1.375 = 2.75em. */}
+          <h3 className="font-medium transition-colors group-hover:text-primary line-clamp-2 break-words leading-snug h-[2.75em]">
             {product.name}
           </h3>
 
@@ -295,21 +356,25 @@ export function ProductCard({ product }: ProductCardProps) {
             </p>
           ) : null}
 
-          <div className="flex items-center gap-1">
-            {typeof product.rating_avg === "number" && (
-              <>
-                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                <span className="text-sm font-medium">
-                  {product.rating_avg.toFixed(1)}
+          {/* On mobile, content flows naturally — the price sits
+              directly under the description with no dead space, since
+              vertical scrolling doesn't benefit from cross-card price
+              alignment. On sm:+ we anchor this block to the bottom
+              with mt-auto so prices line up across the desktop grid. */}
+          <div className="space-y-1 pt-2 sm:mt-auto">
+          {typeof product.rating_avg === "number" && (
+            <div className="flex items-center gap-1">
+              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+              <span className="text-sm font-medium">
+                {product.rating_avg.toFixed(1)}
+              </span>
+              {typeof product.rating_count === "number" && (
+                <span className="text-xs sm:text-sm text-muted-foreground">
+                  ({product.rating_count})
                 </span>
-                {typeof product.rating_count === "number" && (
-                  <span className="text-xs sm:text-sm text-muted-foreground">
-                    ({product.rating_count})
-                  </span>
-                )}
-              </>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span className="text-base sm:text-lg font-bold">
@@ -357,6 +422,7 @@ export function ProductCard({ product }: ProductCardProps) {
               )}
             </Button>
           </div>
+          </div>{/* end mt-auto bottom block */}
       </div>
     </Link>
   );

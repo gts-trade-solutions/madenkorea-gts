@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { ProductCard } from "@/components/ProductCard";
+import { ProductFilters } from "@/components/ProductFilters";
 
 export const revalidate = 300; // ISR: refresh every 5 minutes
 
@@ -204,44 +205,14 @@ export default async function CategoryPage({
           )}
         </div>
 
-        <div className="flex items-center justify-between mb-6">
-          <p className="text-muted-foreground">
-            {sortedItems.length} {sortedItems.length === 1 ? "product" : "products"}
-          </p>
-          <form className="flex items-center gap-2" method="get">
-            <select name="sort" defaultValue={selectedSort} className="h-9 rounded-md border bg-background px-2 text-sm">
-              <option value="newest">Newest</option>
-              <option value="price_asc">Price: Low to high</option>
-              <option value="price_desc">Price: High to low</option>
-              <option value="popular">Most Popular</option>
-            </select>
-            <select name="price" defaultValue={selectedPrice} className="h-9 rounded-md border bg-background px-2 text-sm">
-              <option value="all">All prices</option>
-              <option value="0-5000">INR 0 - INR 5,000</option>
-              <option value="5000-10000">INR 5,000 - INR 10,000</option>
-              <option value="10000+">INR 10,000+</option>
-            </select>
-            <select name="brand" defaultValue={selectedBrand} className="h-9 rounded-md border bg-background px-2 text-sm">
-              <option value="all">All brands</option>
-              {brandOptions.map((b) => {
-                const value = b?.slug || b?.name || "";
-                if (!value) return null;
-                return (
-                  <option key={value} value={value}>
-                    {b?.name}
-                  </option>
-                );
-              })}
-            </select>
-            <label className="inline-flex items-center gap-2 rounded-md border px-2 h-9 text-sm">
-              <input type="checkbox" name="in_stock" value="1" defaultChecked={inStockOnly} />
-              In stock only
-            </label>
-            <button className="h-9 rounded-md border px-3 text-sm" type="submit">
-              Apply
-            </button>
-          </form>
-        </div>
+        <ProductFilters
+          itemCount={sortedItems.length}
+          selectedSort={selectedSort}
+          selectedPrice={selectedPrice}
+          selectedBrand={selectedBrand}
+          brandOptions={brandOptions}
+          inStockOnly={inStockOnly}
+        />
 
         {sortedItems.length === 0 ? (
           <div className="text-center py-12">
@@ -250,7 +221,7 @@ export default async function CategoryPage({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
   {sortedItems.map((product) => (
     <ProductCard key={product.id} product={product as any} />
   ))}

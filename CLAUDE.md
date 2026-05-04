@@ -104,6 +104,21 @@ Local migrations present:
 - **`lib/adminAuth.ts`** checks an `ADMIN_EMAIL` request header but the visible admin UI relies on `AuthContext` role checks — don't mix the two.
 - **Build ignores type errors** (see Commands above). Run `npm run typecheck` explicitly.
 
+## Mobile-View Conventions
+
+Tailwind defaults are `sm: 640px`, `md: 768px`, `lg: 1024px`. To prevent the tablet dead-zone (640–1023px), use these canonical class strings instead of inventing your own:
+
+| Use case | Class string |
+|---|---|
+| Product / card grid (4-up at desktop) | `grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4` |
+| Card grid (3-up at desktop) | `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6` |
+| Form row (3-field row) | `grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4` |
+| Footer columns (5-up) | `grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6` |
+| Sticky desktop sidebar (cart summary, etc.) | `lg:sticky lg:top-20` — never plain `sticky top-20`, which jumps on mobile |
+| Floating fixed button (FloatingWhatsApp) | `z-40` — keep below shadcn Dialog/Sheet (`z-50`) |
+
+For `<Image>` in a 2-column mobile grid (most product cards), `sizes` must reflect the actual rendered width: `"(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"` — never `100vw` on mobile, that loads 2× the bandwidth needed.
+
 ## Environment Variables
 
 Full categorized list (Supabase, Razorpay, SES, DTDC, Meta/Instagram/Facebook, WhatsApp, OpenAI, referral) is in CODEBASE_REFERENCE.md → "Environment Variables Referenced". **Never read or paste `.env` values into docs, commits, or tool output.**

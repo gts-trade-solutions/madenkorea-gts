@@ -41,6 +41,34 @@ function toDateInputValue(ts?: string | null) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/**
+ * `<input type="datetime-local">` requires the value in EXACTLY
+ * `YYYY-MM-DDTHH:mm` format — it silently renders empty for any other
+ * shape (including the `YYYY-MM-DDTHH:mm:ss+TZ` strings Supabase
+ * returns for timestamptz columns). We convert ISO → local components
+ * here so saved sale dates actually re-display in the input on reload.
+ */
+function toDateTimeLocalInputValue(ts?: string | null) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
+ * Inverse: take the `YYYY-MM-DDTHH:mm` value the input emits (local
+ * time, no timezone) and turn it back into an ISO timestamp the DB
+ * column expects. Returns null for empty input so the column stays
+ * NULL rather than the epoch.
+ */
+function fromDateTimeLocalInputValue(local?: string | null) {
+  if (!local) return null;
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
 type BrandRow = { id: string; name?: string|null; slug?: string|null };
 type CategoryRow = { id: string; name?: string|null; slug?: string|null };
 type VendorRow = { id: string; display_name?: string|null };
@@ -159,8 +187,8 @@ export function AdminProductEditor({ productId }: { productId: string }) {
         is_published: !!prod.is_published,
         compare_at_price: prod.compare_at_price ?? null,
         sale_price: prod.sale_price ?? null,
-        sale_starts_at: prod.sale_starts_at || "",
-        sale_ends_at: prod.sale_ends_at || "",
+        sale_starts_at: toDateTimeLocalInputValue(prod.sale_starts_at),
+        sale_ends_at: toDateTimeLocalInputValue(prod.sale_ends_at),
 
         made_in_korea: !!prod.made_in_korea,
         is_vegetarian: !!prod.is_vegetarian,
@@ -251,8 +279,8 @@ export function AdminProductEditor({ productId }: { productId: string }) {
         currency: model.currency || "INR",
         compare_at_price: model.compare_at_price ?? null,
         sale_price: model.sale_price ?? null,
-        sale_starts_at: model.sale_starts_at || null,
-        sale_ends_at: model.sale_ends_at || null,
+        sale_starts_at: fromDateTimeLocalInputValue(model.sale_starts_at),
+        sale_ends_at: fromDateTimeLocalInputValue(model.sale_ends_at),
         is_published: !!model.is_published,
 
         made_in_korea: !!model.made_in_korea,

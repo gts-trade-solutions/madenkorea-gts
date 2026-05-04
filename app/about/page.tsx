@@ -67,7 +67,7 @@ export default function AboutPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-12">
           <Card>
             <CardContent className="pt-6">
               <Award className="h-12 w-12 text-primary mb-4" />

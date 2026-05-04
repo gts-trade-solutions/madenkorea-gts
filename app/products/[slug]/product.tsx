@@ -1149,50 +1149,63 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                 </div>
 
                 {galleryCount > 1 && (
-                  <div className="grid grid-cols-4 gap-2">
-                    {/* image thumbs */}
-                    {imageUrls.map((src, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setSelectedImage(idx)}
-                        className={`relative aspect-square rounded-lg overflow-hidden border-2 ${
-                          selectedImage === idx
-                            ? "border-primary"
-                            : "border-transparent"
-                        }`}
-                      >
-                        <Image
-                          src={src}
-                          alt={`${product.name} ${idx + 1}`}
-                          fill
-                          className="object-cover"
-                        />
-                      </button>
-                    ))}
+                  // Single-row scrollable thumbnail strip. Replaces the
+                  // previous `grid grid-cols-4` which wrapped to a
+                  // second row at 5+ items. A subtle right-edge fade
+                  // hints there's more to scroll.
+                  <div className="relative">
+                    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30">
+                      {/* image thumbs */}
+                      {imageUrls.map((src, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setSelectedImage(idx)}
+                          className={`relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 ${
+                            selectedImage === idx
+                              ? "border-primary"
+                              : "border-transparent"
+                          }`}
+                        >
+                          <Image
+                            src={src}
+                            alt={`${product.name} ${idx + 1}`}
+                            fill
+                            className="object-cover"
+                            sizes="80px"
+                          />
+                        </button>
+                      ))}
 
-                    {/* video thumb (last) */}
-                    {videoUrl && (
-                      <button
-                        onClick={() => setSelectedImage(imageUrls.length)}
-                        className={`relative aspect-square rounded-lg overflow-hidden border-2 ${
-                          isVideoSelected
-                            ? "border-primary"
-                            : "border-transparent"
-                        }`}
-                        aria-label="Product video"
-                        title="Product video"
-                      >
-                        <video
-                          src={videoUrl}
-                          muted
-                          playsInline
-                          preload="metadata"
-                          className="absolute inset-0 w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-black/30 grid place-items-center">
-                          <PlayCircle className="h-8 w-8 text-white drop-shadow" />
-                        </div>
-                      </button>
+                      {/* video thumb (last) */}
+                      {videoUrl && (
+                        <button
+                          onClick={() => setSelectedImage(imageUrls.length)}
+                          className={`relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 ${
+                            isVideoSelected
+                              ? "border-primary"
+                              : "border-transparent"
+                          }`}
+                          aria-label="Product video"
+                          title="Product video"
+                        >
+                          <video
+                            src={videoUrl}
+                            muted
+                            playsInline
+                            preload="metadata"
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/30 grid place-items-center">
+                            <PlayCircle className="h-8 w-8 text-white drop-shadow" />
+                          </div>
+                        </button>
+                      )}
+                    </div>
+                    {galleryCount > 4 && (
+                      <div
+                        className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent"
+                        aria-hidden="true"
+                      />
                     )}
                   </div>
                 )}
@@ -1816,18 +1829,19 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       {/* LIGHTBOX — proper image viewer with prev/next + keyboard nav */}
       <Dialog open={showZoom} onOpenChange={setShowZoom}>
         <DialogContent
-          // Lock the dialog to nearly the full viewport so the expanded
-          // image actually feels expanded vs the inline gallery. Use an
-          // explicit grid template so shadcn's default `sm:max-w-lg` and
-          // grid layout don't shrink-wrap the image area.
+          // Mobile: pin the dialog to all four viewport edges with
+          // `inset-0` and zero out the translate. With both `left: 0`
+          // and `right: 0` set, the browser computes width to fill the
+          // visible viewport precisely — no scrollbar gutter quirk, no
+          // off-by-pixel from translate-centering. `w-auto` and
+          // `h-auto` defer width/height to the inset offsets.
           //
-          // Width is capped by the available image-area height so square
-          // photos fill the dialog cleanly without flanking white space
-          // on wide monitors. The min() picks whichever is smaller —
-          // 95vw on phones (portrait, width-bound), ~85vh on desktops
-          // (landscape, height-bound). Header + thumbnail strip take
-          // ~10vh, leaving ~85vh of square image space.
-          className="!w-[min(95vw,85vh)] !max-w-[min(95vw,85vh)] sm:!max-w-[min(95vw,85vh)] h-[95vh] max-h-[95vh] p-0 grid grid-rows-[auto_1fr_auto] gap-0"
+          // Tablet+: revert to centered `90vmin` square.
+          //
+          // `overflow-hidden` on the dialog itself contains anything
+          // image-specific that might otherwise leak. `!` prefixes win
+          // over shadcn's defaults regardless of class merge order.
+          className="!fixed !inset-0 !translate-x-0 !translate-y-0 !w-auto !max-w-none !h-auto !max-h-none !rounded-none overflow-hidden sm:!inset-auto sm:!top-[50%] sm:!left-[50%] sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:!w-[90vmin] sm:!max-w-[90vmin] sm:!h-[90vmin] sm:!max-h-[90vmin] sm:!rounded-lg p-0 grid grid-rows-[auto_1fr_auto] gap-0"
           onKeyDown={(e) => {
             if (imageUrls.length < 2) return;
             // Clamp to image-only navigation; the video tile (if any)
@@ -1848,8 +1862,8 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
             }
           }}
         >
-          <DialogHeader className="p-4 pb-2 shrink-0 flex flex-row items-center justify-between gap-3">
-            <DialogTitle className="truncate">
+          <DialogHeader className="p-4 pr-12 pb-2 shrink-0 flex flex-row items-center justify-between gap-3 min-w-0 overflow-hidden">
+            <DialogTitle className="truncate min-w-0 flex-1">
               {product?.name || "Product Image"}
             </DialogTitle>
             {imageUrls.length > 1 && (
@@ -1862,19 +1876,21 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
           {/* Image area — fills the middle row (1fr) of the dialog grid,
               so it grows to occupy all the screen except the header and
-              thumbnail strip. Click on the image itself does nothing;
-              close is via Esc, the X button, or clicking the backdrop
-              outside the dialog. */}
-          <div className="relative bg-muted/30 min-h-0 overflow-hidden">
+              thumbnail strip. `overflow-hidden` + `max-w-full` clamp
+              any inner content (the rendered image, lazy thumbnails,
+              etc.) so they cannot push the cell wider than the dialog,
+              regardless of the source image's natural dimensions or
+              load state. Click on the image itself does nothing; close
+              is via Esc, the X button, or clicking the backdrop. */}
+          <div className="relative bg-muted/30 min-h-0 min-w-0 max-w-full overflow-hidden">
             {imageUrls[selectedImage] ? (
               <Image
                 src={imageUrls[selectedImage]}
                 alt={product?.name || "Product image"}
                 fill
                 className="object-contain select-none"
-                sizes="95vw"
+                sizes="(max-width: 640px) 100vw, 720px"
                 draggable={false}
-                priority
               />
             ) : (
               <div className="w-full h-full bg-muted" />

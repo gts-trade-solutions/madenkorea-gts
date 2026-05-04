@@ -113,8 +113,14 @@ export default function AdminFunnelPage() {
                   i > 0 && prev > 0
                     ? Math.round(((prev - s.count) / prev) * 100)
                     : 0;
+                const href = `/admin/analytics/sessions?range=${range}&filter=${s.key}`;
                 return (
-                  <div key={s.key}>
+                  <Link
+                    key={s.key}
+                    href={href}
+                    className="block rounded-md p-2 -mx-2 hover:bg-muted/60 transition-colors"
+                    title={`View ${s.count.toLocaleString("en-IN")} session${s.count === 1 ? "" : "s"} that reached "${s.label}"`}
+                  >
                     <div className="flex items-baseline justify-between mb-1 flex-wrap gap-x-3 gap-y-1">
                       <span className="font-medium">{s.label}</span>
                       <span className="text-sm">
@@ -145,7 +151,7 @@ export default function AdminFunnelPage() {
                         style={{ width: `${pctOfTop}%` }}
                       />
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
@@ -154,9 +160,10 @@ export default function AdminFunnelPage() {
       </Card>
 
       <p className="mt-6 text-xs text-muted-foreground">
-        Sessions are 30-minute windows of a single browser. A session is
-        counted at a stage if any event of that stage fired during the
-        window. The biggest drop-offs (highlighted in red above) are where
+        Click any stage to see the underlying sessions. Sessions are 30-minute
+        windows of a single browser. A session is counted at a stage if any
+        event of that stage fired during the window. The biggest drop-offs
+        (highlighted in red above) are where
         you should focus your funnel work.
       </p>
     </div>

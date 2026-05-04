@@ -41,8 +41,8 @@ export function EditorialSection({
         {description && <p className="text-muted-foreground">{description}</p>}
       </div>
 
-      {/* 2 columns on mobile, 4 on large screens */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* 2 cols phone, 3 cols small tablet, 4 cols tablet+ */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
         {products.map((product) => (
           <ProductCard key={product.id} product={product as any} />
         ))}
