@@ -1,95 +1,71 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabaseAdmin";
-import { checkPincodeWithShipsy } from "@/lib/dtdc/serviceability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const CACHE_TTL_DAYS = 7;
-const TTL_MS = CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
-
+// We service every Indian pincode we have a row for. ETAs come from a
+// six-zone table that admins can edit at /admin/settings/shipping-zones.
+// The DTDC/Shipsy live serviceability call has been removed - that endpoint
+// doesn't exist in their public API.
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const raw = url.searchParams.get("pincode") ?? "";
   const pincode = raw.trim().replace(/[^0-9]/g, "");
   if (pincode.length !== 6) {
+    return NextResponse.json({ ok: false, error: "BAD_PINCODE" }, { status: 400 });
+  }
+
+  type LookupRow = {
+    pincode: string;
+    place_name: string;
+    district: string | null;
+    state: string;
+    zone: string;
+    label: string;
+    eta_days_min: number;
+    eta_days_max: number;
+    estimated_max_delivery_date: string;
+    serviceable: boolean;
+  };
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .rpc("lookup_pincode_eta", { p_pincode: pincode })
+    .maybeSingle<LookupRow>();
+
+  if (error) {
+    console.error("[serviceability] rpc error", error);
     return NextResponse.json(
-      { ok: false, error: "BAD_PINCODE" },
-      { status: 400 }
+      { ok: false, error: "LOOKUP_FAILED" },
+      { status: 500 },
     );
   }
 
-  const admin = createAdminClient();
-
-  // 1) Cache lookup — only return if it's still fresh.
-  const cached = await admin
-    .from("pincode_serviceability_cache")
-    .select("pincode, serviceable, eta_days_min, eta_days_max, last_checked_at")
-    .eq("pincode", pincode)
-    .maybeSingle();
-
-  if (cached.data) {
-    const ageMs = Date.now() - new Date(cached.data.last_checked_at).getTime();
-    if (ageMs < TTL_MS) {
-      return NextResponse.json({
-        ok: true,
-        pincode,
-        serviceable: cached.data.serviceable,
-        etaDaysMin: cached.data.eta_days_min,
-        etaDaysMax: cached.data.eta_days_max,
-        source: "cache",
-      });
-    }
-  }
-
-  // 2) Cache miss / stale → call Shipsy.
-  const result = await checkPincodeWithShipsy(pincode);
-  const debug = url.searchParams.get("debug") === "1";
-
-  // Fail-open: if we couldn't determine, return undetermined and don't
-  // poison the cache. Caller will treat null as "we'll confirm at
-  // checkout" and not block the user.
-  if (result.serviceable === null) {
-    // Log server-side so we can see exactly what went wrong with Shipsy
-    // even though the customer-facing response stays opaque.
-    console.warn("[serviceability] live-undetermined", {
-      pincode,
-      diag: result.diag,
-      raw: result.raw,
-    });
+  if (!data) {
+    // No row for this pincode. We don't have data for it yet — surface that
+    // explicitly so the UI can prompt the user to email us, rather than
+    // claiming we don't deliver there.
     return NextResponse.json({
       ok: true,
       pincode,
       serviceable: null,
-      etaDaysMin: null,
-      etaDaysMax: null,
-      source: "live-undetermined",
-      ...(debug ? { diag: result.diag, raw: result.raw } : {}),
+      known: false,
     });
   }
 
-  // 3) Persist the live answer.
-  await admin
-    .from("pincode_serviceability_cache")
-    .upsert(
-      {
-        pincode,
-        serviceable: result.serviceable,
-        eta_days_min: result.etaDaysMin,
-        eta_days_max: result.etaDaysMax,
-        payload: (result.raw as any) ?? null,
-        last_checked_at: new Date().toISOString(),
-        source: "shipsy",
-      },
-      { onConflict: "pincode" }
-    );
-
   return NextResponse.json({
     ok: true,
-    pincode,
-    serviceable: result.serviceable,
-    etaDaysMin: result.etaDaysMin,
-    etaDaysMax: result.etaDaysMax,
-    source: "live",
+    pincode: data.pincode,
+    placeName: data.place_name,
+    district: data.district,
+    state: data.state,
+    zone: data.zone,
+    zoneLabel: data.label,
+    serviceable: data.serviceable,
+    known: true,
+    etaDaysMin: data.eta_days_min,
+    etaDaysMax: data.eta_days_max,
+    estimatedMaxDeliveryDate: data.estimated_max_delivery_date,
   });
 }

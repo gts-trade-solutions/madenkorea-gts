@@ -299,7 +299,15 @@ export function Header() {
                 </Button>
               </SheetTrigger>
 
-              <SheetContent side="left" className="w-[85vw] max-w-sm p-0">
+              <SheetContent
+                side="left"
+                className="w-[85vw] max-w-sm p-0"
+                // Radix auto-focuses the first focusable child of a
+                // Sheet on open. That landed on the search input and
+                // popped the on-screen keyboard the moment the menu
+                // opened — intrusive UX. Block the auto-focus here.
+                onOpenAutoFocus={(e) => e.preventDefault()}
+              >
                 <div className="flex items-center justify-between px-5 py-4">
                   <Link href="/" className="flex items-center">
                     <Image
@@ -659,7 +667,9 @@ export function Header() {
         {showSearch && (
           <div className="absolute left-0 right-0 top-full z-50 px-4 pb-3">
             <div className="mx-auto w-full max-w-lg rounded-2xl border border-neutral-200 bg-white p-3 shadow-2xl">
-              <SearchAutocomplete />
+              {/* User explicitly tapped the search icon — focus the
+                  input so the keyboard appears immediately. */}
+              <SearchAutocomplete autoFocus />
             </div>
           </div>
         )}

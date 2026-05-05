@@ -26,7 +26,8 @@
       "Bash(grep -vE \"^\\\\s*$\")",
       "mcp__claude_ai_Supabase__list_migrations",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\derin_\\\\Desktop\\\\madenkorea-documentation\\\\app versions\\\\madenkorea-production\" -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(curl -fsSL -o \"public/razorpay-logo.svg\" \"https://razorpay.com/assets/razorpay-logo.svg\")"
     ]
   }
 }

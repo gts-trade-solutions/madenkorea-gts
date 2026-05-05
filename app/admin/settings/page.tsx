@@ -330,6 +330,20 @@ export default function AdminSettingsPage() {
                     onCheckedChange={(checked) => setSettings({ ...settings, codEnabled: checked })}
                   />
                 </div>
+
+                <div className="border-t pt-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <Label>Delivery Time Zones</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Edit the per-zone ETA windows shown on product pages (Chennai Metro, Tamil Nadu, South India, North India, Northeast, Islands).
+                      </p>
+                    </div>
+                    <Button variant="outline" onClick={() => router.push('/admin/settings/shipping-zones')}>
+                      Manage zones
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

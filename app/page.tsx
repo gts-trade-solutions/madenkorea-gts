@@ -157,7 +157,7 @@ export const metadata: Metadata = {
   },
 };
 
-export const revalidate = 300; // ISR: refresh the home data every 5 minutes
+export const revalidate = 30; // ISR: refresh the home data every 5 minutes
 
 function supabaseServer() {
   return createClient(

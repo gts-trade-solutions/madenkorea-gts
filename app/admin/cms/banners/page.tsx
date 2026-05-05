@@ -132,11 +132,29 @@ export default function BannersAdminPage() {
       .publicUrl;
   }
 
+  // Tells the home route to drop its cached banner data and re-render.
+  // Best-effort: we never block the admin save on this network call, and
+  // never surface its failure — the next ISR tick will catch up anyway.
+  async function revalidateHome() {
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      await fetch("/api/admin/banners/revalidate", {
+        method: "POST",
+        credentials: "include",
+        headers: token ? { authorization: `Bearer ${token}` } : undefined,
+      });
+    } catch {
+      // ignore — non-critical
+    }
+  }
+
   async function handleDelete(id: string) {
     if (!confirm("Delete this banner?")) return;
     const { error } = await supabase.from("home_banners").delete().eq("id", id);
     if (error) return alert(error.message);
     await fetchList();
+    revalidateHome();
   }
 
   async function handleToggle(r: Row) {
@@ -146,6 +164,7 @@ export default function BannersAdminPage() {
       .eq("id", r.id);
     if (error) return alert(error.message);
     await fetchList();
+    revalidateHome();
   }
 
   // Create or Save (works even if image_path NOT NULL — we upload first)
@@ -247,6 +266,7 @@ export default function BannersAdminPage() {
 
       setOpen(false);
       await fetchList();
+      revalidateHome();
     } catch (err: any) {
       setMsg(err.message || "Save failed");
     }

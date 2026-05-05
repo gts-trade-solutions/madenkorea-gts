@@ -62,6 +62,14 @@ export function Footer() {
               </li>
               <li>
                 <Link
+                  href="/policies/shipping-returns"
+                  className="text-white/90 hover:text-white transition-colors"
+                >
+                  Shipping &amp; Returns
+                </Link>
+              </li>
+              <li>
+                <Link
                   href="/privacy"
                   className="text-white/90 hover:text-white transition-colors"
                 >

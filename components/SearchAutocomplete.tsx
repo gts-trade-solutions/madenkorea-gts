@@ -21,7 +21,19 @@ const supabase = createClient(
   { auth: { persistSession: true, autoRefreshToken: true } }
 );
 
-export function SearchAutocomplete() {
+type SearchAutocompleteProps = {
+  /**
+   * When true, focuses the input on mount and shows the on-screen
+   * keyboard on mobile. Use only on surfaces where focus is the
+   * intended outcome of the user's last action (e.g. tapping the
+   * header search icon). Do NOT enable inside menus / sheets — Radix
+   * already auto-focuses the first focusable child of a sheet, which
+   * would pop the keyboard the moment the menu opens.
+   */
+  autoFocus?: boolean;
+};
+
+export function SearchAutocomplete({ autoFocus = false }: SearchAutocompleteProps = {}) {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
@@ -31,6 +43,10 @@ export function SearchAutocomplete() {
   const [errorState, setErrorState] = useState<string | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus();
+  }, [autoFocus]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

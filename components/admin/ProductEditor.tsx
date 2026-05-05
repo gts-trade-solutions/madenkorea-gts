@@ -103,6 +103,7 @@ type ProductModel = {
   ingredients_md: string;
   key_features_md: string;
   additional_details_md: string;
+  box_contents_md: string;
   attributes_json: string; // JSON text, parsed to jsonb
   faq_text: string;        // "Q?::A||Q2?::A2" (converted to jsonb)
   key_benefits_text: string; // "Hydrating|Soothing" (converted to text[])
@@ -160,6 +161,7 @@ export function ProductEditor({
     ingredients_md: "",
     key_features_md: "",
     additional_details_md: "",
+    box_contents_md: "",
     attributes_json: "{}",        // jsonb NOT NULL in your schema
     faq_text: "",
     key_benefits_text: "",
@@ -250,6 +252,7 @@ export function ProductEditor({
           ingredients_md: prod.ingredients_md || "",
           key_features_md: prod.key_features_md || "",
           additional_details_md: prod.additional_details_md || "",
+          box_contents_md: prod.box_contents_md || "",
           attributes_json: JSON.stringify(prod.attributes ?? {}, null, 0),
           faq_text: ((prod.faq ?? []) as any[])
             .map((x: any) => `${x?.q ?? ""}::${x?.a ?? ""}`).filter(Boolean).join("||"),
@@ -341,6 +344,7 @@ export function ProductEditor({
         ingredients_md: model.ingredients_md || null,
         key_features_md: model.key_features_md || null,
         additional_details_md: model.additional_details_md || null,
+        box_contents_md: model.box_contents_md || null,
         attributes: (() => {
           try { return JSON.parse(model.attributes_json || "{}"); } catch { return {}; }
         })(),
@@ -653,6 +657,15 @@ export function ProductEditor({
             <div>
               <Label>Meta description</Label>
               <Textarea rows={3} value={model.meta_description} onChange={e => setModel(m=>({...m, meta_description: e.target.value}))} />
+            </div>
+            <div>
+              <Label>What's in the Box (markdown)</Label>
+              <Textarea
+                rows={4}
+                placeholder={"- 1× Product (50 ml)\n- 1× Spatula\n- Instruction leaflet"}
+                value={model.box_contents_md}
+                onChange={e => setModel(m=>({...m, box_contents_md: e.target.value}))}
+              />
             </div>
             <div>
               <Label>Ingredients (markdown)</Label>

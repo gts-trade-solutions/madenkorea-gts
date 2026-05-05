@@ -52,6 +52,7 @@ type BulkProductRow = {
   ingredients_md: string | null;
   key_features_md: string | null;
   additional_details_md: string | null;
+  box_contents_md: string | null;
   attributes_json: string | null;
   faq: Array<{ q: string; a: string }>;
   key_benefits: string[];
@@ -335,6 +336,7 @@ async function bulkDownloadTemplate() {
     { header: "ingredients_md", key: "ingredients_md", width: 40 },
     { header: "key_features_md", key: "key_features_md", width: 40 },
     { header: "additional_details_md", key: "additional_details_md", width: 40 },
+    { header: "box_contents_md", key: "box_contents_md", width: 40 },
     { header: "attributes_json", key: "attributes_json", width: 28 },
     { header: "faq", key: "faq", width: 34 },
     { header: "key_benefits", key: "key_benefits", width: 28 },
@@ -377,6 +379,7 @@ async function bulkDownloadTemplate() {
     ingredients_md: "- Water\n- Glycerin",
     key_features_md: "- Feature A\n- Feature B",
     additional_details_md: "",
+    box_contents_md: "- 1× Product (50 ml)\n- 1× Spatula\n- Instruction leaflet",
     attributes_json: "{\"shade\":\"01\",\"size\":\"100ml\"}",
     faq: "Q1?::A1||Q2?::A2",
     key_benefits: "Hydrating|Brightening|Soothing",
@@ -386,7 +389,7 @@ async function bulkDownloadTemplate() {
   writeRow(2, ex1);
 
   // Wrap long text columns
-  ["short_description","description","ingredients_md","key_features_md","additional_details_md","meta_description"]
+  ["short_description","description","ingredients_md","key_features_md","additional_details_md","box_contents_md","meta_description"]
     .forEach(key => { ws.getColumn(key).alignment = { wrapText: true }; });
 
   // Data validation (after rows are written). Use direct ranges, NO "=".
@@ -502,6 +505,7 @@ async function bulkDownloadTemplate() {
         ingredients_md: r.ingredients_md || null,
         key_features_md: r.key_features_md || null,
         additional_details_md: r.additional_details_md || null,
+        box_contents_md: r.box_contents_md || null,
         attributes_json: r.attributes_json || null,
         faq: parseFaq(r.faq),
         key_benefits: parseList(r.key_benefits),
@@ -859,6 +863,7 @@ async function bulkDownloadTemplate() {
           ingredients_md: p.ingredients_md,
           key_features_md: p.key_features_md,
           additional_details_md: p.additional_details_md,
+          box_contents_md: p.box_contents_md,
           attributes: safeJSON(p.attributes_json) ?? {}, // ← never null (DB is jsonb NOT NULL)
           faq: p.faq,
           key_benefits: p.key_benefits,

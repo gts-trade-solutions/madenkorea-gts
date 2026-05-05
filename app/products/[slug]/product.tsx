@@ -37,7 +37,11 @@ import {
   MessageCircle,
   Send,
   PlayCircle,
+  Check,
+  Plus,
+  Minus,
 } from "lucide-react";
+import Link from "next/link";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +50,13 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useShippingConfig } from "@/lib/hooks/useShippingConfig";
 import {
   Dialog,
   DialogContent,
@@ -97,6 +108,7 @@ type Product = {
   ingredients_md?: string | null;
   key_features_md?: string | null;
   additional_details_md?: string | null;
+  box_contents_md?: string | null;
   key_benefits?: string[] | null;
 
   brands?: Brand | null; // via join
@@ -296,7 +308,12 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
   const router = useRouter();
   const params = useParams();
   const slug = (params?.slug as string) || (params?.handle as string);
-  const { addItem } = useCart();
+  const {
+    addItem,
+    setQty: setCartQty,
+    removeItem: removeCartLine,
+    items: cartItems,
+  } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
   const [showShare, setShowShare] = useState(false);
   const [isBuyingNow, setIsBuyingNow] = useState(false);
@@ -310,6 +327,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
   const [deliveryEstimate, setDeliveryEstimate] = useState("");
   const [isCheckingPincode, setIsCheckingPincode] = useState(false);
   const [showZoom, setShowZoom] = useState(false);
+  const shippingConfig = useShippingConfig();
 
   const [editingReview, setEditingReview] = useState<ReviewWithPhotos | null>(
     null
@@ -412,7 +430,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
           is_published, brand_id, category_id, hero_image_path, stock_qty,
           volume_ml, net_weight_g, country_of_origin, new_until, is_featured, is_trending,
           made_in_korea, is_vegetarian, cruelty_free, toxin_free, paraben_free,
-          ingredients_md, key_features_md, additional_details_md, key_benefits,
+          ingredients_md, key_features_md, additional_details_md, box_contents_md, key_benefits,
           video_path,
           brands ( name, slug )
         `
@@ -527,13 +545,61 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const isOutOfStock = (product?.stock_qty ?? 0) <= 0;
 
+  // Upper bound for the quantity selector: cap at stock_qty. Falls back
+  // to 99 when stock isn't tracked so the user isn't blocked.
+  const maxQty = useMemo(() => {
+    const stock = product?.stock_qty ?? null;
+    if (stock == null || stock <= 0) return 99;
+    return stock;
+  }, [product?.stock_qty]);
+
+  // Reset quantity to 1 whenever the visitor switches to a different
+  // product (the page is a client component and persists state).
+  useEffect(() => {
+    setQuantity(1);
+  }, [product?.id]);
+
+  // Clamp the current quantity if stock dropped below the selected
+  // amount (e.g. another tab updated the cart).
+  useEffect(() => {
+    setQuantity((q) => Math.min(q, maxQty));
+  }, [maxQty]);
+
+  // Cart line for this specific product, if any. Used to mirror the
+  // live cart quantity in the selector and to drive the +/- buttons
+  // when the item is already in the cart.
+  const cartLine = useMemo(
+    () =>
+      product?.id
+        ? cartItems.find((it) => it.product_id === product.id) ?? null
+        : null,
+    [cartItems, product?.id]
+  );
+  const inCart = !!cartLine;
+  const cartQty = cartLine?.quantity ?? 0;
+
+  // Selector mirrors reality:
+  //   - In cart  → live cart quantity (≥ 1).
+  //   - Not in cart → 0 (the product hasn't been added yet).
+  // Adding starts the count at 1; − at 1 removes the line entirely.
+  const displayedQty = inCart ? cartQty : 0;
+
   const handleAddToCart = async () => {
     if (!product || isAddingToCart || isOutOfStock) return;
+    // Once the item is already in the cart, the +/- buttons drive the
+    // cart line directly. Tapping "Added to cart" jumps to /cart so
+    // the user can review or proceed instead of stacking duplicates.
+    if (inCart) {
+      router.push("/cart");
+      return;
+    }
     try {
       setIsAddingToCart(true);
-      await addItem(product.id, quantity);
+      // First add starts the count at 1. The +/- buttons let the user
+      // bump it from there.
+      await addItem(product.id, 1);
       toast.success("Added to cart", {
-        description: `${quantity} × ${product.name} added to your cart.`,
+        description: `${product.name} added to your cart.`,
       });
     } catch (error) {
       console.error("Add to cart error:", error);
@@ -547,7 +613,12 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
     if (!product || isBuyingNow || isOutOfStock) return;
     try {
       setIsBuyingNow(true);
-      await addItem(product.id, quantity);
+      // If the item is already in the cart, don't add more — the
+      // cart line is the source of truth. Otherwise add a single unit
+      // (the user can still adjust quantity on /checkout if needed).
+      if (!inCart) {
+        await addItem(product.id, 1);
+      }
       router.push("/checkout");
     } catch (error) {
       console.error("Buy now error:", error);
@@ -577,9 +648,11 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       );
       const j: {
         ok?: boolean;
-        serviceable: boolean | null;
-        etaDaysMin: number | null;
-        etaDaysMax: number | null;
+        known?: boolean;
+        serviceable?: boolean | null;
+        placeName?: string;
+        state?: string;
+        estimatedMaxDeliveryDate?: string;
       } = await res.json().catch(() => ({} as any));
 
       if (!res.ok || !j?.ok) {
@@ -587,22 +660,30 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
         return;
       }
 
-      if (j.serviceable === true) {
-        const eta =
-          j.etaDaysMin && j.etaDaysMax
-            ? j.etaDaysMin === j.etaDaysMax
-              ? `in ~${j.etaDaysMin} day${j.etaDaysMin === 1 ? "" : "s"}`
-              : `in ${j.etaDaysMin}–${j.etaDaysMax} days`
-            : "in 3–5 days";
-        setDeliveryEstimate(`✓ Deliverable to ${cleaned} ${eta}.`);
-      } else if (j.serviceable === false) {
+      if (j.known === false) {
         setDeliveryEstimate(
-          `Sorry, we don't deliver to ${cleaned} yet. Email info@madenkorea.com if you'd like us to ship there.`
+          `We don't have delivery info for ${cleaned} yet. Email info@madenkorea.com and we'll confirm.`
         );
+        return;
+      }
+
+      // Format YYYY-MM-DD as "10 May" (no year — same calendar year either way for ETAs ≤15d).
+      const formatBy = (iso?: string) => {
+        if (!iso) return null;
+        const d = new Date(`${iso}T00:00:00`);
+        if (Number.isNaN(d.getTime())) return null;
+        return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+      };
+
+      const by = formatBy(j.estimatedMaxDeliveryDate);
+      const where = [j.placeName, j.state].filter(Boolean).join(", ");
+
+      if (where && by) {
+        setDeliveryEstimate(`✓ Deliverable to ${where} by ${by}.`);
+      } else if (by) {
+        setDeliveryEstimate(`✓ Deliverable to ${cleaned} by ${by}.`);
       } else {
-        setDeliveryEstimate(
-          "We couldn't reach our courier just now. We'll confirm availability at checkout."
-        );
+        setDeliveryEstimate(`✓ Deliverable to ${cleaned}.`);
       }
     } catch (e) {
       setDeliveryEstimate("Delivery availability will be confirmed at checkout.");
@@ -915,6 +996,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
   /* ------------ Dynamic tabs (now includes Reviews) ------------ */
   const hasDescription = Boolean(product?.description?.trim());
+  const hasBoxContents = Boolean(product?.box_contents_md?.trim());
   const hasIngredients = Boolean(product?.ingredients_md?.trim());
   const hasBenefits =
     Boolean(product?.key_features_md?.trim()) ||
@@ -942,6 +1024,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
     () =>
       [
         hasDescription && { key: "description", label: "Description" },
+        hasBoxContents && { key: "box-contents", label: "What's in the Box" },
         hasIngredients && { key: "ingredients", label: "Ingredients" },
         hasBenefits && { key: "benefits", label: "Benefits" },
         hasFaq && { key: "faq", label: "FAQ" },
@@ -960,6 +1043,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       hasFaq,
       hasAdditional,
       hasDescription,
+      hasBoxContents,
       reviewStats?.rating_count,
     ]
   );
@@ -1300,39 +1384,91 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
                 {/* Quantity + CTAs */}
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                  <div className="flex items-center border rounded-lg">
+                  {/* 44px touch targets for the +/- buttons (Apple
+                      guideline) — the previous size="sm" was 32px,
+                      cramped on mobile. Plus and Minus icons replace
+                      raw "+" / "-" text for a centered glyph. Both
+                      handlers use functional setters and respect the
+                      stock-aware max so rapid clicks don't push past
+                      available inventory. */}
+                  {/* +/- always drive the cart. Decrementing from 1
+                      removes the line; incrementing from 0 adds 1.
+                      The Add-to-Cart button handles the same first-add
+                      action, but is needed because some users expect
+                      a labelled CTA. */}
+                  <div className="flex items-center border rounded-lg overflow-hidden self-start">
                     <Button
                       variant="ghost"
-                      size="sm"
-                      onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                      disabled={quantity <= 1}
+                      size="icon"
+                      className="h-11 w-11 rounded-none"
+                      onClick={() => {
+                        if (!cartLine) return;
+                        if (cartQty <= 1) {
+                          void removeCartLine(cartLine.id);
+                        } else {
+                          void setCartQty(cartLine.id, cartQty - 1);
+                        }
+                      }}
+                      disabled={!inCart || isOutOfStock}
+                      aria-label={
+                        cartQty === 1
+                          ? "Remove from cart"
+                          : "Decrease quantity"
+                      }
                     >
-                      -
+                      <Minus className="h-4 w-4" />
                     </Button>
-                    <span className="px-4 py-2 min-w-[3rem] text-center">
-                      {quantity}
+                    <span className="px-4 min-w-[3rem] text-center font-medium tabular-nums">
+                      {displayedQty}
                     </span>
                     <Button
                       variant="ghost"
-                      size="sm"
-                      onClick={() => setQuantity(quantity + 1)}
+                      size="icon"
+                      className="h-11 w-11 rounded-none"
+                      onClick={() => {
+                        if (!product || isOutOfStock) return;
+                        if (cartLine) {
+                          if (cartQty < maxQty) {
+                            void setCartQty(cartLine.id, cartQty + 1);
+                          }
+                        } else {
+                          void addItem(product.id, 1);
+                        }
+                      }}
+                      disabled={
+                        isOutOfStock ||
+                        (inCart && cartQty >= maxQty)
+                      }
+                      aria-label={
+                        inCart ? "Increase quantity" : "Add to cart"
+                      }
                     >
-                      +
+                      <Plus className="h-4 w-4" />
                     </Button>
                   </div>
 
                   <div className="grid flex-1 gap-3 sm:grid-cols-2">
                     <Button
                       size="lg"
-                      className="w-full"
+                      className={`w-full transition-colors ${
+                        inCart
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          : ""
+                      }`}
                       onClick={handleAddToCart}
                       disabled={isAddingToCart || isOutOfStock}
                     >
-                      <ShoppingCart className="mr-2 h-5 w-5" />
+                      {inCart ? (
+                        <Check className="mr-2 h-5 w-5" />
+                      ) : (
+                        <ShoppingCart className="mr-2 h-5 w-5" />
+                      )}
                       {isOutOfStock
                         ? "Out of Stock"
                         : isAddingToCart
                         ? "Adding..."
+                        : inCart
+                        ? "Added to cart"
                         : "Add to Cart"}
                     </Button>
                     <Button
@@ -1376,7 +1512,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                 </div>
 
                 <Card className="mt-6">
-                  <CardContent className="p-4 space-y-4">
+                  <CardContent className="p-3 sm:p-4 space-y-3 sm:space-y-4">
                     <div>
                       <Label htmlFor="pincode">Check Delivery</Label>
                       <div className="flex gap-2 mt-2">
@@ -1409,44 +1545,68 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
                     <Separator />
 
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-start gap-2">
-                        <Truck className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                        <div>
-                          <p className="font-medium">Free Shipping</p>
-                          <p className="text-muted-foreground">
-                            On orders above ₹2,000
-                          </p>
-                        </div>
+                    <TooltipProvider delayDuration={150}>
+                      <div className="grid grid-cols-2 gap-1.5 sm:gap-2 text-sm">
+                        {[
+                          {
+                            href: "/policies/shipping-returns#free-shipping",
+                            Icon: Truck,
+                            title: "Free Shipping",
+                            sub: `On orders above ₹${shippingConfig.deliveryThreshold.toLocaleString("en-IN")}`,
+                            tip: `Pan-India delivery is free once your cart crosses ₹${shippingConfig.deliveryThreshold.toLocaleString("en-IN")}. K Plus members get free shipping on every order.`,
+                          },
+                          {
+                            href: "/policies/shipping-returns#easy-returns",
+                            Icon: RotateCcw,
+                            title: "Easy Returns",
+                            sub: "7 days return policy",
+                            tip: "Raise a return within 7 days of delivery for a damaged, defective, or wrong item. Pickup is arranged from your address.",
+                          },
+                          {
+                            href: "/policies/shipping-returns#secure-payment",
+                            Icon: Shield,
+                            title: "Secure Payment",
+                            // Word-mark rendered from the official Razorpay SVG in /public.
+                            // Sized to sit on the same baseline as the other subtitles.
+                            sub: (
+                              <span className="inline-flex items-center gap-1">
+                                Powered by
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src="/razorpay-logo.svg"
+                                  alt="Razorpay"
+                                  className="h-3 sm:h-3.5 w-auto inline-block"
+                                />
+                              </span>
+                            ),
+                            tip: "All payments are processed by Razorpay over an encrypted PCI-DSS-compliant connection. We never see or store your card details.",
+                          },
+                          {
+                            href: "/policies/shipping-returns#authentic-products",
+                            Icon: Package,
+                            title: "Authentic Products",
+                            sub: "100% original Korean products",
+                            tip: "Every product is sourced directly from the brand or its authorised distributor in Korea. No grey-market stock, no expired batches.",
+                          },
+                        ].map(({ href, Icon, title, sub, tip }) => (
+                          <Tooltip key={title}>
+                            <TooltipTrigger asChild>
+                              <Link
+                                href={href}
+                                className="flex flex-col items-center justify-center text-center gap-1 rounded-md p-1.5 sm:p-2 hover:bg-muted/60 transition-colors min-w-0"
+                              >
+                                <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground flex-shrink-0" />
+                                <p className="font-medium leading-tight text-xs sm:text-sm">{title}</p>
+                                <p className="text-muted-foreground text-[11px] sm:text-xs leading-snug line-clamp-2">{sub}</p>
+                              </Link>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs text-xs">
+                              {tip}
+                            </TooltipContent>
+                          </Tooltip>
+                        ))}
                       </div>
-                      <div className="flex items-start gap-2">
-                        <RotateCcw className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                        <div>
-                          <p className="font-medium">Easy Returns</p>
-                          <p className="text-muted-foreground">
-                            7 days return policy
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <Shield className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                        <div>
-                          <p className="font-medium">Secure Payment</p>
-                          <p className="text-muted-foreground">
-                            100% secure transactions
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <Package className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                        <div>
-                          <p className="font-medium">Authentic Products</p>
-                          <p className="text-muted-foreground">
-                            100% original Korean products
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                    </TooltipProvider>
                   </CardContent>
                 </Card>
               </div>
@@ -1465,6 +1625,16 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     {product?.description && (
                       <Markdown>{product.description}</Markdown>
                     )}
+                  </ProductInfoAccordionSection>
+                )}
+
+                {hasBoxContents && (
+                  <ProductInfoAccordionSection
+                    title="What's in the Box"
+                    isOpen={openSection === "box-contents"}
+                    onToggle={() => toggleSection("box-contents")}
+                  >
+                    <Markdown>{product!.box_contents_md!}</Markdown>
                   </ProductInfoAccordionSection>
                 )}
 
