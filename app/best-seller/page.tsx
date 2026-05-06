@@ -18,6 +18,7 @@ type Product = {
   hero_image_path?: string | null;
   is_featured?: boolean | null;
   is_trending?: boolean | null;
+  is_bundle?: boolean | null;
   short_description?: string | null;
   volume_ml?: number | null;
   net_weight_g?: number | null;
@@ -42,7 +43,7 @@ export default function BestSellerPage() {
         .select(`
           id, slug, name,
           price, currency, compare_at_price, sale_price, sale_starts_at, sale_ends_at,
-          hero_image_path, is_featured, is_trending,
+          hero_image_path, is_featured, is_trending, is_bundle,
           short_description, volume_ml, net_weight_g, country_of_origin, stock_qty,
           brands ( name )
         `)
@@ -69,7 +70,7 @@ export default function BestSellerPage() {
               .select(`
                 id, slug, name,
                 price, currency, compare_at_price, sale_price, sale_starts_at, sale_ends_at,
-                hero_image_path, is_featured, is_trending,
+                hero_image_path, is_featured, is_trending, is_bundle,
                 short_description, volume_ml, net_weight_g, country_of_origin, stock_qty,
                 brands ( name )
               `)

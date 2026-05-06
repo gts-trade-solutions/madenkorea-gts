@@ -26,6 +26,7 @@ type ProductForCard = {
 
   is_featured?: boolean | null;
   is_trending?: boolean | null;
+  is_bundle?: boolean | null;
   new_until?: string | null;
 
   hero_image_url?: string | null;
@@ -239,7 +240,12 @@ export function ProductCard({ product }: ProductCardProps) {
               behavioural signal wins. On sm:+ we show all marketing
               badges since there's room. */}
           {(() => {
-            const mobileMarketingBadge = isNew
+            // Bundle wins priority on mobile because it's a category, not just a
+            // marketing flag — users browsing a grid need to know "this is a set,
+            // not a single item" at a glance.
+            const mobileMarketingBadge = product.is_bundle
+              ? "Bundle"
+              : isNew
               ? "New"
               : product.is_trending
                 ? "Trending"
@@ -281,6 +287,9 @@ export function ProductCard({ product }: ProductCardProps) {
                 )}
 
                 {/* Tablet+: full marketing badge stack */}
+                {product.is_bundle && (
+                  <Badge className="hidden sm:inline-flex">Bundle</Badge>
+                )}
                 {product.is_featured && (
                   <Badge className="hidden sm:inline-flex">Featured</Badge>
                 )}

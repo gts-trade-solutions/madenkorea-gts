@@ -30,6 +30,7 @@ type DbProduct = {
   sale_ends_at?: string | null;
   hero_image_path?: string | null;
   stock_qty?: number | null;
+  is_bundle?: boolean | null;
   brands?: { name?: string | null } | null;
 };
 
@@ -70,7 +71,7 @@ export default function AccountPage() {
             `
             id, slug, name, price, currency,
             compare_at_price, sale_price, sale_starts_at, sale_ends_at,
-            hero_image_path, stock_qty, brands(name)
+            hero_image_path, stock_qty, is_bundle, brands(name)
           `
           )
           .in("id", viewedIds.slice(0, 12))

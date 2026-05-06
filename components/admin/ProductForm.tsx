@@ -41,6 +41,7 @@ type BulkProductRow = {
 
   // badges
   made_in_korea: boolean;
+  is_bundle: boolean;
   is_vegetarian: boolean;
   cruelty_free: boolean;
   toxin_free: boolean;
@@ -326,6 +327,7 @@ async function bulkDownloadTemplate() {
     { header: "sale_ends_at", key: "sale_ends_at", width: 18 },
 
     { header: "made_in_korea", key: "made_in_korea", width: 14 },
+    { header: "is_bundle", key: "is_bundle", width: 12 },
     { header: "is_vegetarian", key: "is_vegetarian", width: 14 },
     { header: "cruelty_free", key: "cruelty_free", width: 12 },
     { header: "toxin_free", key: "toxin_free", width: 12 },
@@ -375,6 +377,7 @@ async function bulkDownloadTemplate() {
     is_published: true, compare_at_price: "", sale_price: "",
     sale_starts_at: "", sale_ends_at: "",
     made_in_korea: true, is_vegetarian: true, cruelty_free: true, toxin_free: true, paraben_free: true,
+    is_bundle: false,
     meta_title: "SEO Title", meta_description: "SEO description…",
     ingredients_md: "- Water\n- Glycerin",
     key_features_md: "- Feature A\n- Feature B",
@@ -495,6 +498,7 @@ async function bulkDownloadTemplate() {
         sale_ends_at: toISODate(r.sale_ends_at),
 
         made_in_korea: parseBool(r.made_in_korea),
+        is_bundle: parseBool(r.is_bundle),
         is_vegetarian: parseBool(r.is_vegetarian),
         cruelty_free: parseBool(r.cruelty_free),
         toxin_free: parseBool(r.toxin_free),
@@ -852,6 +856,7 @@ async function bulkDownloadTemplate() {
 
           // badges
           made_in_korea: p.made_in_korea,
+          is_bundle: p.is_bundle,
           is_vegetarian: p.is_vegetarian,
           cruelty_free: p.cruelty_free,
           toxin_free: p.toxin_free,

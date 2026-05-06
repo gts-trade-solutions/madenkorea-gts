@@ -13,6 +13,7 @@ type CardProduct = {
   sale_ends_at?: string | null;
   is_featured?: boolean | null;
   is_trending?: boolean | null;
+  is_bundle?: boolean | null;
   new_until?: string | null;
   short_description?: string | null;
   volume_ml?: number | null;

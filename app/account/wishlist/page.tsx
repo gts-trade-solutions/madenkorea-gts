@@ -35,6 +35,7 @@ type ProductRow = {
   sale_starts_at?: string | null;
   sale_ends_at?: string | null;
   hero_image_path?: string | null;
+  is_bundle?: boolean | null;
   brands?: { name?: string | null } | null;
 };
 
@@ -115,7 +116,7 @@ export default function WishlistPage() {
           product:products!wishlist_items_product_id_fkey (
             id, slug, name, price, currency,
             compare_at_price, sale_price, sale_starts_at, sale_ends_at,
-            hero_image_path, brands ( name )
+            hero_image_path, is_bundle, brands ( name )
           )
         `)
         .order('created_at', { ascending: false });

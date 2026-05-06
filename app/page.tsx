@@ -209,7 +209,7 @@ async function fetchEditorial(
       id, slug, name,
       price, currency,
       compare_at_price, sale_price, sale_starts_at, sale_ends_at,
-      is_featured, is_trending, new_until,
+      is_featured, is_trending, is_bundle, new_until,
       short_description, volume_ml, net_weight_g, country_of_origin,
       hero_image_path, stock_qty,
       brands ( name )

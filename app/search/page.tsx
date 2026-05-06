@@ -15,6 +15,7 @@ type CardProduct = {
   sale_ends_at?: string | null;
   is_featured?: boolean | null;
   is_trending?: boolean | null;
+  is_bundle?: boolean | null;
   new_until?: string | null;
   short_description?: string | null;
   volume_ml?: number | null;
@@ -71,7 +72,7 @@ async function searchProducts(query: string): Promise<CardProduct[]> {
       id, slug, name,
       price, currency,
       compare_at_price, sale_price, sale_starts_at, sale_ends_at,
-      is_featured, is_trending, new_until,
+      is_featured, is_trending, is_bundle, new_until,
       short_description, volume_ml, net_weight_g, country_of_origin,
       hero_image_path, stock_qty,
       brands ( name )

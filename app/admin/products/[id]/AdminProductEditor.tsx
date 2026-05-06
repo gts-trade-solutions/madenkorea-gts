@@ -127,6 +127,7 @@ type Model = {
   is_featured: boolean;
   featured_rank: number | "" | null;
   is_trending: boolean;
+  is_bundle: boolean;
   new_until: string;         // yyyy-mm-dd
 
   /* media */
@@ -214,6 +215,7 @@ export function AdminProductEditor({ productId }: { productId: string }) {
         is_featured: !!prod.is_featured,
         featured_rank: prod.featured_rank ?? "",
         is_trending: !!prod.is_trending,
+        is_bundle: !!prod.is_bundle,
         new_until: toDateInputValue(prod.new_until),
 
         images: ((imgs ?? []) as any[]).map((r) => ({
@@ -313,6 +315,7 @@ export function AdminProductEditor({ productId }: { productId: string }) {
         is_featured: !!model.is_featured,
         featured_rank: model.featured_rank === "" ? null : (model.featured_rank ?? null),
         is_trending: !!model.is_trending,
+        is_bundle: !!model.is_bundle,
         new_until: model.new_until ? new Date(`${model.new_until}T00:00:00Z`).toISOString() : null,
       };
 
@@ -684,6 +687,10 @@ export function AdminProductEditor({ productId }: { productId: string }) {
             <label className="flex items-center gap-3">
               <Switch checked={model.is_trending} onCheckedChange={(v)=>setModel(m=>m ? ({...m, is_trending: v}) : m)} />
               <span>Trending</span>
+            </label>
+            <label className="flex items-center gap-3">
+              <Switch checked={model.is_bundle} onCheckedChange={(v)=>setModel(m=>m ? ({...m, is_bundle: v}) : m)} />
+              <span>Bundle</span>
             </label>
             <div>
               <Label>New until</Label>

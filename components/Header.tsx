@@ -437,6 +437,12 @@ export function Header() {
                       </AccordionItem>
                     </Accordion>
 
+                    <div className="mt-4 space-y-3">
+                      <Link href="/bundles" className="block text-base uppercase">
+                        BUNDLES
+                      </Link>
+                    </div>
+
                   </nav>
                 </ScrollArea>
               </SheetContent>
@@ -545,6 +551,15 @@ export function Header() {
                         )}
                       </div>
                     </NavigationMenuContent>
+                  </NavigationMenuItem>
+
+                  <NavigationMenuItem>
+                    <Link
+                      href="/bundles"
+                      className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium uppercase transition-colors hover:bg-accent hover:text-accent-foreground"
+                    >
+                      BUNDLES
+                    </Link>
                   </NavigationMenuItem>
 
                   <NavigationMenuItem>

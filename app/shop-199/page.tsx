@@ -18,6 +18,7 @@ type Product = {
   hero_image_path?: string | null;
   is_featured?: boolean | null;
   is_trending?: boolean | null;
+  is_bundle?: boolean | null;
   short_description?: string | null;
   volume_ml?: number | null;
   net_weight_g?: number | null;
@@ -42,7 +43,7 @@ export default function Shop199Page() {
         .select(`
           id, slug, name,
           price, currency, compare_at_price, sale_price, sale_starts_at, sale_ends_at,
-          hero_image_path, is_featured, is_trending,
+          hero_image_path, is_featured, is_trending, is_bundle,
           short_description, volume_ml, net_weight_g, country_of_origin, stock_qty,
           brands ( name )
         `)
@@ -58,10 +59,12 @@ export default function Shop199Page() {
           console.error("Shop@199 fetch error:", error);
           setProducts([]);
         } else {
-          const active = ((data ?? []) as Product[]).filter((p) =>
-            isSaleActive(p.sale_starts_at, p.sale_ends_at)
-          );
-          setProducts(active);
+          // The sale-window filter is already enforced server-side by the
+          // two .or() clauses on sale_starts_at / sale_ends_at, so we don't
+          // need to re-check it here. (Earlier code referenced an undefined
+          // `isSaleActive` helper which threw and left the page stuck on the
+          // loading skeleton whenever there were matching products.)
+          setProducts((data ?? []) as Product[]);
         }
         setLoading(false);
       }

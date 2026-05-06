@@ -37,6 +37,7 @@ type ProductRow = {
   stock_qty?: number | null;
   is_featured?: boolean | null;
   is_trending?: boolean | null;
+  is_bundle?: boolean | null;
   brands?: { name?: string | null } | null;
 };
 
@@ -124,7 +125,7 @@ export default async function BrandPage({
       price, currency,
       compare_at_price, sale_price, sale_starts_at, sale_ends_at,
       short_description, volume_ml, net_weight_g, country_of_origin,
-      hero_image_path, created_at, stock_qty, is_featured, is_trending,
+      hero_image_path, created_at, stock_qty, is_featured, is_trending, is_bundle,
       brands ( name )
     `
     )

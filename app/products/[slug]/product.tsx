@@ -95,6 +95,7 @@ type Product = {
   new_until?: string | null;
   is_featured?: boolean | null;
   is_trending?: boolean | null;
+  is_bundle?: boolean | null;
   video_path?: string | null;
 
   // highlight flags
@@ -428,7 +429,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
           id, slug, name, short_description, description,
           price, currency, compare_at_price, sale_price, sale_starts_at, sale_ends_at,
           is_published, brand_id, category_id, hero_image_path, stock_qty,
-          volume_ml, net_weight_g, country_of_origin, new_until, is_featured, is_trending,
+          volume_ml, net_weight_g, country_of_origin, new_until, is_featured, is_trending, is_bundle,
           made_in_korea, is_vegetarian, cruelty_free, toxin_free, paraben_free,
           ingredients_md, key_features_md, additional_details_md, box_contents_md, key_benefits,
           video_path,
@@ -704,7 +705,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
           `
         id, slug, name,
         price, currency, compare_at_price, sale_price, sale_starts_at, sale_ends_at,
-        hero_image_path, stock_qty, is_published,
+        hero_image_path, stock_qty, is_published, is_bundle,
         brands ( name )
       `
         )
@@ -1330,6 +1331,9 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                         }
                       )}
                     </Badge>
+                  )}
+                  {product.is_bundle && (
+                    <Badge variant="default">Bundle</Badge>
                   )}
                   {product.new_until && new Date(product.new_until) >= now && (
                     <Badge variant="default">New</Badge>
