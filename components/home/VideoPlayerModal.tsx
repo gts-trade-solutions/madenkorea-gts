@@ -110,7 +110,7 @@ export function VideoPlayerModal({ open, items, startIndex, onClose }: Props) {
         // close button (no backdrop, invisible on dark frames) — we
         // render our own with a visible chip below.
         className="
-          w-screen max-w-none h-screen max-h-none rounded-none border-0
+          w-screen max-w-none h-[100dvh] max-h-[100dvh] rounded-none border-0
           sm:w-[calc(75vh*9/16)] sm:max-w-[95vw] sm:h-auto sm:max-h-[95vh] sm:rounded-lg
           p-0 gap-0 bg-background flex flex-col overflow-hidden
           [&>button]:hidden
