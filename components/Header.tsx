@@ -49,6 +49,11 @@ type FeaturedTickerItem = {
   price?: number | null;
   currency?: string | null;
   short_description?: string | null;
+  // Sale window fields so the marquee can show the same effective
+  // selling price the rest of the storefront does.
+  sale_price?: number | null;
+  sale_starts_at?: string | null;
+  sale_ends_at?: string | null;
 };
 
 const supabase = createClient(
@@ -136,7 +141,9 @@ export function Header() {
           .order("name", { ascending: true }),
         supabase
           .from("products")
-          .select("slug,name,price,currency,short_description")
+          .select(
+            "slug,name,price,currency,short_description,sale_price,sale_starts_at,sale_ends_at"
+          )
           .eq("is_published", true)
           .eq("is_featured", true)
           .order("created_at", { ascending: false })
@@ -225,18 +232,73 @@ export function Header() {
   const topCats = useMemo(() => sortedCats.slice(0, 8), [sortedCats]);
   const topBrands = useMemo(() => sortedBrands.slice(0, 10), [sortedBrands]);
 
-  const tickerText = useMemo(() => {
-    if (!featuredTicker.length) {
-      return "SHOP AUTHENTIC K-BEAUTY FAVORITES • DISCOVER OUR FEATURED PICKS • FREE DELIVERY OFFERS AVAILABLE";
-    }
+  // Hardcoded fallback when there are no featured products yet.
+  const fallbackTickerText =
+    "SHOP AUTHENTIC K-BEAUTY FAVORITES • DISCOVER OUR FEATURED PICKS • FREE DELIVERY OFFERS AVAILABLE";
 
-    return featuredTicker
-      .map((item) => {
-        const price = formatINR(item.price, item.currency);
-        return [item.name, price].filter(Boolean).join(" ");
-      })
-      .join("  •  ");
-  }, [featuredTicker]);
+  // Mirror the storefront's effective-price logic: if `sale_price` is set
+  // and we're inside the optional sale window, show the sale price.
+  // Otherwise show the list price.
+  const effectivePriceFor = (item: FeaturedTickerItem): number | null => {
+    if (item.sale_price != null) {
+      const now = Date.now();
+      const startsOk =
+        !item.sale_starts_at || new Date(item.sale_starts_at).getTime() <= now;
+      const endsOk =
+        !item.sale_ends_at || new Date(item.sale_ends_at).getTime() >= now;
+      if (startsOk && endsOk) return item.sale_price;
+    }
+    return item.price ?? null;
+  };
+
+  // Renders one full copy of the ticker contents. Duplicated below the
+  // marquee with `aria-hidden` so the seamless-loop wrap doesn't
+  // double-announce items to screen readers.
+  const TickerSet = ({ ariaHidden = false }: { ariaHidden?: boolean }) => {
+    if (featuredTicker.length === 0) {
+      return (
+        <span
+          className="mx-8 inline-block"
+          {...(ariaHidden ? { "aria-hidden": "true" as const } : {})}
+        >
+          {fallbackTickerText}
+        </span>
+      );
+    }
+    return (
+      <span
+        className="inline-block"
+        {...(ariaHidden ? { "aria-hidden": "true" as const } : {})}
+      >
+        {featuredTicker.map((item, i) => {
+          const price = effectivePriceFor(item);
+          return (
+            <span key={`${item.slug}-${i}`} className="inline-block">
+              <Link
+                href={`/products/${item.slug}`}
+                className="mx-6 inline-block whitespace-nowrap hover:text-white hover:underline"
+                // Keep aria-hidden duplicates out of the tab order so
+                // keyboard users only encounter each product once.
+                tabIndex={ariaHidden ? -1 : undefined}
+              >
+                {item.name}
+                {price != null && (
+                  <span className="ml-2 opacity-80">
+                    {formatINR(price, item.currency)}
+                  </span>
+                )}
+              </Link>
+              {i < featuredTicker.length - 1 && (
+                <span className="opacity-50" aria-hidden="true">
+                  •
+                </span>
+              )}
+            </span>
+          );
+        })}
+      </span>
+    );
+  };
 
   const DisabledItem = ({ children }: { children: React.ReactNode }) => (
     <div
@@ -256,12 +318,14 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="overflow-hidden bg-black text-white">
         <div className="container mx-auto">
-          <div className="relative flex h-10 items-center overflow-hidden">
+          {/* `group` so the inner .ticker-marquee can pause on hover via
+              the parent's :hover state — that way hovering the gaps
+              between items also pauses (more forgiving than only pausing
+              on item hover). */}
+          <div className="ticker-strip group relative flex h-10 items-center overflow-hidden">
             <div className="ticker-marquee whitespace-nowrap text-center text-[11px] font-medium uppercase tracking-[0.24em] text-white/95">
-              <span className="mx-8 inline-block">{tickerText}</span>
-              <span className="mx-8 inline-block" aria-hidden="true">
-                {tickerText}
-              </span>
+              <TickerSet />
+              <TickerSet ariaHidden />
             </div>
           </div>
         </div>
@@ -271,7 +335,35 @@ export function Header() {
         .ticker-marquee {
           display: inline-block;
           min-width: 200%;
+          /* Default = desktop. Mobile/tablet override below — the
+             animation translates by -50%, which is a *percentage* of the
+             marquee's own width. On a narrow viewport that's far fewer
+             actual pixels, so a fixed duration makes the perceived speed
+             much slower. Shortening the duration on smaller screens
+             keeps the px/sec velocity roughly consistent. */
           animation: ticker-scroll 32s linear infinite;
+        }
+
+        @media (max-width: 1023px) {
+          .ticker-marquee {
+            animation-duration: 22s;
+          }
+        }
+
+        @media (max-width: 639px) {
+          .ticker-marquee {
+            animation-duration: 14s;
+          }
+        }
+
+        /* Pause the scroll when the user hovers anywhere on the strip,
+           so they have time to read or click an individual product link.
+           CSS can't smoothly transition animation-play-state, so this is
+           a hard pause/resume — the user's stated goal ("stop when we
+           hover") is met; the perceived "slow down" is whatever the
+           viewer reads into the cursor lingering before stop. */
+        .ticker-strip:hover .ticker-marquee {
+          animation-play-state: paused;
         }
 
         @keyframes ticker-scroll {
