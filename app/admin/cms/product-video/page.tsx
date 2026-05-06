@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from "next/link";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+import { ProductMultiPicker, type PickerProduct } from "@/components/admin/ProductMultiPicker";
+import { useAdminGate } from "@/lib/hooks/useAdminGate";
+
+const JOIN_TABLE = "home_product_video_products";
 
 // DB row type
 type Row = {
@@ -25,6 +31,8 @@ type Row = {
 type Mode = 'create' | 'edit';
 
 export default function AdminProductVideosPage() {
+  const { ready, requireSession } = useAdminGate();
+
   // list state
   const [scope, setScope] = useState('home');
   const [loading, setLoading] = useState(false);
@@ -47,7 +55,15 @@ export default function AdminProductVideosPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [thumbFile, setThumbFile] = useState<File | null>(null);
 
+  // Multi-attached products for the open form. Replaces the old single
+  // product_id slug field; the legacy column is left untouched.
+  const [attachedProducts, setAttachedProducts] = useState<PickerProduct[]>([]);
+
   const [msg, setMsg] = useState('');
+
+  // Save flow state — disables buttons + shows in-flight label so admins
+  // can't double-click and trigger a duplicate upload.
+  const [saving, setSaving] = useState(false);
 
   const toPublicUrl = (bucket: string, path?: string | null) =>
     path ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}` : undefined;
@@ -89,7 +105,50 @@ export default function AdminProductVideosPage() {
     setProductSlug('');
     setVideoFile(null);
     setThumbFile(null);
+    setAttachedProducts([]);
     setMsg('');
+  }
+
+  // Load currently-attached products for an existing video.
+  async function loadAttached(videoId: string): Promise<PickerProduct[]> {
+    const { data, error } = await supabase
+      .from(JOIN_TABLE)
+      .select(`position, products ( id, slug, name, hero_image_path )`)
+      .eq("video_id", videoId)
+      .order("position", { ascending: true });
+    if (error) {
+      console.error("loadAttached error:", error);
+      return [];
+    }
+    return ((data ?? []) as Array<{ position: number; products: any }>)
+      .filter((r) => !!r.products)
+      .map((r) => r.products as PickerProduct);
+  }
+
+  // Replace-all via server route. Bypasses RLS on the join table (the
+  // route does its own admin auth check) so a flaky client-side session
+  // can't fail the write while parent-row writes succeed.
+  async function persistAttached(videoId: string) {
+    // Asserts a live session; throws "Your session has expired…" if not.
+    const token = await requireSession();
+    const res = await fetch("/api/admin/video-products", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        kind: "product",
+        videoId,
+        productIds: attachedProducts.map((p) => p.id),
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) {
+      const diagStr = body.diag ? ` (${JSON.stringify(body.diag)})` : "";
+      throw new Error(`${body.error || "Failed to save attached products"}${diagStr}`);
+    }
   }
 
   function openCreate() {
@@ -112,8 +171,11 @@ export default function AdminProductVideosPage() {
     setProductSlug(''); // optional: user can enter to change
     setVideoFile(null);
     setThumbFile(null);
+    setAttachedProducts([]);
     setMsg('');
     setOpen(true);
+    // Hydrate attached products in the background — don't block modal open.
+    loadAttached(r.id).then(setAttachedProducts);
   }
 
   function safeExt(name: string, fallback: string) {
@@ -178,8 +240,10 @@ export default function AdminProductVideosPage() {
   }
 
   async function save() {
+    if (saving) return; // hard guard against double-clicks
     try {
       setMsg('');
+      setSaving(true);
       if (!title.trim()) throw new Error('Title is required.');
       if (mode === 'create' && !videoFile) throw new Error('Please select a video file.');
 
@@ -231,6 +295,9 @@ export default function AdminProductVideosPage() {
         });
         if (error) throw new Error(error.message);
 
+        // 4) replace attached products for this video
+        await persistAttached(id);
+
       } else {
         if (!editingId) throw new Error('Missing id');
         // 1) update base fields
@@ -269,21 +336,49 @@ export default function AdminProductVideosPage() {
           const { error: e2 } = await supabase.from('home_product_videos').update(patch).eq('id', editingId);
           if (e2) throw new Error(e2.message);
         }
+
+        // 3) replace attached products for this video
+        await persistAttached(editingId);
       }
 
       setOpen(false);
       await fetchList();
+      toast.success(mode === 'create' ? 'Video created' : 'Video saved');
     } catch (err: any) {
-      setMsg(err.message || 'Save failed');
+      const message = err?.message || 'Save failed';
+      setMsg(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
     }
   }
 
   const list = useMemo(() => rows, [rows]);
 
+  // Don't render the admin UI until the session check has resolved. If
+  // there's no session, useAdminGate() bounces the user to /auth/login;
+  // the brief "Checking session…" placeholder is what they see during
+  // that redirect.
+  if (!ready) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto text-sm text-gray-500">
+        Checking session…
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Product Video Carousel</h1>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/admin/cms"
+            className="rounded border px-2 py-1 text-sm hover:bg-gray-50"
+          >
+            ← Back
+          </Link>
+          <h1 className="text-2xl font-semibold">Product Video Carousel</h1>
+        </div>
         <div className="flex items-center gap-2">
           <select
             value={scope}
@@ -384,7 +479,7 @@ export default function AdminProductVideosPage() {
       {/* Modal */}
       {open && (
         <div className="fixed inset-0 bg-black/40 grid place-items-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-2xl p-5">
+          <div className="bg-white rounded-2xl w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between mb-2">
               <div>
                 <div className="text-lg font-semibold">{mode === 'create' ? 'Add Video' : 'Edit Video'}</div>
@@ -428,9 +523,20 @@ export default function AdminProductVideosPage() {
                 </label>
               </div>
 
+              <div className="text-sm">
+                <div className="mb-1">Attached products</div>
+                <ProductMultiPicker
+                  value={attachedProducts}
+                  onChange={setAttachedProducts}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Shown below the video when a customer opens this clip in the player.
+                </p>
+              </div>
+
               <label className="text-sm">
-                Link to product (slug) — optional
-                <input className="mt-1 w-full border rounded px-2 py-1" value={productSlug} onChange={(e) => setProductSlug(e.target.value)} placeholder="e.g. skintectonic-spf-50" />
+                <span className="text-gray-500">Legacy single-product slug (deprecated, optional)</span>
+                <input className="mt-1 w-full border rounded px-2 py-1" value={productSlug} onChange={(e) => setProductSlug(e.target.value)} placeholder="leave blank — use Attached products above" />
               </label>
 
               <label className="text-sm">
@@ -454,9 +560,31 @@ export default function AdminProductVideosPage() {
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <button className="px-3 py-2 rounded border hover:bg-gray-50" onClick={() => setOpen(false)}>Cancel</button>
-              <button onClick={save} className="px-3 py-2 rounded bg-black text-white hover:opacity-90">
-                {mode === 'create' ? 'Create' : 'Save'}
+              <button
+                className="px-3 py-2 rounded border hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => setOpen(false)}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={save}
+                disabled={saving}
+                className="px-3 py-2 rounded bg-black text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
+              >
+                {saving && (
+                  <span
+                    aria-hidden
+                    className="h-3 w-3 rounded-full border-2 border-white/40 border-t-white animate-spin"
+                  />
+                )}
+                {saving
+                  ? mode === 'create'
+                    ? 'Creating…'
+                    : 'Saving…'
+                  : mode === 'create'
+                  ? 'Create'
+                  : 'Save'}
               </button>
             </div>
           </div>

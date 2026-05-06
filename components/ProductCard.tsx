@@ -49,6 +49,11 @@ type ProductForCard = {
 
 interface ProductCardProps {
   product: ProductForCard;
+  // Suppress the entire badge stack (discount, stock, marketing badges).
+  // Use on dense surfaces where badges add visual noise — e.g. the
+  // VideoPlayerModal's "Featured products" strip, where the user is
+  // already focused on a specific video and just wants product names.
+  hideBadges?: boolean;
 }
 
 const supabase = createClient(
@@ -91,7 +96,7 @@ function tinyDate(d?: string | null) {
   });
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
   const router = useRouter();
   const { addItem } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
@@ -239,7 +244,7 @@ export function ProductCard({ product }: ProductCardProps) {
               Trending > Featured` so the most time-sensitive /
               behavioural signal wins. On sm:+ we show all marketing
               badges since there's room. */}
-          {(() => {
+          {!hideBadges && (() => {
             // Bundle wins priority on mobile because it's a category, not just a
             // marketing flag — users browsing a grid need to know "this is a set,
             // not a single item" at a glance.

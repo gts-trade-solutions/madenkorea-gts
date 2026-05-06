@@ -1,3 +1,5 @@
+import type { AttachedProduct } from "./attached_product";
+
 export type InfluencerVideo = {
   id: string;
   influencer_name: string;
@@ -13,6 +15,9 @@ export type InfluencerVideo = {
   instagram_link?: string | null;
   post_url?: string | null;
   embed_captioned?: boolean;
+
+  // Products attached via home_influencer_video_products (M:N).
+  products?: AttachedProduct[];
 
   page_scope?: string;
   position?: number;

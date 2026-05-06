@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+import { ProductMultiPicker, type PickerProduct } from "@/components/admin/ProductMultiPicker";
+import { useAdminGate } from "@/lib/hooks/useAdminGate";
+
+const JOIN_TABLE = "home_influencer_video_products";
 
 type Row = {
   id: string;
@@ -47,6 +53,8 @@ const thumbPath = (id: string, file: File) => {
 };
 
 export default function AdminInstagramVideosPage() {
+  const { ready, requireSession } = useAdminGate();
+
   const [scope, setScope] = useState("home");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
@@ -72,6 +80,13 @@ export default function AdminInstagramVideosPage() {
   // files
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [thumbFile, setThumbFile] = useState<File | null>(null);
+
+  // attached products (M:N)
+  const [attachedProducts, setAttachedProducts] = useState<PickerProduct[]>([]);
+
+  // Save flow state — disables buttons + shows in-flight label so admins
+  // can't double-click the button and trigger a duplicate upload.
+  const [saving, setSaving] = useState(false);
 
   const isoToLocal = (iso?: string | null) => {
     if (!iso) return "";
@@ -117,7 +132,52 @@ export default function AdminInstagramVideosPage() {
     setInstagramLink("");
     setVideoFile(null);
     setThumbFile(null);
+    setAttachedProducts([]);
     setMsg("");
+  }
+
+  // Load currently-attached products for an existing video.
+  async function loadAttached(videoId: string): Promise<PickerProduct[]> {
+    const { data, error } = await supabase
+      .from(JOIN_TABLE)
+      .select(`position, products ( id, slug, name, hero_image_path )`)
+      .eq("video_id", videoId)
+      .order("position", { ascending: true });
+    if (error) {
+      console.error("loadAttached error:", error);
+      return [];
+    }
+    return ((data ?? []) as Array<{ position: number; products: any }>)
+      .filter((r) => !!r.products)
+      .map((r) => r.products as PickerProduct);
+  }
+
+  // Replace-all via server route. The route is admin-authed and uses the
+  // service-role client to write the join, bypassing the table's RLS so
+  // a flaky session can't fail the write while parent writes succeed.
+  async function persistAttached(videoId: string) {
+    // Asserts a live session and grabs a fresh access token. Throws a
+    // clear "Your session has expired. Please log in again." if the
+    // session was lost — better than silently no-op-ing.
+    const token = await requireSession();
+    const res = await fetch("/api/admin/video-products", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        kind: "influencer",
+        videoId,
+        productIds: attachedProducts.map((p) => p.id),
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) {
+      const diagStr = body.diag ? ` (${JSON.stringify(body.diag)})` : "";
+      throw new Error(`${body.error || "Failed to save attached products"}${diagStr}`);
+    }
   }
 
   function openCreate() {
@@ -142,8 +202,10 @@ export default function AdminInstagramVideosPage() {
     setInstagramLink(r.instagram_link ?? "");
     setVideoFile(null);
     setThumbFile(null);
+    setAttachedProducts([]);
     setMsg("");
     setOpen(true);
+    loadAttached(r.id).then(setAttachedProducts);
   }
 
   async function uploadPublic(path: string, file: File, contentType?: string) {
@@ -211,8 +273,10 @@ export default function AdminInstagramVideosPage() {
   }
 
   async function save() {
+    if (saving) return; // hard guard against double-clicks
     try {
       setMsg("");
+      setSaving(true);
       if (!influencerName.trim())
         throw new Error("Influencer name is required.");
 
@@ -254,6 +318,8 @@ export default function AdminInstagramVideosPage() {
           ends_at: localToIso(endsAt),
         });
         if (error) throw new Error(error.message);
+
+        await persistAttached(id);
       } else {
         if (!editingId) throw new Error("Missing id");
 
@@ -292,22 +358,49 @@ export default function AdminInstagramVideosPage() {
           .update(base)
           .eq("id", editingId);
         if (error) throw new Error(error.message);
+
+        await persistAttached(editingId);
       }
 
       setOpen(false);
       await fetchList();
+      toast.success(mode === "create" ? "Video created" : "Video saved");
     } catch (err: any) {
-      setMsg(err.message || "Save failed");
+      const message = err?.message || "Save failed";
+      setMsg(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
     }
   }
 
   const list = useMemo(() => rows, [rows]);
 
+  // Don't render the admin UI until the session check has resolved. If
+  // there's no session, useAdminGate() bounces the user to /auth/login;
+  // the brief "Checking session…" placeholder is what they see during
+  // that redirect.
+  if (!ready) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto text-sm text-gray-500">
+        Checking session…
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Influencer Videos</h1>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/admin/cms"
+            className="rounded border px-2 py-1 text-sm hover:bg-gray-50"
+          >
+            ← Back
+          </Link>
+          <h1 className="text-2xl font-semibold">Influencer Videos</h1>
+        </div>
         <div className="flex items-center gap-2">
           <select
             value={scope}
@@ -371,9 +464,21 @@ export default function AdminInstagramVideosPage() {
                         alt={r.caption ?? r.influencer_name}
                         className="w-full h-full object-cover"
                       />
+                    ) : r.video_url ? (
+                      // Fallback: when no separate thumbnail was uploaded,
+                      // render a muted preview frame from the video itself
+                      // so admins can identify the row visually. Same
+                      // pattern the product-video admin uses.
+                      <video
+                        src={r.video_url}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
                       <div className="w-full h-full grid place-items-center text-xs text-gray-500">
-                        no thumb
+                        no media
                       </div>
                     )}
                   </div>
@@ -442,7 +547,7 @@ export default function AdminInstagramVideosPage() {
       {/* modal */}
       {open && (
         <div className="fixed inset-0 bg-black/40 grid place-items-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-2xl p-5">
+          <div className="bg-white rounded-2xl w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between mb-2">
               <div>
                 <div className="text-lg font-semibold">
@@ -559,6 +664,17 @@ export default function AdminInstagramVideosPage() {
                 </p>
               </label>
 
+              <div className="text-sm">
+                <div className="mb-1">Attached products</div>
+                <ProductMultiPicker
+                  value={attachedProducts}
+                  onChange={setAttachedProducts}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Shown below the video when a customer opens this clip in the player.
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-sm">
                   Page scope
@@ -610,16 +726,30 @@ export default function AdminInstagramVideosPage() {
 
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="px-3 py-2 rounded border hover:bg-gray-50"
+                className="px-3 py-2 rounded border hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => setOpen(false)}
+                disabled={saving}
               >
                 Cancel
               </button>
               <button
                 onClick={save}
-                className="px-3 py-2 rounded bg-black text-white hover:opacity-90"
+                disabled={saving}
+                className="px-3 py-2 rounded bg-black text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
               >
-                {mode === "create" ? "Create" : "Save"}
+                {saving && (
+                  <span
+                    aria-hidden
+                    className="h-3 w-3 rounded-full border-2 border-white/40 border-t-white animate-spin"
+                  />
+                )}
+                {saving
+                  ? mode === "create"
+                    ? "Creating…"
+                    : "Saving…"
+                  : mode === "create"
+                  ? "Create"
+                  : "Save"}
               </button>
             </div>
           </div>
