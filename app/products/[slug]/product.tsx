@@ -72,6 +72,19 @@ import type { StoryBlock } from "@/lib/types/productStory";
 import { supabase } from "@/lib/supabaseClient";
 
 type Brand = { name?: string | null; slug?: string | null };
+// Vendor disclosure shape — legal_name + gstin + address are required by
+// Consumer Protection (E-Commerce) Rules 2020 to be shown on every
+// listing for products supplied by a third-party vendor through the
+// marketplace. We pull them via a `vendors(...)` join in the product
+// fetch below.
+type Vendor = {
+  display_name?: string | null;
+  legal_name?: string | null;
+  gstin?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address_json?: any;
+};
 type Product = {
   id: string;
   slug: string;
@@ -112,7 +125,9 @@ type Product = {
   box_contents_md?: string | null;
   key_benefits?: string[] | null;
 
+  vendor_id?: string | null;
   brands?: Brand | null; // via join
+  vendors?: Vendor | null; // via join (only for marketplace items)
 };
 
 type ProductImage = {
@@ -432,7 +447,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
           volume_ml, net_weight_g, country_of_origin, new_until, is_featured, is_trending, is_bundle,
           made_in_korea, is_vegetarian, cruelty_free, toxin_free, paraben_free,
           ingredients_md, key_features_md, additional_details_md, box_contents_md, key_benefits,
-          video_path,
+          video_path, vendor_id,
           brands ( name, slug )
         `
         )
@@ -458,7 +473,32 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       if (iErr) console.error("Images fetch error:", iErr);
       if (cancelled) return;
 
-      setProduct(prod);
+      // Marketplace seller disclosure — gated on the admin toggle in
+      // store_settings.marketplace_disclosure_enabled. Off by default;
+      // admin enables once vendor records have accurate legal name /
+      // address / GSTIN. We read the flag alongside the vendor row.
+      let vendorInfo: Vendor | null = null;
+      if (prod.vendor_id) {
+        const [{ data: cfg }, { data: v, error: vErr }] = await Promise.all([
+          supabase
+            .from("store_settings")
+            .select("marketplace_disclosure_enabled")
+            .eq("id", 1)
+            .maybeSingle<{ marketplace_disclosure_enabled: boolean }>(),
+          supabase
+            .from("vendors_public")
+            .select(
+              "display_name, legal_name, gstin, email, phone, address_json"
+            )
+            .eq("id", prod.vendor_id)
+            .maybeSingle<Vendor>(),
+        ]);
+        if (vErr) console.error("Vendor disclosure fetch error:", vErr);
+        if (cancelled) return;
+        vendorInfo = cfg?.marketplace_disclosure_enabled ? v ?? null : null;
+      }
+
+      setProduct({ ...prod, vendors: vendorInfo });
       setImages(imgs ?? []);
       setSelectedImage(0);
       setLoading(false);
@@ -1613,6 +1653,62 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     </TooltipProvider>
                   </CardContent>
                 </Card>
+
+                {/* ---------- Marketplace seller disclosure ----------
+                    Required by Consumer Protection (E-Commerce) Rules
+                    2020 for vendor-supplied products: legal name +
+                    address + GSTIN visible on every listing. Renders
+                    only when the product has a vendor row attached. */}
+                {product?.vendor_id && product?.vendors && (
+                  <Card className="mt-4">
+                    <CardContent className="p-4 text-sm space-y-2">
+                      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+                        <Package className="h-3.5 w-3.5" />
+                        Sold by
+                      </div>
+                      <p className="font-medium">
+                        {product.vendors.legal_name ||
+                          product.vendors.display_name ||
+                          "Authorised seller"}
+                      </p>
+                      {(() => {
+                        const a = product.vendors?.address_json;
+                        if (!a || typeof a !== "object") return null;
+                        const parts = [
+                          a.line1,
+                          a.line2,
+                          a.city,
+                          a.state,
+                          a.pincode || a.postal_code,
+                          a.country,
+                        ]
+                          .filter((x) => typeof x === "string" && x.trim())
+                          .join(", ");
+                        return parts ? (
+                          <p className="text-muted-foreground">{parts}</p>
+                        ) : null;
+                      })()}
+                      {product.vendors.gstin && (
+                        <p className="text-muted-foreground">
+                          GSTIN:{" "}
+                          <span className="font-mono">
+                            {product.vendors.gstin}
+                          </span>
+                        </p>
+                      )}
+                      {product.vendors.email && (
+                        <p className="text-muted-foreground">
+                          <a
+                            href={`mailto:${product.vendors.email}`}
+                            className="hover:underline"
+                          >
+                            {product.vendors.email}
+                          </a>
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </div>
 

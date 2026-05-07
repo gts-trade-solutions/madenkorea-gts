@@ -32,6 +32,39 @@ export function VideoPlayerModal({ open, items, startIndex, onClose }: Props) {
   const [isMuted, setIsMuted] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const touchStartX = useRef<number | null>(null);
+  const productStripRef = useRef<HTMLDivElement>(null);
+  const [stripCanScrollLeft, setStripCanScrollLeft] = useState(false);
+  const [stripCanScrollRight, setStripCanScrollRight] = useState(false);
+
+  // Scroll the product strip by roughly one card-and-gap. The cards are
+  // ~220px on desktop and the gap is 8px, so ~228 lands the next card
+  // flush against the strip's left edge thanks to `snap-start`.
+  const scrollProducts = (dir: "prev" | "next") => {
+    const el = productStripRef.current;
+    if (!el) return;
+    const delta = dir === "next" ? 228 : -228;
+    el.scrollBy({ left: delta, behavior: "smooth" });
+  };
+
+  // Track whether the strip has more content to either side, so we can
+  // hide/dim the chevrons when there's nowhere left to scroll.
+  useEffect(() => {
+    const el = productStripRef.current;
+    if (!el) return;
+    const update = () => {
+      const max = el.scrollWidth - el.clientWidth;
+      setStripCanScrollLeft(el.scrollLeft > 4);
+      setStripCanScrollRight(el.scrollLeft < max - 4);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [open, index]);
 
   // Re-seat the index whenever the modal is opened. Closing leaves the
   // last-watched index untouched; that's fine since startIndex re-syncs on
@@ -254,32 +287,80 @@ export function VideoPlayerModal({ open, items, startIndex, onClose }: Props) {
                 />
               </div>
             ) : (
-              <div
-                className="
-                  flex gap-2 overflow-x-auto scrollbar-hide
-                  snap-x snap-mandatory pb-1
-                  [scrollbar-width:none] [-ms-overflow-style:none]
-                "
-                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-              >
-                {products.map((p) => (
-                  <div
-                    key={p.id}
-                    // Mobile: full-screen modal, more horizontal room — show
-                    // ~1.6 cards visible (peek of the next) so the user
-                    // sees scroll affordance.
-                    // Desktop: narrower modal (= video width), reduce basis
-                    // accordingly.
-                    className="shrink-0 snap-start basis-[58%] sm:basis-[220px]"
-                  >
-                    <CompactProductCard
-                      product={{
-                        ...p,
-                        hero_image_path: p.hero_image_path ?? undefined,
-                      }}
-                    />
-                  </div>
-                ))}
+              // Wrapper exists purely to host the desktop-only chevron
+              // overlays. Mobile keeps swiping the strip; desktop has no
+              // visible scrollbar and a narrow ~380px modal, so without
+              // chevrons the second product is unreachable.
+              <div className="relative">
+                <div
+                  ref={productStripRef}
+                  className="
+                    flex gap-2 overflow-x-auto scrollbar-hide
+                    snap-x snap-mandatory pb-1
+                    [scrollbar-width:none] [-ms-overflow-style:none]
+                  "
+                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                >
+                  {products.map((p) => (
+                    <div
+                      key={p.id}
+                      // Mobile: full-screen modal, more horizontal room — show
+                      // ~1.6 cards visible (peek of the next) so the user
+                      // sees scroll affordance.
+                      // Desktop: narrower modal (= video width), reduce basis
+                      // accordingly.
+                      className="shrink-0 snap-start basis-[58%] sm:basis-[220px]"
+                    >
+                      <CompactProductCard
+                        product={{
+                          ...p,
+                          hero_image_path: p.hero_image_path ?? undefined,
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop-only chevrons. Hidden on mobile (swipe handles
+                    it). Render disabled when at the respective edge so the
+                    affordance is honest — clicking does nothing visible
+                    when there's nowhere to go. */}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  onClick={() => scrollProducts("prev")}
+                  aria-label="Previous product"
+                  disabled={!stripCanScrollLeft}
+                  className="
+                    hidden sm:inline-flex
+                    absolute left-1 top-1/2 -translate-y-1/2
+                    h-8 w-8 rounded-full bg-background/90 shadow-md border
+                    backdrop-blur-sm hover:bg-background
+                    disabled:opacity-0 disabled:pointer-events-none
+                    transition-opacity z-10
+                  "
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  onClick={() => scrollProducts("next")}
+                  aria-label="Next product"
+                  disabled={!stripCanScrollRight}
+                  className="
+                    hidden sm:inline-flex
+                    absolute right-1 top-1/2 -translate-y-1/2
+                    h-8 w-8 rounded-full bg-background/90 shadow-md border
+                    backdrop-blur-sm hover:bg-background
+                    disabled:opacity-0 disabled:pointer-events-none
+                    transition-opacity z-10
+                  "
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
               </div>
             )}
           </div>

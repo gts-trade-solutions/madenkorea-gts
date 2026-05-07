@@ -5,11 +5,14 @@ import { Inter } from "next/font/google";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
 import { CartProvider } from "@/lib/contexts/CartContext";
 import { WishlistProvider } from "@/lib/contexts/WishlistContext";
+import { CookieConsentProvider } from "@/lib/contexts/CookieConsentContext";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "next-themes";
 import Script from "next/script";
 import { FloatingWhatsApp } from "@/components/FloatingWhatsApp";
 import { AnalyticsBootstrap } from "@/components/AnalyticsBootstrap";
+import { AnalyticsScripts } from "@/components/AnalyticsScripts";
+import { CookieConsentBanner } from "@/components/CookieConsentBanner";
 import {
   WHATSAPP_DEFAULT_MESSAGE,
   WHATSAPP_PHONE_NUMBER,
@@ -25,21 +28,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-PHZYP1091X"
-          strategy="afterInteractive"
-        />
-
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          gtag('js', new Date());
-          gtag('config', 'G-PHZYP1091X');
-          `}
-        </Script>
-      </head>
       <body className={`${inter.className} overflow-x-clip`}>
         <ThemeProvider
           attribute="class"
@@ -48,19 +36,26 @@ export default function RootLayout({
           storageKey="madenkorea-theme"
         >
           <AuthProvider>
-            <CartProvider>
-              <WishlistProvider>
-                <Suspense fallback={null}>
-                  <AnalyticsBootstrap />
-                </Suspense>
-                {children}
-                <FloatingWhatsApp
-                  phoneNumber={WHATSAPP_PHONE_NUMBER}
-                  message={WHATSAPP_DEFAULT_MESSAGE}
-                />
-                <Toaster />
-              </WishlistProvider>
-            </CartProvider>
+            <CookieConsentProvider>
+              <CartProvider>
+                <WishlistProvider>
+                  {/* Google Analytics — only loads once the user grants
+                      "Analytics" consent through the banner. No GA cookies
+                      or requests until that happens. */}
+                  <AnalyticsScripts />
+                  <Suspense fallback={null}>
+                    <AnalyticsBootstrap />
+                  </Suspense>
+                  {children}
+                  <FloatingWhatsApp
+                    phoneNumber={WHATSAPP_PHONE_NUMBER}
+                    message={WHATSAPP_DEFAULT_MESSAGE}
+                  />
+                  <Toaster />
+                  <CookieConsentBanner />
+                </WishlistProvider>
+              </CartProvider>
+            </CookieConsentProvider>
           </AuthProvider>
         </ThemeProvider>
         <Script

@@ -71,8 +71,8 @@ export default function OrderFailurePage() {
               <div className="pt-4 border-t">
                 <p className="text-sm text-center text-muted-foreground">
                   Need help? Contact our support team at{' '}
-                  <a href="mailto:support@madenkorea.com" className="text-primary hover:underline">
-                    support@madenkorea.com
+                  <a href="mailto:info@madenkorea.com" className="text-primary hover:underline">
+                    info@madenkorea.com
                   </a>
                 </p>
               </div>

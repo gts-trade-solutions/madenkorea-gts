@@ -1,9 +1,27 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Truck, RotateCcw, Shield, Package, Lock, CreditCard, BadgeCheck } from "lucide-react";
+import {
+  BadgeCheck,
+  CreditCard,
+  Lock,
+  Package,
+  RotateCcw,
+  Shield,
+  Truck,
+} from "lucide-react";
 import { CustomerLayout } from "@/components/CustomerLayout";
-import { Card, CardContent } from "@/components/ui/card";
+import { PolicyHero } from "@/components/PolicyHero";
+import {
+  PolicyShell,
+  PolicyQuickJump,
+  PolicySection,
+  PolicyDivider,
+  PolicyCta,
+  PolicyMeta,
+  type TocItem,
+} from "@/components/PolicyLayout";
 import { getShippingConfig } from "@/lib/storeSettings";
+import { getBusinessInfo } from "@/lib/businessInfo";
 
 export const dynamic = "force-dynamic";
 
@@ -15,217 +33,267 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-const SECTIONS = [
-  { id: "free-shipping", label: "Free Shipping", Icon: Truck },
-  { id: "easy-returns", label: "Easy Returns", Icon: RotateCcw },
-  { id: "secure-payment", label: "Secure Payment", Icon: Shield },
-  { id: "authentic-products", label: "Authentic Products", Icon: Package },
-] as const;
+const TOC: TocItem[] = [
+  { id: "free-shipping", label: "Free shipping" },
+  { id: "easy-returns", label: "Easy returns" },
+  { id: "secure-payment", label: "Secure payment" },
+  { id: "authentic-products", label: "Authentic products" },
+];
 
 export default async function ShippingReturnsPage() {
-  const config = await getShippingConfig();
-  const threshold = config.deliveryThreshold;
-  const fee = config.defaultShippingFee;
-  const thresholdLabel = `₹${threshold.toLocaleString("en-IN")}`;
-  const feeLabel = `₹${fee.toLocaleString("en-IN")}`;
+  const [config, business] = await Promise.all([
+    getShippingConfig(),
+    getBusinessInfo(),
+  ]);
+  const thresholdLabel = `₹${config.deliveryThreshold.toLocaleString("en-IN")}`;
+  const feeLabel = `₹${config.defaultShippingFee.toLocaleString("en-IN")}`;
 
   return (
     <CustomerLayout>
-      <div className="container mx-auto py-8">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl font-bold mb-3">Shipping, Returns & Trust</h1>
-          <p className="text-muted-foreground mb-8">
-            Everything you need to know about how we ship, how returns work, how your payments stay
-            safe, and why every product on MadenKorea is the real thing.
+      <PolicyHero
+        eyebrow="Shipping & trust"
+        title="Shipping, Returns & Trust"
+        description="Everything you need to know about how we ship, how returns work, how your payments stay safe, and why every product on MadenKorea is the real thing."
+      />
+
+      <PolicyShell toc={TOC}>
+        <PolicyMeta updated="May 7, 2026" readingTime="4 min read" />
+        <PolicyQuickJump items={TOC} />
+
+        <PolicySection
+          id="free-shipping"
+          icon={Truck}
+          title="Free Shipping"
+        >
+          <p>
+            We deliver across India. Shipping is{" "}
+            <strong>free on every order above {thresholdLabel}</strong>. Orders
+            below that ship at a flat <strong>{feeLabel}</strong> per order
+            &mdash; the fee shown at checkout is the only one you pay, with no
+            hidden surcharges.
+          </p>
+          <p>
+            K Plus members get{" "}
+            <strong>free shipping on every order, regardless of cart value</strong>.
+            See the <Link href="/k-plus">K Plus benefits</Link> for the full
+            list.
+          </p>
+          <p>
+            Estimated delivery times depend on your pincode. Enter yours in the
+            &ldquo;Check Delivery&rdquo; box on any product page to see the
+            exact window &mdash; from <strong>1&ndash;3 days</strong> in
+            Chennai metro up to <strong>10&ndash;15 days</strong> for the
+            islands.
+          </p>
+        </PolicySection>
+
+        <PolicyDivider />
+
+        <PolicySection id="easy-returns" icon={RotateCcw} title="Easy Returns">
+          <p>
+            You have <strong>7 days from delivery</strong> to raise a return if
+            your item arrives damaged, defective, or wrong. We&apos;ll arrange
+            a pickup from your registered address and refund you to the
+            original payment method once the item is back with us.
+          </p>
+          <ul>
+            <li>
+              Items must be unused, in their original packaging, with all
+              seals intact.
+            </li>
+            <li>
+              Skincare and personal-care products that have been opened
+              cannot be returned for hygiene reasons unless they were damaged
+              or defective on arrival.
+            </li>
+            <li>
+              To start a return, head to{" "}
+              <Link href="/account">My Account &rarr; Orders</Link> and pick
+              the order, or email{" "}
+              <a href={`mailto:${business.supportEmail}`}>
+                {business.supportEmail}
+              </a>
+              .
+            </li>
+            <li>
+              To <strong>cancel</strong> an order before it ships (different
+              from a return), see the{" "}
+              <Link href="/policies/cancellation">Cancellation Policy</Link>.
+            </li>
+          </ul>
+        </PolicySection>
+
+        <PolicyDivider />
+
+        <PolicySection id="secure-payment" icon={Shield} title="Secure Payment">
+          <p>
+            All payments on MadenKorea are processed by{" "}
+            <strong>Razorpay</strong>, a PCI-DSS Level 1 certified payment
+            gateway. Your card, UPI, netbanking, and wallet details are
+            encrypted in transit and never touch our servers.
           </p>
 
-          {/* Quick-jump nav. Anchors here match the hash links from the product page. */}
-          <nav className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-10">
-            {SECTIONS.map(({ id, label, Icon }) => (
-              <Link
-                key={id}
-                href={`#${id}`}
-                className="flex items-center gap-2 rounded-lg border bg-background p-3 text-sm font-medium hover:bg-muted transition-colors"
+          <div className="not-prose grid gap-3 sm:grid-cols-3 my-6">
+            {[
+              {
+                Icon: Lock,
+                title: "256-bit TLS encryption",
+                copy: "Every payment request is encrypted end-to-end.",
+              },
+              {
+                Icon: CreditCard,
+                title: "Cards, UPI, Netbanking, Wallets",
+                copy: "Pay with what works for you.",
+              },
+              {
+                Icon: BadgeCheck,
+                title: "No card details stored",
+                copy: "We never see or save your payment credentials.",
+              },
+            ].map(({ Icon, title, copy }) => (
+              <div
+                key={title}
+                className="rounded-xl border bg-background p-4 flex items-start gap-3"
               >
-                <Icon className="h-4 w-4 text-muted-foreground" />
-                {label}
-              </Link>
+                <Icon className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">{title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{copy}</p>
+                </div>
+              </div>
             ))}
-          </nav>
+          </div>
 
-          <section id="free-shipping" className="scroll-mt-24 mb-10">
-            <Card>
-              <CardContent className="p-6 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-md bg-muted p-2">
-                    <Truck className="h-5 w-5" />
-                  </div>
-                  <h2 className="text-2xl font-semibold">Free Shipping</h2>
-                </div>
-                <p className="text-muted-foreground">
-                  We deliver across India. Shipping is <strong>free on every order above {thresholdLabel}</strong>.
-                  Orders below that ship at a flat <strong>{feeLabel}</strong> per order — the
-                  fee shown at checkout is the only one you pay, with no hidden surcharges.
-                </p>
-                <p className="text-muted-foreground">
-                  K Plus members get <strong>free shipping on every order, regardless of cart value</strong>.
-                  See the <Link href="/k-plus" className="underline">K Plus benefits</Link> for the
-                  full list.
-                </p>
-                <p className="text-muted-foreground">
-                  Estimated delivery times depend on your pincode. Enter yours in the
-                  &ldquo;Check Delivery&rdquo; box on any product page to see the exact window
-                  &mdash; from <strong>1&ndash;3 days</strong> in Chennai metro up to{" "}
-                  <strong>10&ndash;15 days</strong> for the islands.
-                </p>
-              </CardContent>
-            </Card>
-          </section>
-
-          <section id="easy-returns" className="scroll-mt-24 mb-10">
-            <Card>
-              <CardContent className="p-6 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-md bg-muted p-2">
-                    <RotateCcw className="h-5 w-5" />
-                  </div>
-                  <h2 className="text-2xl font-semibold">Easy Returns</h2>
-                </div>
-                <p className="text-muted-foreground">
-                  You have <strong>7 days from delivery</strong> to raise a return if your item
-                  arrives damaged, defective, or wrong. We&apos;ll arrange a pickup from your
-                  registered address and refund you to the original payment method once the item
-                  is back with us.
-                </p>
-                <ul className="list-disc pl-6 text-muted-foreground space-y-1">
-                  <li>Items must be unused, in their original packaging, with all seals intact.</li>
-                  <li>
-                    Skincare and personal-care products that have been opened cannot be returned
-                    for hygiene reasons unless they were damaged or defective on arrival.
-                  </li>
-                  <li>
-                    To start a return, head to{" "}
-                    <Link href="/account" className="underline">
-                      My Account &rarr; Orders
-                    </Link>{" "}
-                    and pick the order, or email{" "}
-                    <a href="mailto:info@madenkorea.com" className="underline">
-                      info@madenkorea.com
-                    </a>
-                    .
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-          </section>
-
-          <section id="secure-payment" className="scroll-mt-24 mb-10">
-            <Card>
-              <CardContent className="p-6 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-md bg-muted p-2">
-                    <Shield className="h-5 w-5" />
-                  </div>
-                  <h2 className="text-2xl font-semibold">Secure Payment</h2>
-                </div>
-                <p className="text-muted-foreground">
-                  All payments on MadenKorea are processed by <strong>Razorpay</strong>, a
-                  PCI-DSS Level 1 certified payment gateway. Your card, UPI, netbanking, and
-                  wallet details are encrypted in transit and never touch our servers.
-                </p>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="flex items-start gap-2 rounded-md border p-3">
-                    <Lock className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">256-bit TLS encryption</p>
-                      <p className="text-xs text-muted-foreground">
-                        Every payment request is encrypted end-to-end.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2 rounded-md border p-3">
-                    <CreditCard className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Cards, UPI, Netbanking, Wallets</p>
-                      <p className="text-xs text-muted-foreground">
-                        Pay with what works for you.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2 rounded-md border p-3">
-                    <BadgeCheck className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">No card details stored</p>
-                      <p className="text-xs text-muted-foreground">
-                        We never see or save your payment credentials.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="pt-2">
-                  <a
-                    href="https://razorpay.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
-                  >
-                    <Shield className="h-4 w-4" />
-                    <span className="inline-flex items-center gap-1.5">
-                      Payments secured by
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src="/razorpay-logo.svg"
-                        alt="Razorpay"
-                        className="h-4 w-auto inline-block"
-                      />
-                    </span>
-                  </a>
-                </div>
-              </CardContent>
-            </Card>
-          </section>
-
-          <section id="authentic-products" className="scroll-mt-24 mb-10">
-            <Card>
-              <CardContent className="p-6 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-md bg-muted p-2">
-                    <Package className="h-5 w-5" />
-                  </div>
-                  <h2 className="text-2xl font-semibold">Authentic Products</h2>
-                </div>
-                <p className="text-muted-foreground">
-                  Every product on MadenKorea is sourced directly from the brand or its authorised
-                  distributor in Korea. We do not stock from grey-market resellers, and we do not
-                  re-pack products before they reach you.
-                </p>
-                <ul className="list-disc pl-6 text-muted-foreground space-y-1">
-                  <li>Original Korean packaging and barcodes on every unit.</li>
-                  <li>
-                    Manufacturing and expiry dates are checked at intake; near-expiry stock is
-                    never shipped.
-                  </li>
-                  <li>
-                    If you ever suspect a product isn&apos;t authentic, email us at{" "}
-                    <a href="mailto:info@madenkorea.com" className="underline">
-                      info@madenkorea.com
-                    </a>{" "}
-                    and we&apos;ll investigate and replace or refund &mdash; no questions asked.
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-          </section>
-
-          <p className="text-sm text-muted-foreground">
-            Questions? Reach us at{" "}
-            <a href="mailto:info@madenkorea.com" className="underline">
-              info@madenkorea.com
+          <p>
+            <a
+              href="https://razorpay.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="not-prose inline-flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
+            >
+              <Shield className="h-4 w-4" />
+              <span>
+                Payments secured by{" "}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/razorpay-logo.svg"
+                  alt="Razorpay"
+                  className="inline-block h-3.5 w-auto align-middle ml-1"
+                />
+              </span>
             </a>
-            .
           </p>
-        </div>
-      </div>
+        </PolicySection>
+
+        <PolicyDivider />
+
+        <PolicySection
+          id="authentic-products"
+          icon={Package}
+          title="Authentic Products"
+        >
+          <p>
+            Every product on MadenKorea is sourced directly from the brand or
+            its authorised distributor in Korea. We do not stock from
+            grey-market resellers, and we do not re-pack products before they
+            reach you.
+          </p>
+          <ul>
+            <li>Original Korean packaging and barcodes on every unit.</li>
+            <li>
+              Manufacturing and expiry dates are checked at intake; near-expiry
+              stock is never shipped.
+            </li>
+            <li>
+              If you ever suspect a product isn&apos;t authentic, email us at{" "}
+              <a href={`mailto:${business.supportEmail}`}>
+                {business.supportEmail}
+              </a>{" "}
+              and we&apos;ll investigate and replace or refund &mdash; no
+              questions asked.
+            </li>
+          </ul>
+
+          <div className="not-prose mt-6 rounded-2xl border-2 border-primary/40 bg-primary/5 p-6 sm:p-7 space-y-3">
+            <div className="flex items-center gap-2">
+              <BadgeCheck className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold">
+                MadenKorea Authenticity Guarantee
+              </h3>
+            </div>
+            <p className="text-sm">
+              If a product purchased from MadenKorea is found to be{" "}
+              <strong>counterfeit, tampered with, or expired on arrival</strong>,
+              we commit to the following remedy at our cost, regardless of the
+              standard 7-day return window:
+            </p>
+            <ul className="list-disc pl-6 text-sm space-y-1">
+              <li>
+                <strong>Full refund</strong> of the price paid, processed to
+                your original payment method per our{" "}
+                <Link href="/policies/refunds" className="underline">
+                  Refund Policy
+                </Link>
+                .
+              </li>
+              <li>
+                <strong>Return shipping reimbursed</strong> &mdash;
+                we&apos;ll arrange a courier pickup or refund the courier
+                charges if you ship it yourself.
+              </li>
+              <li>
+                <strong>Replacement at our cost</strong> if you&apos;d prefer
+                a genuine unit instead of a refund, subject to stock
+                availability per our{" "}
+                <Link href="/policies/replacements" className="underline">
+                  Replacement Policy
+                </Link>
+                .
+              </li>
+              <li>
+                We may request photos of the product, the packaging, the
+                barcodes, and the invoice to verify the claim. We cooperate
+                fully with brand/distributor investigations where applicable.
+              </li>
+            </ul>
+            <p className="text-sm">
+              <strong>How to file a claim.</strong> Email{" "}
+              <a
+                href={`mailto:${business.supportEmail}`}
+                className="underline"
+              >
+                {business.supportEmail}
+              </a>{" "}
+              with your order number and supporting photos. We acknowledge
+              within 48 hours and resolve within 14 business days.
+            </p>
+            {business.grievanceOfficerName && (
+              <p className="text-sm">
+                <strong>If unresolved,</strong> escalate to our Grievance
+                Officer{" "}
+                <span className="font-medium">
+                  {business.grievanceOfficerName}
+                </span>
+                {business.grievanceOfficerEmail && (
+                  <>
+                    {" at "}
+                    <a
+                      href={`mailto:${business.grievanceOfficerEmail}`}
+                      className="underline"
+                    >
+                      {business.grievanceOfficerEmail}
+                    </a>
+                  </>
+                )}
+                . The Grievance Officer is the named arbiter for authenticity
+                disputes and will issue a written decision within one month.
+              </p>
+            )}
+          </div>
+        </PolicySection>
+
+        <PolicyCta supportEmail={business.supportEmail} />
+      </PolicyShell>
     </CustomerLayout>
   );
 }

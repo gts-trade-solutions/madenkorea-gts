@@ -210,7 +210,7 @@ export default function VendorDashboard() {
               Back to Home
             </Button>
             <div className="text-xs text-muted-foreground">
-              Need help? Email support@madenkorea.com
+              Need help? Email info@madenkorea.com
             </div>
           </CardContent>
         </Card>
