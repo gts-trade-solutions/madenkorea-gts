@@ -1245,20 +1245,34 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                       playsInline
                       className="w-full h-full object-cover" /* fills without side black bars */
                     />
-                  ) : imageUrls[selectedImage] ? (
-                    <Image
-                      src={imageUrls[selectedImage]}
-                      alt={images[selectedImage]?.alt || product.name}
-                      fill
-                      className="object-cover"
-                      // PDP hero is the LCP element on most product
-                      // pages. priority sets fetchpriority="high" and
-                      // disables lazy loading so the first paint isn't
-                      // blocked waiting for an in-viewport image.
-                      // Subsequent thumbnail swaps fetch normally.
-                      priority={selectedImage === 0}
-                      sizes="(max-width: 1024px) 100vw, 50vw"
-                    />
+                  ) : imageUrls.length > 0 ? (
+                    // Stack ALL gallery images in the same container,
+                    // toggle visibility via opacity. Browser loads every
+                    // variant up front (same network cost as preloading
+                    // hidden Images, but layered guarantees the visible
+                    // swap is a CSS opacity flip — instant and smooth.
+                    // The previous implementation only rendered the
+                    // selected image, so each thumbnail click triggered
+                    // a fresh fetch + decode while the old image stayed
+                    // visible, producing the "long delay" feel.
+                    //
+                    // Only the index-0 image carries `priority` so we
+                    // don't blow the LCP budget on every gallery item.
+                    imageUrls.map((src, idx) => (
+                      <Image
+                        key={src}
+                        src={src}
+                        alt={images[idx]?.alt || product.name}
+                        fill
+                        className={`object-cover transition-opacity duration-200 ${
+                          selectedImage === idx
+                            ? "opacity-100"
+                            : "opacity-0 pointer-events-none"
+                        }`}
+                        priority={idx === 0}
+                        sizes="(max-width: 1024px) 100vw, 50vw"
+                      />
+                    ))
                   ) : (
                     <div className="w-full h-full bg-muted" />
                   )}

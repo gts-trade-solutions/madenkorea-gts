@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
@@ -50,17 +50,23 @@ function formatINR(n: number) {
 }
 
 export function CompactProductCard({ product }: { product: CompactProduct }) {
-  const [imageUrl, setImageUrl] = useState<string | null>(
-    product.hero_image_url ?? null
-  );
-  useEffect(() => {
-    if (!imageUrl && product.hero_image_path) {
+  // Derive imageUrl from props every render. Was previously kept in
+  // useState, which only initialized on mount — when the parent
+  // (VideoPlayerModal in the single-product branch) reused the same
+  // component instance and passed a new product, the URL stayed stuck
+  // on the *previous* product's image. useMemo recomputes whenever
+  // either source field changes; getPublicUrl is sync so no state /
+  // effect required.
+  const imageUrl = useMemo<string | null>(() => {
+    if (product.hero_image_url) return product.hero_image_url;
+    if (product.hero_image_path) {
       const { data } = supabase.storage
         .from("product-media")
         .getPublicUrl(product.hero_image_path);
-      setImageUrl(data.publicUrl ?? null);
+      return data.publicUrl ?? null;
     }
-  }, [imageUrl, product.hero_image_path]);
+    return null;
+  }, [product.hero_image_url, product.hero_image_path]);
 
   const saleActive = useMemo(
     () =>
