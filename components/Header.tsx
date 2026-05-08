@@ -94,6 +94,17 @@ export function Header() {
   const { isAuthenticated } = useAuth();
 
   const [showSearch, setShowSearch] = useState(false);
+  // Close the search popup on Esc — standard dismissal pattern, paired
+  // with the visible X button inside the popup.
+  useEffect(() => {
+    if (!showSearch) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowSearch(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showSearch]);
+
   const [categories, setCategories] = useState<DictRow[] | null>(null);
   const [brands, setBrands] = useState<DictRow[] | null>(null);
   const [featuredTicker, setFeaturedTicker] = useState<FeaturedTickerItem[]>([]);
@@ -774,9 +785,27 @@ export function Header() {
         {showSearch && (
           <div className="absolute left-0 right-0 top-full z-50 px-4 pb-3">
             <div className="mx-auto w-full max-w-lg rounded-2xl border border-neutral-200 bg-white p-3 shadow-2xl">
-              {/* User explicitly tapped the search icon — focus the
-                  input so the keyboard appears immediately. */}
-              <SearchAutocomplete autoFocus />
+              {/* Inline close — the toggle in the top-right corner also
+                  closes the popup, but it's far from where the user's
+                  attention sits, so a visible X next to the input is
+                  the obvious affordance. */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  {/* User explicitly tapped the search icon — focus the
+                      input so the keyboard appears immediately. */}
+                  <SearchAutocomplete autoFocus />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowSearch(false)}
+                  aria-label="Close search"
+                  className="shrink-0 h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
         )}

@@ -68,6 +68,7 @@ import { useWishlist } from "@/lib/contexts/WishlistContext";
 import { toast } from "sonner";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductStorySection } from "@/components/products/ProductStorySection";
+import { MobileBuyBar } from "@/components/products/MobileBuyBar";
 import type { StoryBlock } from "@/lib/types/productStory";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -1169,7 +1170,10 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
   return (
     <CustomerLayout>
-      <div className="container mx-auto py-8">
+      {/* `pb-24 md:pb-0` keeps the last visible row from being hidden
+          behind the sticky MobileBuyBar on mobile. Desktop has no
+          sticky bar, so no extra padding needed. */}
+      <div className="container mx-auto py-8 pb-24 md:pb-8">
         {/* Loading skeleton */}
         {loading && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
@@ -1498,7 +1502,12 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     </Button>
                   </div>
 
-                  <div className="grid flex-1 gap-3 sm:grid-cols-2">
+                  {/* Desktop-only action buttons. Mobile gets the
+                      sticky MobileBuyBar at the bottom of the page —
+                      rendering them both would duplicate the same
+                      controls. The qty stepper above stays visible on
+                      both breakpoints; the bar reads its quantity. */}
+                  <div className="hidden md:grid flex-1 gap-3 sm:grid-cols-2">
                     <Button
                       size="lg"
                       className={`w-full transition-colors ${
@@ -1536,18 +1545,19 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                         : "Buy Now"}
                     </Button>
                   </div>
-                  {/* 
                   <Button
                     size="lg"
                     variant="outline"
                     onClick={handleWishlistToggle}
+                    aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"}
+                    className="hidden md:inline-flex shrink-0"
                   >
                     <Heart
                       className={`h-5 w-5 ${
                         inWishlist ? "fill-red-500 text-red-500" : ""
                       }`}
                     />
-                  </Button> */}
+                  </Button>
                 </div>
 
                 {/* Share + shipping highlights */}
@@ -2320,6 +2330,22 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Sticky bottom action bar — mobile only. The component itself
+          handles the md:hidden gating, safe-area padding, and lifting
+          the FloatingWhatsApp button via a CSS variable. */}
+      {product && (
+        <MobileBuyBar
+          inWishlist={inWishlist}
+          inCart={inCart}
+          isAddingToCart={isAddingToCart}
+          isBuyingNow={isBuyingNow}
+          isOutOfStock={isOutOfStock}
+          onWishlistToggle={handleWishlistToggle}
+          onAddToCart={handleAddToCart}
+          onBuyNow={handleBuyNow}
+        />
+      )}
     </CustomerLayout>
   );
 }

@@ -168,7 +168,12 @@ export default function RootLayout({
                     phoneNumber={WHATSAPP_PHONE_NUMBER}
                     message={WHATSAPP_DEFAULT_MESSAGE}
                   />
-                  <Toaster />
+                  {/* Top-center positioning so toasts never overlap
+                      bottom-anchored UI (PDP MobileBuyBar, Floating
+                      WhatsApp). Modern pattern (Apple/Linear/Vercel) and
+                      avoids the sticky-bar conflict on every page, not
+                      just the PDP. */}
+                  <Toaster position="top-center" />
                   <CookieConsentBanner />
                 </WishlistProvider>
               </CartProvider>

@@ -1,11 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 type FloatingWhatsAppProps = {
   phoneNumber: string; // example: 919876543210
   message?: string;
 };
+
+// Routes where the floating WhatsApp button should be hidden on mobile.
+// PDP is the canonical case: its image carousel chevrons sit on the
+// right side at exactly the area this button wants to occupy, and the
+// page already exposes the MobileBuyBar for primary actions plus a
+// footer link to /contact for support. Match prefix-style so deeper
+// PDP variants (`/products/foo/something`) are also covered.
+const HIDE_ON_MOBILE_PREFIXES = ["/products/"];
 
 /**
  * Official WhatsApp glyph — the phone-in-speech-bubble silhouette.
@@ -29,6 +38,9 @@ export function FloatingWhatsApp({
   phoneNumber,
   message = "Hi, I need help.",
 }: FloatingWhatsAppProps) {
+  const pathname = usePathname() ?? "";
+  const hideOnMobile = HIDE_ON_MOBILE_PREFIXES.some((p) => pathname.startsWith(p));
+
   const href = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 
   return (
@@ -40,7 +52,17 @@ export function FloatingWhatsApp({
       // z-40 sits below shadcn Dialog (z-50) and Sheet (z-50) so the
       // button never overlays open modals (Razorpay, lightbox, share,
       // mobile menu). It still floats above page content (z-auto).
-      className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition hover:scale-105"
+      //
+      // `bottom` is driven by a CSS variable so any surface that needs
+      // the WhatsApp button lifted (e.g. the PDP MobileBuyBar on
+      // tablet/desktop) can override it without prop drilling. Default
+      // 1.25rem matches the legacy `bottom-5`.
+      //
+      // `hideOnMobile` hides the button on small viewports for routes
+      // listed above (PDP) where it competes with page chrome. Desktop
+      // still shows it because there's plenty of room.
+      style={{ bottom: "var(--floating-whatsapp-bottom, 1.25rem)" }}
+      className={`fixed right-5 z-40 ${hideOnMobile ? "hidden md:flex" : "flex"} h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition hover:scale-105`}
     >
       <WhatsAppIcon className="h-7 w-7" />
     </Link>
