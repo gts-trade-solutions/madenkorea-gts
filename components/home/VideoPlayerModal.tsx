@@ -33,8 +33,15 @@ export function VideoPlayerModal({ open, items, startIndex, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const touchStartX = useRef<number | null>(null);
   const productStripRef = useRef<HTMLDivElement>(null);
+  // Optimistic defaults: assume there IS overflow to scroll right when
+  // the strip mounts with multiple products. The IntersectionObserver
+  // will correct this if the cards actually all fit. Optimistic-true
+  // here means the chevron is visible from first paint; the alternative
+  // (default false) caused the original flakiness where measurement
+  // timing during the Dialog open animation suppressed the affordance
+  // entirely.
   const [stripCanScrollLeft, setStripCanScrollLeft] = useState(false);
-  const [stripCanScrollRight, setStripCanScrollRight] = useState(false);
+  const [stripCanScrollRight, setStripCanScrollRight] = useState(true);
 
   // Scroll the product strip by roughly one card-and-gap. The cards are
   // ~220px on desktop and the gap is 8px, so ~228 lands the next card
@@ -46,24 +53,44 @@ export function VideoPlayerModal({ open, items, startIndex, onClose }: Props) {
     el.scrollBy({ left: delta, behavior: "smooth" });
   };
 
-  // Track whether the strip has more content to either side, so we can
-  // hide/dim the chevrons when there's nowhere left to scroll.
+  // Track which chevron should be enabled. We do this with an
+  // IntersectionObserver on the first and last card rather than
+  // measuring scrollWidth/clientWidth, because those measurements lie
+  // during the Dialog's open animation (Radix applies a zoom-in
+  // transform that makes the strip momentarily report
+  // scrollWidth === clientWidth, suppressing the right chevron at
+  // first paint). IO only fires once layout commits and reports
+  // intersection ratios from the actual painted geometry — immune to
+  // animation, image-load, font-load, and viewport-resize timing.
   useEffect(() => {
     const el = productStripRef.current;
     if (!el) return;
-    const update = () => {
-      const max = el.scrollWidth - el.clientWidth;
-      setStripCanScrollLeft(el.scrollLeft > 4);
-      setStripCanScrollRight(el.scrollLeft < max - 4);
-    };
-    update();
-    el.addEventListener("scroll", update, { passive: true });
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => {
-      el.removeEventListener("scroll", update);
-      ro.disconnect();
-    };
+    const cards = Array.from(el.children) as HTMLElement[];
+    if (cards.length === 0) return;
+
+    const first = cards[0];
+    const last = cards[cards.length - 1];
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          // `isIntersecting` here means "≥95% visible inside the strip
+          // viewport" because of the threshold below — i.e. the card
+          // is for-sure-onscreen, not just peeking in.
+          if (entry.target === first) {
+            setStripCanScrollLeft(!entry.isIntersecting);
+          }
+          if (entry.target === last) {
+            setStripCanScrollRight(!entry.isIntersecting);
+          }
+        }
+      },
+      { root: el, threshold: 0.95 }
+    );
+
+    io.observe(first);
+    if (last !== first) io.observe(last);
+    return () => io.disconnect();
   }, [open, index]);
 
   // Re-seat the index whenever the modal is opened. Closing leaves the
@@ -103,8 +130,16 @@ export function VideoPlayerModal({ open, items, startIndex, onClose }: Props) {
     el.play().catch(() => {});
   }, [index, isMuted, open]);
 
-  // Touch swipe nav: 60px threshold left/right.
+  // Touch swipe nav between videos: 60px threshold left/right. Touches
+  // that start *inside* the product strip are ignored — they're the
+  // user scrolling the strip horizontally, not asking to change video.
+  // Without this, both gestures fired and any product-strip swipe
+  // skipped to the next/prev video.
   const onTouchStart = (e: React.TouchEvent) => {
+    if (productStripRef.current?.contains(e.target as Node)) {
+      touchStartX.current = null;
+      return;
+    }
     touchStartX.current = e.touches[0]?.clientX ?? null;
   };
   const onTouchEnd = (e: React.TouchEvent) => {
@@ -337,7 +372,7 @@ export function VideoPlayerModal({ open, items, startIndex, onClose }: Props) {
                     absolute left-1 top-1/2 -translate-y-1/2
                     h-8 w-8 rounded-full bg-background/90 shadow-md border
                     backdrop-blur-sm hover:bg-background
-                    disabled:opacity-0 disabled:pointer-events-none
+                    disabled:opacity-30 disabled:pointer-events-none
                     transition-opacity z-10
                   "
                 >
@@ -355,7 +390,7 @@ export function VideoPlayerModal({ open, items, startIndex, onClose }: Props) {
                     absolute right-1 top-1/2 -translate-y-1/2
                     h-8 w-8 rounded-full bg-background/90 shadow-md border
                     backdrop-blur-sm hover:bg-background
-                    disabled:opacity-0 disabled:pointer-events-none
+                    disabled:opacity-30 disabled:pointer-events-none
                     transition-opacity z-10
                   "
                 >
