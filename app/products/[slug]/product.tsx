@@ -1247,6 +1247,13 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                       alt={images[selectedImage]?.alt || product.name}
                       fill
                       className="object-cover"
+                      // PDP hero is the LCP element on most product
+                      // pages. priority sets fetchpriority="high" and
+                      // disables lazy loading so the first paint isn't
+                      // blocked waiting for an in-viewport image.
+                      // Subsequent thumbnail swaps fetch normally.
+                      priority={selectedImage === 0}
+                      sizes="(max-width: 1024px) 100vw, 50vw"
                     />
                   ) : (
                     <div className="w-full h-full bg-muted" />

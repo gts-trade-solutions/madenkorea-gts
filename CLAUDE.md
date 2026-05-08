@@ -8,6 +8,7 @@ Orientation for Claude Code working in this repository. Keep this file lean: dee
 - [ISSUE_REGISTER.md](ISSUE_REGISTER.md) — enriched issue register (audit findings, fix status, confidence markers). Treat as a planning doc; re-verify items marked `[INFERRED]` or `[UNVERIFIED]` before acting.
 - [REQUIREMENTS.md](REQUIREMENTS.md) — original product requirements. Some sections are dated; trust CODEBASE_REFERENCE over REQUIREMENTS when they conflict.
 - [ANALYTICS.md](ANALYTICS.md) — first-party event log + conversion funnel (admin pages at `/admin/analytics/funnel` and `/admin/analytics/sessions`). Lists every captured event, where it fires from, the props payload, and the privacy/PII posture. Read before adding new events.
+- [SEO.md](SEO.md) — SEO audit + action plan (internal gaps, external off-site actions, sequencing). Living document; update checkboxes as items ship. Last audit: 2026-05-08.
 - [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) — historical milestone log (2025-10). Mostly historical; do not assume it reflects current state.
 
 When you fix an issue, update both the issue register status and any relevant notes in CODEBASE_REFERENCE.md.
@@ -100,7 +101,7 @@ Local migrations present:
 - **Some admin email files are `.txt`**, not `.tsx` — they are archived, not active App Router pages. Don't try to "fix" them by importing them.
 - **Mock data layer is legacy.** `lib/mock-data/`, `MockAuthApi`, `MockProductApi`, `AuthAdapter`, `ProductAdapter` are dead-code candidates (see CODEBASE_REFERENCE dead-code queue). Real data flows through Supabase. Don't extend the mock layer.
 - **Razorpay verify route is the heaviest critical path** — [app/api/razorpay/verify/route.ts](app/api/razorpay/verify/route.ts) combines signature verification, payment metadata, attribution, promo increment, cart clear, and inline-HTML SES emails. Edit carefully and test the full payment flow.
-- **Two ProductForm backups exist** (`ProductForm v-1.tsx`, `ProductForm v-2.tsx`) — they are stale and currently contribute typecheck errors. Not imported anywhere; deletion candidates.
+- ~~**Two ProductForm backups exist** (`ProductForm v-1.tsx`, `ProductForm v-2.tsx`) — they are stale and currently contribute typecheck errors. Not imported anywhere; deletion candidates.~~ Both deleted 2026-05-08 (SEO P2 #12 cleanup).
 - **`lib/adminAuth.ts`** checks an `ADMIN_EMAIL` request header but the visible admin UI relies on `AuthContext` role checks — don't mix the two.
 - **Build ignores type errors** (see Commands above). Run `npm run typecheck` explicitly.
 

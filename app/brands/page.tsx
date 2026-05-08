@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
@@ -5,9 +6,27 @@ import { CustomerLayout } from '@/components/CustomerLayout';
 import { Card } from '@/components/ui/card';
 import { publicURL } from '@/lib/storage-public-url';
 
-export const metadata = {
-  title: 'All Brands | MadenKorea',
-  description: 'Browse all Korean beauty brands available at MadenKorea',
+const CANONICAL = 'https://madenkorea.com/brands';
+const TITLE = 'All Korean beauty brands';
+const DESCRIPTION =
+  'Browse every authentic K-beauty brand stocked at MadenKorea — sourced direct from Korea, available across India.';
+
+export const metadata: Metadata = {
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: CANONICAL },
+  openGraph: {
+    type: 'website',
+    url: CANONICAL,
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  robots: { index: true, follow: true },
 };
 
 type BrandRow = {

@@ -3,11 +3,18 @@ import { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 
 export const dynamic = "force-dynamic";
+
+// Influencer dashboard — gated, user-specific. Noindex the whole tree.
+export const metadata: Metadata = {
+  title: "Influencer Portal",
+  robots: { index: false, follow: false, nocache: true },
+};
 
 export default async function InfluencerLayout({ children }: { children: ReactNode }) {
   // Use the auth-helpers server client (handles sb-* cookies correctly)

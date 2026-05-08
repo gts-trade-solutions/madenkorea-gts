@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductFilters } from "@/components/ProductFilters";
+import { BreadcrumbJsonLd } from "@/components/BreadcrumbJsonLd";
 
 export const revalidate = 300; // ISR: refresh every 5 minutes
 
@@ -182,6 +183,12 @@ export default async function BrandPage({
 
   return (
     <CustomerLayout>
+      <BreadcrumbJsonLd
+        items={[
+          { name: "Home", url: "/" },
+          { name: brand.name, url: `/brand/${brand.slug}` },
+        ]}
+      />
       {/* Optional brand banner if you later add brand.banner_url */}
       {/* {brand.banner_url && (
         <div className="relative w-full aspect-[21/7] bg-muted mb-8">

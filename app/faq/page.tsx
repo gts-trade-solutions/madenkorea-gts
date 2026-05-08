@@ -36,7 +36,12 @@ type Section = {
   id: string;
   label: string;
   Icon: typeof Truck;
-  items: { q: string; a: React.ReactNode }[];
+  // `a` is the rendered JSX (with links / formatting) shown to users.
+  // `aText` is the plain-text answer used for FAQPage JSON-LD — schema
+  // accepts plain text or HTML, and plain text is safer than trying to
+  // serialise React on a route file (Next blocks `react-dom/server`
+  // imports in app/* for client-bundling reasons).
+  items: { q: string; a: React.ReactNode; aText: string }[];
 };
 
 export default async function FAQPage() {
@@ -56,6 +61,8 @@ export default async function FAQPage() {
       items: [
         {
           q: "How long does delivery take?",
+          aText:
+            "It depends on your pincode. Use the Check Delivery box on any product page to see the exact window: from 1–3 days in Chennai metro up to 10–15 days for the islands. Once dispatched you'll receive a tracking link by email and can track the package any time from My Account → Orders.",
           a: (
             <p>
               It depends on your pincode. Use the &ldquo;Check Delivery&rdquo;
@@ -72,6 +79,7 @@ export default async function FAQPage() {
         },
         {
           q: "When do I get free shipping?",
+          aText: `Pan-India delivery is free on every order above ${thresholdLabel}. Below that, shipping is a flat ${feeLabel}. K Plus members get free shipping on every order, regardless of cart value.`,
           a: (
             <p>
               Pan-India delivery is free on every order above{" "}
@@ -86,6 +94,8 @@ export default async function FAQPage() {
         },
         {
           q: "Do you ship across India?",
+          aText:
+            "Yes — we ship to every Indian pincode covered by our courier partners. The product page's delivery checker tells you the exact ETA for your pincode. If your pincode isn't covered for some reason, the checker says so before you place the order.",
           a: (
             <p>
               Yes &mdash; we ship to every Indian pincode covered by our
@@ -98,6 +108,7 @@ export default async function FAQPage() {
         },
         {
           q: "Can I change my delivery address after ordering?",
+          aText: `Yes, as long as the order hasn't shipped yet. Email ${supportEmail} with your order number and the new address. Once an order is in Shipped status the courier has it and we can no longer redirect.`,
           a: (
             <p>
               Yes, as long as the order hasn&apos;t shipped yet. Email{" "}
@@ -119,6 +130,8 @@ export default async function FAQPage() {
       items: [
         {
           q: "What's your return policy?",
+          aText:
+            "Raise a return within 7 days of delivery for an item that arrived damaged, defective, or wrong. Opened skincare and personal-care products generally can't be returned for hygiene reasons unless they were faulty on arrival. Full details are on the Shipping & Returns page.",
           a: (
             <p>
               Raise a return within <strong>7 days of delivery</strong> for an
@@ -135,6 +148,7 @@ export default async function FAQPage() {
         },
         {
           q: "How do I cancel an order?",
+          aText: `You can cancel any order for free before it ships — through My Account → Orders, by emailing ${supportEmail} with your order number, or by tapping the WhatsApp icon at the bottom-right of any page. Step-by-step rules and what gets refunded are on the Cancellation Policy page.`,
           a: (
             <p>
               You can cancel any order for free before it ships &mdash; through{" "}
@@ -157,6 +171,8 @@ export default async function FAQPage() {
         },
         {
           q: "How long does a refund take?",
+          aText:
+            "Once we confirm the cancellation or receive your return, refunds go back to your original payment method through Razorpay. UPI and wallet refunds typically reach you in 1–2 business days; card and netbanking refunds take 5–7 business days. Detailed table is in the Cancellation Policy.",
           a: (
             <p>
               Once we confirm the cancellation or receive your return, refunds
@@ -176,6 +192,7 @@ export default async function FAQPage() {
         },
         {
           q: "What if my product arrives damaged or wrong?",
+          aText: `Email ${supportEmail} within 7 days of delivery with 2–4 photos showing the issue. We'll either send a replacement or refund — your choice. Pickup of the original item is at our cost. See the Replacement Policy for the full process.`,
           a: (
             <p>
               Email{" "}
@@ -202,6 +219,8 @@ export default async function FAQPage() {
       items: [
         {
           q: "What payment methods do you accept?",
+          aText:
+            "All standard methods through our payment partner Razorpay: UPI, all major credit and debit cards, netbanking, and popular wallets. Cash on Delivery is available for eligible pincodes — the option appears at checkout when applicable.",
           a: (
             <p>
               All standard methods through our payment partner Razorpay: UPI,
@@ -213,6 +232,8 @@ export default async function FAQPage() {
         },
         {
           q: "Are my payment details safe?",
+          aText:
+            "Yes. Payments are processed by Razorpay over an encrypted PCI-DSS Level 1 compliant connection. We never see or store your card, UPI, or netbanking credentials. More details on the Shipping & Returns page.",
           a: (
             <p>
               Yes. Payments are processed by Razorpay over an encrypted
@@ -230,6 +251,7 @@ export default async function FAQPage() {
         },
         {
           q: "My payment failed but money was deducted. What should I do?",
+          aText: `Bank holds on failed payments usually release within 3–5 business days automatically. If it doesn't reverse after that, email us at ${supportEmail} with the transaction reference and a screenshot of the bank entry — we'll trace it with Razorpay.`,
           a: (
             <p>
               Bank holds on failed payments usually release within 3&ndash;5
@@ -245,6 +267,8 @@ export default async function FAQPage() {
         },
         {
           q: "Can I get a GST invoice?",
+          aText:
+            "Yes — every paid order generates a GST-compliant invoice. You can download it from My Account → Orders once it's available. If you need an updated copy or your business name on the invoice, email us before placing the order.",
           a: (
             <p>
               Yes &mdash; every paid order generates a GST-compliant invoice.
@@ -267,6 +291,8 @@ export default async function FAQPage() {
       items: [
         {
           q: "Do I need an account to shop?",
+          aText:
+            "Yes — you'll be asked to sign in or create an account at checkout. It's free, takes 30 seconds, and lets you track orders, raise returns, save addresses, and access K Plus benefits.",
           a: (
             <p>
               Yes &mdash; you&apos;ll be asked to sign in or create an account
@@ -278,6 +304,8 @@ export default async function FAQPage() {
         },
         {
           q: "How do I reset my password?",
+          aText:
+            "On the login page tap Forgot password?. We'll email a reset link to the address on your account — valid for 60 minutes.",
           a: (
             <p>
               On the{" "}
@@ -292,6 +320,8 @@ export default async function FAQPage() {
         },
         {
           q: "How do I delete my account?",
+          aText:
+            "Email us from the address on your account with the subject Delete my account. We acknowledge within 48 hours and complete the deletion within 30 days. Some records (notably GST-compliant invoices) are retained for the legally required 7 years — full details on the Privacy Policy page.",
           a: (
             <p>
               Email us from the address on your account with the subject{" "}
@@ -310,8 +340,33 @@ export default async function FAQPage() {
     },
   ];
 
+  // FAQPage JSON-LD. Lets Google show the question + answer as
+  // expandable accordions inside the SERP, and qualifies the page for
+  // "People also ask" carousels. Uses the plain-text `aText` field
+  // alongside the rendered JSX `a` — Next blocks `react-dom/server` in
+  // route files (it can leak into client bundles), so we maintain a
+  // text twin instead of stringifying React on the fly.
+  const faqLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: sections.flatMap((section) =>
+      section.items.map((item) => ({
+        "@type": "Question",
+        name: item.q,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: item.aText,
+        },
+      }))
+    ),
+  };
+
   return (
     <CustomerLayout>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }}
+      />
       <PolicyHero
         eyebrow="Help center"
         title="Frequently asked questions"

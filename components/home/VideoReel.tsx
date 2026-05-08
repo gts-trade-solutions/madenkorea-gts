@@ -20,6 +20,25 @@ import { Volume2, VolumeX } from "lucide-react";
 // the per-card overlay. Both pass an `onCardClick(index)` to open the
 // shared VideoPlayerModal at that index.
 
+// Tracks the user's `prefers-reduced-motion` media query. Returns true
+// when motion should be minimised — used to skip the 4s carousel
+// auto-advance and to leave videos paused on poster frames. Vestibular
+// disorders make autoplaying carousels and unsolicited video genuinely
+// uncomfortable; respecting the OS-level pref is both correct UX and
+// good for the indirect bounce-rate signal.
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+  return reduced;
+}
+
 export type ReelItem = {
   id: string | number;
   video_url?: string | null;
@@ -52,6 +71,7 @@ export function VideoReel<T extends ReelItem>({
   const [slidesPerView, setSlidesPerView] = useState(6);
   const [currentPage, setCurrentPage] = useState(0);
   const [activeId, setActiveId] = useState<string | number | null>(null);
+  const reducedMotion = useReducedMotion();
 
   const items = useMemo(
     () => rawItems.filter((v) => !!v.video_url),
@@ -132,7 +152,7 @@ export function VideoReel<T extends ReelItem>({
     let afterScrollTimer: number | null = null;
 
     const tick = () => {
-      if (paused || isHoverPaused) return;
+      if (paused || isHoverPaused || reducedMotion) return;
       const s = getStep();
       if (!s) return;
       const curIdx = Math.round(el.scrollLeft / s);
@@ -174,7 +194,7 @@ export function VideoReel<T extends ReelItem>({
       el.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onResize);
     };
-  }, [paused, isHoverPaused, computeFromScroll]);
+  }, [paused, isHoverPaused, reducedMotion, computeFromScroll]);
 
   // Empty-list early return goes AFTER all hooks have been declared so the
   // hook order stays stable across renders.
@@ -294,6 +314,7 @@ function ReelCard<T extends ReelItem>({
   const [showControls, setShowControls] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [inView, setInView] = useState(false);
+  const reducedMotion = useReducedMotion();
 
   const isActive = activeId != null && activeId === video.id;
 
@@ -308,17 +329,19 @@ function ReelCard<T extends ReelItem>({
     return () => obs.disconnect();
   }, []);
 
-  // Only the active+visible card plays. Others paused.
+  // Only the active+visible card plays. Others paused. Reduced-motion
+  // users see the poster frame only — they can still tap the card to
+  // open the modal player and watch on demand.
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
-    if (isActive && inView) {
+    if (isActive && inView && !reducedMotion) {
       el.muted = isMuted;
       el.play().catch(() => {});
     } else {
       el.pause();
     }
-  }, [isActive, inView, isMuted]);
+  }, [isActive, inView, isMuted, reducedMotion]);
 
   useEffect(() => {
     if (!inView) setVideoReady(false);
@@ -349,7 +372,11 @@ function ReelCard<T extends ReelItem>({
         {!!video.thumbnail_url && (
           <Image
             src={video.thumbnail_url}
-            alt=""
+            // Generic descriptive alt — the thumbnail is a transient
+            // placeholder behind the actual <video> element below, but
+            // it's the only image asset Googlebot sees on this card. A
+            // generic "Product video preview" is more useful than empty.
+            alt="Product video preview"
             fill
             className={[
               "object-cover transition-opacity duration-300",

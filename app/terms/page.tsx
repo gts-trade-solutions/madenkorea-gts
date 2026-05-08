@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { PolicyHero } from "@/components/PolicyHero";
@@ -12,6 +13,14 @@ import {
 import { getBusinessInfo } from "@/lib/businessInfo";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Terms & Conditions",
+  description:
+    "The rules that apply when you browse, buy, or use any service on madenkorea.com.",
+  alternates: { canonical: "https://madenkorea.com/terms" },
+  robots: { index: true, follow: true },
+};
 
 const TOC: TocItem[] = [
   { id: "intro", label: "1. Introduction" },

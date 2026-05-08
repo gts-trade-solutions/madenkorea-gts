@@ -1,4 +1,5 @@
 // app/(marketing)/services/cdsco-regulatory-support/page.tsx
+import type { Metadata } from "next";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -15,6 +16,14 @@ import {
   BadgeCheck,
   Mail, // ✅ added
 } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "CDSCO Regulatory Support",
+  description:
+    "End-to-end CDSCO support for imported cosmetics in India — dossier prep, SUGAM filing, approvals, labeling, and post-approval compliance.",
+  alternates: { canonical: "https://madenkorea.com/services" },
+  robots: { index: true, follow: true },
+};
 
 export default function CdscoRegulatorySupportPage() {
   return (

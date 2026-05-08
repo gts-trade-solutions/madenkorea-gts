@@ -1,7 +1,16 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { CustomerLayout } from '@/components/CustomerLayout';
 import { ProductCard } from '@/components/ProductCard';
 import { createClient } from '@supabase/supabase-js';
+
+// Search-results pages don't add unique value to Google's index — but
+// internal links on them (to actual product pages) are useful, so we
+// keep follow:true.
+export const metadata: Metadata = {
+  title: 'Search',
+  robots: { index: false, follow: true, nocache: true },
+};
 
 type CardProduct = {
   id: string;
