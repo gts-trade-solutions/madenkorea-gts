@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import { supabaseRouteClient } from "@/lib/supabaseRoute";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,21 +14,11 @@ function addDays(base: Date, days: number) {
   return d;
 }
 
+// Same auth-cookie-format alignment as create-order — see that file's
+// note for the history. Using supabaseRouteClient() everywhere keeps
+// auth reads consistent with middleware and /api/auth/attach.
 async function getAuthenticatedUserId() {
-  const cookieStore = cookies();
-  const sb = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set() {},
-        remove() {},
-      },
-    }
-  );
+  const sb = supabaseRouteClient();
   const { data } = await sb.auth.getUser();
   return data.user?.id ?? null;
 }

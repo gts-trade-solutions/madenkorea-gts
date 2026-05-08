@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { MEMBERSHIP_PRICE } from "@/lib/membership";
+import { supabaseRouteClient } from "@/lib/supabaseRoute";
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
@@ -15,21 +14,13 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Read auth via the same `supabaseRouteClient()` helper that middleware
+// and /api/auth/attach already speak. Using @supabase/ssr's
+// createServerClient directly here read cookies in a different format
+// and silently returned null for the user — surfacing as a misleading
+// "Unauthorized" toast on the K Plus join button.
 async function getAuthenticatedUserId() {
-  const cookieStore = cookies();
-  const sb = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set() {},
-        remove() {},
-      },
-    }
-  );
+  const sb = supabaseRouteClient();
   const { data } = await sb.auth.getUser();
   return data.user?.id ?? null;
 }

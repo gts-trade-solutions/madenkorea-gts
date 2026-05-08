@@ -23,6 +23,7 @@ import {
   getActiveMembership,
   type MembershipRow,
 } from "@/lib/membership";
+import { useShippingConfig } from "@/lib/hooks/useShippingConfig";
 
 declare global {
   interface Window {
@@ -32,6 +33,8 @@ declare global {
 
 export default function KPlusPage() {
   const router = useRouter();
+  const shippingConfig = useShippingConfig();
+  const thresholdLabel = `₹${shippingConfig.deliveryThreshold.toLocaleString("en-IN")}`;
 
   const [loading, setLoading] = useState(false);
   const [checkingMembership, setCheckingMembership] = useState(true);
@@ -299,7 +302,7 @@ export default function KPlusPage() {
                       <ul className="mt-4 space-y-3 text-sm text-neutral-600">
                         <li className="flex gap-2">
                           <span>•</span>
-                          <span>Free delivery only above ₹2000</span>
+                          <span>Free delivery only above {thresholdLabel}</span>
                         </li>
                         <li className="flex gap-2">
                           <span>•</span>
