@@ -70,6 +70,7 @@ import { toast } from "sonner";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductStorySection } from "@/components/products/ProductStorySection";
 import { MobileBuyBar } from "@/components/products/MobileBuyBar";
+import { InternationalOrderModal } from "@/components/InternationalOrderModal";
 import type { StoryBlock } from "@/lib/types/productStory";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -336,6 +337,10 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
   const { formatPrice, isINR } = useCurrency();
   const [showShare, setShowShare] = useState(false);
   const [isBuyingNow, setIsBuyingNow] = useState(false);
+  // International order modal for the Buy Now flow. Cart-page Buy Now
+  // (via /cart) already routes to the cart's modal; this state covers
+  // the direct PDP "Buy Now" button which bypasses the cart entirely.
+  const [showIntlBuyNowModal, setShowIntlBuyNowModal] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState<Product | null>(null);
@@ -655,6 +660,16 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
   const handleBuyNow = async () => {
     if (!product || isBuyingNow || isOutOfStock) return;
+
+    // International visitors can't use the Razorpay/Indian checkout
+    // flow. Pop the order-request modal directly from the PDP with
+    // just this product as the cart snapshot — same pattern as the
+    // /cart route, scoped to a single line item.
+    if (!isINR) {
+      setShowIntlBuyNowModal(true);
+      return;
+    }
+
     try {
       setIsBuyingNow(true);
       // If the item is already in the cart, don't add more — the
@@ -2381,6 +2396,31 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
           onWishlistToggle={handleWishlistToggle}
           onAddToCart={handleAddToCart}
           onBuyNow={handleBuyNow}
+        />
+      )}
+
+      {/* International order modal for the PDP Buy Now flow. The cart
+          page mounts its own instance for the cart route; this one
+          handles direct PDP Buy Now by passing the current product as
+          a single-line cart snapshot. */}
+      {product && effectivePrice != null && (
+        <InternationalOrderModal
+          open={showIntlBuyNowModal}
+          onOpenChange={setShowIntlBuyNowModal}
+          cart={[
+            {
+              product_id: product.id,
+              name: product.name,
+              sku: null,
+              // Buy Now defaults to 1 unit. If the user wants more
+              // units they can add to cart first; PDP doesn't expose
+              // a pre-purchase quantity for the international flow.
+              quantity: 1,
+              unit_price_inr: effectivePrice,
+              hero_image_url: imageUrls[0] ?? null,
+            },
+          ]}
+          subtotalInr={effectivePrice}
         />
       )}
     </CustomerLayout>
