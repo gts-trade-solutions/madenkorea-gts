@@ -12,6 +12,7 @@ import { useCart } from "@/lib/contexts/CartContext";
 import { useWishlist } from "@/lib/contexts/WishlistContext";
 import { useCurrency } from "@/lib/contexts/CurrencyContext";
 import { toast } from "sonner";
+import { InternationalOrderModal } from "@/components/InternationalOrderModal";
 
 type ProductForCard = {
   id: string;
@@ -105,7 +106,7 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
   const router = useRouter();
   const { addItem } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
-  const { formatPrice } = useCurrency();
+  const { formatPrice, isINR } = useCurrency();
 
   const [imageUrl, setImageUrl] = useState<string | null>(
     product.hero_image_url ?? null
@@ -183,6 +184,11 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
   const [justAdded, setJustAdded] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [isBuyingNow, setIsBuyingNow] = useState(false);
+  // International order request modal — opened by Buy Now when the
+  // visitor isn't on INR. Razorpay/Indian checkout doesn't apply for
+  // them; the modal collects a contact + address and opens their mail
+  // app pre-filled.
+  const [showIntlModal, setShowIntlModal] = useState(false);
   const inWishlist = isInWishlist(product.id);
 
   const onAddToCart = async (e: React.MouseEvent) => {
@@ -205,6 +211,15 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
   const onBuyNow = async (e: React.MouseEvent) => {
     e.preventDefault();
     if (isOut || isBuyingNow) return;
+
+    // International visitors can't use the Razorpay/Indian checkout
+    // flow. Open the order-request modal with just this product as
+    // a single-line cart snapshot — no cart mutation needed.
+    if (!isINR) {
+      setShowIntlModal(true);
+      return;
+    }
+
     try {
       setIsBuyingNow(true);
       await addItem(product.id, 1);
@@ -224,6 +239,7 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
   };
 
   return (
+    <>
     <Link
       href={`/products/${product.slug}`}
       className="group flex h-full flex-col"
@@ -444,6 +460,29 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
           </div>{/* end mt-auto bottom block */}
       </div>
     </Link>
+
+    {/* International order request modal — rendered as a sibling of
+        the Link so the Dialog portal doesn't end up nested inside an
+        anchor element. Only opens when the Buy Now flow detects a
+        non-INR visitor. */}
+    {effectivePrice != null && (
+      <InternationalOrderModal
+        open={showIntlModal}
+        onOpenChange={setShowIntlModal}
+        cart={[
+          {
+            product_id: product.id,
+            name: product.name,
+            sku: null,
+            quantity: 1,
+            unit_price_inr: effectivePrice,
+            hero_image_url: imageUrl,
+          },
+        ]}
+        subtotalInr={effectivePrice}
+      />
+    )}
+    </>
   );
 }
 
