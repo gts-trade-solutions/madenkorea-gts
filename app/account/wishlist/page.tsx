@@ -8,6 +8,7 @@ import { CustomerLayout } from '@/components/CustomerLayout';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useCart } from '@/lib/contexts/CartContext';
 import { useWishlist } from '@/lib/contexts/WishlistContext';
+import { useCurrency } from '@/lib/contexts/CurrencyContext';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -89,6 +90,7 @@ export default function WishlistPage() {
   const { isAuthenticated } = useAuth();
   const { addItem } = useCart();
   const { removeFromWishlist } = useWishlist();
+  const { formatPrice } = useCurrency();
 
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<WishlistRow[]>([]);
@@ -453,12 +455,12 @@ export default function WishlistPage() {
 
                           <div className="flex items-center gap-3 mt-3 flex-wrap">
                             <div className="font-bold text-lg">
-                              {formatINR(unitPrice, product.currency)}
+                              {formatPrice(unitPrice)}
                             </div>
 
                             {compareAt && compareAt > unitPrice ? (
                               <div className="text-sm text-muted-foreground line-through">
-                                {formatINR(compareAt, product.currency)}
+                                {formatPrice(compareAt)}
                               </div>
                             ) : null}
                           </div>

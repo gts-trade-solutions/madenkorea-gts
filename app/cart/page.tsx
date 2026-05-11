@@ -16,6 +16,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/lib/contexts/CartContext";
+import { useCurrency } from "@/lib/contexts/CurrencyContext";
+import { InternationalOrderModal } from "@/components/InternationalOrderModal";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import {
   computeShippingFee,
@@ -114,8 +116,12 @@ export default function CartPage() {
   const { ready: cartReady, loading, items, setQty, removeItem } = useCart();
   const { isAuthenticated } = useAuth();
   const shippingConfig = useShippingConfig();
+  const { formatPrice, isINR } = useCurrency();
 
   const [membership, setMembership] = useState<MembershipRow | null>(null);
+  // International order request modal — opened by the Checkout button
+  // when the visitor isn't on INR. Indian visitors never see this.
+  const [showIntlModal, setShowIntlModal] = useState(false);
 
   const [guestProducts, setGuestProducts] = useState<
     Record<string, ProductRow>
@@ -494,11 +500,11 @@ async function clearPromo() {
                           )}
                           <div className="flex items-baseline gap-2">
                             <span className="font-bold">
-                              {row.unavailable ? "—" : formatINR(row.unitPrice, p.currency)}
+                              {row.unavailable ? "—" : formatPrice(row.unitPrice)}
                             </span>
                             {row.mrp && (
                               <span className="text-sm text-muted-foreground line-through">
-                                {formatINR(row.mrp, p.currency)}
+                                {formatPrice(row.mrp)}
                               </span>
                             )}
                           </div>
@@ -529,7 +535,7 @@ async function clearPromo() {
                         </div>
 
                         <p className="font-semibold whitespace-nowrap">
-                          {formatINR(row.lineTotal, p.currency)}
+                          {formatPrice(row.lineTotal)}
                         </p>
 
                         <Button
@@ -624,7 +630,7 @@ async function clearPromo() {
                 <div className="flex justify-between">
                   <span>Subtotal</span>
                   <span className="font-semibold">
-                    {formatINR(displaySubtotal, displayCurrency)}
+                    {formatPrice(displaySubtotal)}
                   </span>
                 </div>
 
@@ -632,7 +638,7 @@ async function clearPromo() {
                   <div className="flex justify-between text-emerald-600">
                     <span>Discount</span>
                     <span className="font-semibold">
-                      -{formatINR(displayDiscount, displayCurrency)}
+                      -{formatPrice(displayDiscount)}
                     </span>
                   </div>
                 )}
@@ -640,28 +646,37 @@ async function clearPromo() {
                 <div className="flex justify-between">
                   <span>Shipping</span>
                   <span className="font-semibold">
-                    {displayShipping === 0
+                    {!isINR
+                      ? "Quoted on request"
+                      : displayShipping === 0
                       ? "FREE"
-                      : formatINR(displayShipping, displayCurrency)}
+                      : formatPrice(displayShipping)}
                   </span>
                 </div>
 
-                {membershipActive ? (
+                {/* Shipping copy is India-specific (free above threshold,
+                    K Plus benefit). For international visitors, shipping
+                    is quoted manually when they submit the order request. */}
+                {isINR && membershipActive ? (
                   <p className="text-sm text-muted-foreground">
                     {shippingMessage(displaySubtotal, membership, shippingConfig)}
                   </p>
-                ) : displaySubtotal < shippingConfig.deliveryThreshold ? (
+                ) : isINR && displaySubtotal < shippingConfig.deliveryThreshold ? (
                   <p className="text-sm text-muted-foreground">
                     Add{" "}
-                    {formatINR(
+                    {formatPrice(
                       shippingConfig.deliveryThreshold - displaySubtotal,
-                      displayCurrency,
                     )}{" "}
                     more for FREE shipping
                   </p>
-                ) : (
+                ) : isINR ? (
                   <p className="text-sm text-muted-foreground">
                     {shippingMessage(displaySubtotal, membership, shippingConfig)}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    International shipping is quoted when our team responds to
+                    your order request.
                   </p>
                 )}
 
@@ -669,7 +684,7 @@ async function clearPromo() {
 
                 <div className="flex justify-between text-lg font-bold">
                   <span>Total</span>
-                  <span>{formatINR(displayTotal, displayCurrency)}</span>
+                  <span>{formatPrice(displayTotal)}</span>
                 </div>
                 {loadingTotals && (
                   <p className="text-xs text-muted-foreground">Updating totals...</p>
@@ -682,6 +697,15 @@ async function clearPromo() {
                   disabled={unavailableCount > 0 || availableRows.length === 0}
                   onClick={() => {
                     if (unavailableCount > 0 || availableRows.length === 0) {
+                      return;
+                    }
+                    // Non-INR: open the international order request
+                    // modal. Razorpay isn't wired for non-INR billing,
+                    // and DTDC doesn't ship outside India, so we route
+                    // these visitors through the manual fulfilment
+                    // pipeline.
+                    if (!isINR) {
+                      setShowIntlModal(true);
                       return;
                     }
                     if (!isAuthenticated) {
@@ -697,7 +721,7 @@ async function clearPromo() {
                     router.push("/checkout");
                   }}
                 >
-                  Proceed to Checkout
+                  {isINR ? "Proceed to Checkout" : "Request International Order"}
                 </Button>
                 <Button asChild variant="outline" className="w-full">
                   <Link href="/">Continue Shopping</Link>
@@ -707,6 +731,26 @@ async function clearPromo() {
           </div>
         </div>
       </div>
+
+      {/* International order request modal — only opened for non-INR
+          visitors via the Checkout button above. The modal holds its
+          own form state; we just pass the cart snapshot in. */}
+      <InternationalOrderModal
+        open={showIntlModal}
+        onOpenChange={setShowIntlModal}
+        cart={availableRows.map((r) => ({
+          product_id: r.productId,
+          name: r.product.name ?? "Product",
+          // ProductRow doesn't carry sku in this page's local type —
+          // it's only fetched for ops display elsewhere. Omit until
+          // we extend the cart row shape.
+          sku: null,
+          quantity: r.quantity,
+          unit_price_inr: r.unitPrice,
+          hero_image_url: r.product.hero_image_url ?? null,
+        }))}
+        subtotalInr={baseSubtotal}
+      />
     </CustomerLayout>
   );
 }

@@ -356,6 +356,25 @@ export default function AdminSettingsPage() {
                       onCheckedChange={(checked) => setSettings({ ...settings, maintenanceMode: checked })}
                     />
                   </div>
+
+                  <div className="border-t pt-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <Label>Currency display</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Manage FX rates for the multi-currency display, toggle
+                          which currencies appear in the customer-facing switcher,
+                          and trigger a manual rate refresh.
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push('/admin/settings/currencies')}
+                      >
+                        Manage currencies
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>

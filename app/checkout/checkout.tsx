@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/lib/contexts/CartContext";
+import { useCurrency } from "@/lib/contexts/CurrencyContext";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
@@ -104,6 +105,7 @@ export default function CheckoutPage() {
 
   const { items } = useCart();
   const { isAuthenticated, ready } = useAuth();
+  const { formatPrice, isINR } = useCurrency();
   const { start } = useRazorpayCheckout();
   const shippingConfig = useShippingConfig();
 
@@ -708,18 +710,18 @@ export default function CheckoutPage() {
                           <div className="text-right">
                             <div>
                               <span className="font-semibold">
-                                {formatINR(l.unitPrice, l.currency)}
+                                {formatPrice(l.unitPrice)}
                               </span>
                               {l.unitMrpToShow != null && (
                                 <span className="ml-2 text-muted-foreground line-through">
-                                  {formatINR(l.unitMrpToShow, l.currency)}
+                                  {formatPrice(l.unitMrpToShow)}
                                 </span>
                               )}
                             </div>
                             <div className="text-xs">
                               × {l.qty} ={" "}
                               <span className="font-medium">
-                                {formatINR(l.lineTotal, l.currency)}
+                                {formatPrice(l.lineTotal)}
                               </span>
                             </div>
                           </div>
@@ -743,35 +745,39 @@ export default function CheckoutPage() {
                       <div className="flex justify-between">
                         <span>Subtotal</span>
                         <span className="font-semibold">
-                          {formatINR(calc.subtotal, "INR")}
+                          {formatPrice(calc.subtotal)}
                         </span>
                       </div>
 
                       <div className="flex justify-between">
                         <span>
                           Shipping{" "}
-                          {calc.subtotal < shippingConfig.deliveryThreshold && !membershipActive && (
+                          {isINR && calc.subtotal < shippingConfig.deliveryThreshold && !membershipActive && (
                             <span className="text-xs text-muted-foreground">
-                              (Free over ₹{shippingConfig.deliveryThreshold.toLocaleString("en-IN")})
+                              (Free over {formatPrice(shippingConfig.deliveryThreshold)})
                             </span>
                           )}
                         </span>
                         <span className="font-semibold">
-                          {calc.shipping_fee === 0
+                          {!isINR
+                            ? "Quoted on request"
+                            : calc.shipping_fee === 0
                             ? "FREE"
-                            : formatINR(calc.shipping_fee, "INR")}
+                            : formatPrice(calc.shipping_fee)}
                         </span>
                       </div>
 
-                      <div className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-muted-foreground">
-                        {shippingMessage(calc.subtotal, membership, shippingConfig)}
-                      </div>
+                      {isINR && (
+                        <div className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-muted-foreground">
+                          {shippingMessage(calc.subtotal, membership, shippingConfig)}
+                        </div>
+                      )}
 
                       {calc.sale_savings && calc.sale_savings > 0 && (
                         <div className="flex justify-between text-emerald-700">
                           <span>You save on sale</span>
                           <span className="font-semibold">
-                            {formatINR(calc.sale_savings, "INR")}
+                            {formatPrice(calc.sale_savings)}
                           </span>
                         </div>
                       )}
@@ -780,7 +786,7 @@ export default function CheckoutPage() {
                         <div className="flex justify-between text-emerald-700">
                           <span>Promo discount</span>
                           <span className="font-semibold">
-                            - {formatINR(calc.discount_total, "INR")}
+                            - {formatPrice(calc.discount_total)}
                           </span>
                         </div>
                       )}
@@ -789,7 +795,7 @@ export default function CheckoutPage() {
 
                       <div className="flex justify-between text-lg font-bold">
                         <span>Total</span>
-                        <span>{formatINR(calc.total, "INR")}</span>
+                        <span>{formatPrice(calc.total)}</span>
                       </div>
 
                       <Button

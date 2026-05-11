@@ -8,8 +8,15 @@ import {
   MEMBERSHIP_PRICE,
   MEMBERSHIP_DURATION_DAYS,
 } from "@/lib/membership";
+import { useCurrency } from "@/lib/contexts/CurrencyContext";
 
 export function KPlusPromoBanner() {
+  const { isINR } = useCurrency();
+  // K Plus is an India-only product (free shipping benefits apply
+  // only to Razorpay/Indian-pincode flows). Hide it entirely for
+  // visitors viewing in a non-INR currency.
+  if (!isINR) return null;
+
   return (
     <section className="container mx-auto py-8">
       <div className="overflow-hidden rounded-3xl border bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-800 text-white">

@@ -35,6 +35,7 @@ import {
 import { ScrollArea } from "./ui/scroll-area";
 import { Separator } from "./ui/separator";
 import { SearchAutocomplete } from "./SearchAutocomplete";
+import { CurrencySwitcher } from "./CurrencySwitcher";
 
 type DictRow = {
   slug: string;
@@ -708,6 +709,12 @@ export function Header() {
               {showSearch ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
             </Button>
 
+            {/* Mobile currency switcher — compact (symbol only). The
+                desktop equivalent shows symbol + code. */}
+            <div className="md:hidden">
+              <CurrencySwitcher />
+            </div>
+
             <Button
               variant="ghost"
               size="icon"
@@ -745,6 +752,12 @@ export function Header() {
             >
               {showSearch ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
             </Button>
+
+            {/* Currency switcher — visible on desktop only. Mobile
+                exposes the same control inside the slide-out menu. */}
+            <div className="hidden md:inline-flex">
+              <CurrencySwitcher />
+            </div>
 
             <Button
               variant="ghost"

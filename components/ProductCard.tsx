@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/lib/contexts/CartContext";
 import { useWishlist } from "@/lib/contexts/WishlistContext";
+import { useCurrency } from "@/lib/contexts/CurrencyContext";
 import { toast } from "sonner";
 
 type ProductForCard = {
@@ -62,6 +63,10 @@ const supabase = createClient(
   { auth: { persistSession: true, autoRefreshToken: true } }
 );
 
+// Legacy formatter retained for fallbacks where useCurrency() isn't
+// available (e.g. snapshot copy in non-React contexts). New display
+// code should call `formatPrice(inr)` from useCurrency() directly so
+// it honours the user's selected currency.
 function currencyINR(value?: number | null, code?: string | null) {
   if (value == null) return "";
   const c = (code ?? "INR").toUpperCase();
@@ -100,6 +105,7 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
   const router = useRouter();
   const { addItem } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
+  const { formatPrice } = useCurrency();
 
   const [imageUrl, setImageUrl] = useState<string | null>(
     product.hero_image_url ?? null
@@ -392,21 +398,20 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
 
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span className="text-base sm:text-lg font-bold">
-              {currencyINR(effectivePrice, product.currency)}
+              {effectivePrice != null ? formatPrice(effectivePrice) : ""}
             </span>
 
             {product.compare_at_price != null &&
               effectivePrice != null &&
               product.compare_at_price > effectivePrice && (
                 <span className="text-xs sm:text-sm text-muted-foreground line-through">
-                  {currencyINR(product.compare_at_price, product.currency)}
+                  {formatPrice(product.compare_at_price)}
                 </span>
               )}
 
             {discountPct > 0 && saveAmount > 0 && (
               <span className="text-[11px] font-medium rounded px-1.5 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
-                Save {currencyINR(saveAmount, product.currency)} ({discountPct}%
-                OFF)
+                Save {formatPrice(saveAmount)} ({discountPct}% OFF)
               </span>
             )}
 

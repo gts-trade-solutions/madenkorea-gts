@@ -23,6 +23,8 @@ import {
   Instagram,
   Activity,
   Filter,
+  Coins,
+  Globe2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -429,6 +431,52 @@ export default function AdminDashboard() {
                 onClick={() => router.push("/admin/settings")}
               >
                 Store Settings
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Currencies */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <Coins className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>Currencies</CardTitle>
+              <CardDescription>FX rates & display currencies</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                View daily FX rates from open.er-api.com, toggle which
+                currencies are visible to customers, and trigger a manual
+                refresh after big rate moves.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/settings/currencies")}
+              >
+                Manage Currencies
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* International Orders */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <Globe2 className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>International Orders</CardTitle>
+              <CardDescription>Manual fulfilment requests</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Requests submitted by visitors outside India. Reply with a
+                shipping quote and payment instructions, then walk each
+                through new → contacted → quoted → completed.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/international-orders")}
+              >
+                View Requests
               </Button>
             </CardContent>
           </Card>

@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import { useCurrency } from "@/lib/contexts/CurrencyContext";
 
 // Compact horizontal product card used inside the VideoPlayerModal's
 // "Featured products" strip. Deliberately strips out the standard
@@ -41,15 +42,8 @@ function saleWindowActive(start?: string | null, end?: string | null) {
   return true;
 }
 
-function formatINR(n: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
-
 export function CompactProductCard({ product }: { product: CompactProduct }) {
+  const { formatPrice } = useCurrency();
   // Derive imageUrl from props every render. Was previously kept in
   // useState, which only initialized on mount — when the parent
   // (VideoPlayerModal in the single-product branch) reused the same
@@ -109,11 +103,11 @@ export function CompactProductCard({ product }: { product: CompactProduct }) {
         <p className="font-medium text-sm leading-tight line-clamp-2">{product.name}</p>
         <div className="mt-1 flex items-baseline gap-2">
           {effectivePrice != null && (
-            <span className="text-sm font-semibold">{formatINR(effectivePrice)}</span>
+            <span className="text-sm font-semibold">{formatPrice(effectivePrice)}</span>
           )}
           {strikePrice != null && (
             <span className="text-xs text-muted-foreground line-through">
-              {formatINR(strikePrice)}
+              {formatPrice(strikePrice)}
             </span>
           )}
         </div>

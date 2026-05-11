@@ -6,6 +6,7 @@ import { AuthProvider } from "@/lib/contexts/AuthContext";
 import { CartProvider } from "@/lib/contexts/CartContext";
 import { WishlistProvider } from "@/lib/contexts/WishlistContext";
 import { CookieConsentProvider } from "@/lib/contexts/CookieConsentContext";
+import { CurrencyProvider } from "@/lib/contexts/CurrencyContext";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "next-themes";
 import Script from "next/script";
@@ -154,6 +155,7 @@ export default function RootLayout({
         >
           <AuthProvider>
             <CookieConsentProvider>
+              <CurrencyProvider>
               <CartProvider>
                 <WishlistProvider>
                   {/* Google Analytics — only loads once the user grants
@@ -177,6 +179,7 @@ export default function RootLayout({
                   <CookieConsentBanner />
                 </WishlistProvider>
               </CartProvider>
+              </CurrencyProvider>
             </CookieConsentProvider>
           </AuthProvider>
         </ThemeProvider>

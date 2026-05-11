@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Script from "next/script";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { CustomerLayout } from "@/components/CustomerLayout";
@@ -24,6 +25,7 @@ import {
   type MembershipRow,
 } from "@/lib/membership";
 import { useShippingConfig } from "@/lib/hooks/useShippingConfig";
+import { useCurrency } from "@/lib/contexts/CurrencyContext";
 
 declare global {
   interface Window {
@@ -35,6 +37,13 @@ export default function KPlusPage() {
   const router = useRouter();
   const shippingConfig = useShippingConfig();
   const thresholdLabel = `₹${shippingConfig.deliveryThreshold.toLocaleString("en-IN")}`;
+  const { isINR } = useCurrency();
+
+  // K Plus is India-only. International visitors landing here see a
+  // brief explainer + a link to /contact instead of the join flow.
+  // We render this gate AFTER the existing hooks below to keep hook
+  // order stable (early-return-after-state is fine; React only cares
+  // about hook order, not which branch we exit through).
 
   const [loading, setLoading] = useState(false);
   const [checkingMembership, setCheckingMembership] = useState(true);
@@ -217,6 +226,29 @@ export default function KPlusPage() {
         year: "numeric",
       })
     : "";
+
+  // International gate: no Razorpay flow, no shipping benefit, just
+  // direct them to contact us for international orders.
+  if (!isINR) {
+    return (
+      <CustomerLayout>
+        <div className="container mx-auto py-16 max-w-2xl text-center">
+          <h1 className="text-3xl font-bold tracking-tight">
+            {MEMBERSHIP_PLAN_NAME} membership
+          </h1>
+          <p className="mt-4 text-muted-foreground">
+            K Plus is currently available only for customers in India — it
+            unlocks free delivery on every Indian order. For international
+            shipments, please submit an order request from the cart and our
+            team will provide a personalised quote.
+          </p>
+          <Button asChild className="mt-8 rounded-full" size="lg">
+            <Link href="/contact">Contact us</Link>
+          </Button>
+        </div>
+      </CustomerLayout>
+    );
+  }
 
   return (
     <>

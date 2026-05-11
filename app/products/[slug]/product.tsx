@@ -65,6 +65,7 @@ import {
 } from "@/components/ui/dialog";
 import { useCart } from "@/lib/contexts/CartContext";
 import { useWishlist } from "@/lib/contexts/WishlistContext";
+import { useCurrency } from "@/lib/contexts/CurrencyContext";
 import { toast } from "sonner";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductStorySection } from "@/components/products/ProductStorySection";
@@ -332,6 +333,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
     items: cartItems,
   } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
+  const { formatPrice, isINR } = useCurrency();
   const [showShare, setShowShare] = useState(false);
   const [isBuyingNow, setIsBuyingNow] = useState(false);
 
@@ -1373,13 +1375,13 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
                 <div className="flex items-baseline gap-3">
                   <span className="text-3xl font-bold">
-                    {formatINR(effectivePrice, product.currency)}
+                    {effectivePrice != null ? formatPrice(effectivePrice) : ""}
                   </span>
                   {product.compare_at_price != null &&
                     effectivePrice != null &&
                     product.compare_at_price > effectivePrice && (
                       <span className="text-xl text-muted-foreground line-through">
-                        {formatINR(product.compare_at_price, product.currency)}
+                        {formatPrice(product.compare_at_price)}
                       </span>
                     )}
                 </div>
@@ -1588,37 +1590,58 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
                 <Card className="mt-6">
                   <CardContent className="p-3 sm:p-4 space-y-3 sm:space-y-4">
-                    <div>
-                      <Label htmlFor="pincode">Check Delivery</Label>
-                      <div className="flex gap-2 mt-2">
-                        <Input
-                          id="pincode"
-                          placeholder="Enter Pincode"
-                          autoComplete="postal-code"
-                          value={pincode}
-                          onChange={(e) =>
-                            setPincode(
-                              e.target.value.replace(/\D/g, "").slice(0, 6)
-                            )
-                          }
-                          maxLength={6}
-                        />
-                        <Button
-                          onClick={checkDelivery}
-                          disabled={isCheckingPincode}
-                        >
-                          {isCheckingPincode ? "Checking..." : "Check"}
-                        </Button>
-                      </div>
-                      {deliveryEstimate && (
-                        <p className="text-sm text-muted-foreground mt-2 flex items-center gap-1">
-                          <Truck className="h-4 w-4" />
-                          {deliveryEstimate}
-                        </p>
-                      )}
-                    </div>
+                    {/* Pincode delivery checker is India-only — the
+                        DTDC serviceability lookup only covers Indian
+                        pincodes. International visitors get a brief
+                        note + link to the contact page instead. */}
+                    {isINR ? (
+                      <>
+                        <div>
+                          <Label htmlFor="pincode">Check Delivery</Label>
+                          <div className="flex gap-2 mt-2">
+                            <Input
+                              id="pincode"
+                              placeholder="Enter Pincode"
+                              autoComplete="postal-code"
+                              value={pincode}
+                              onChange={(e) =>
+                                setPincode(
+                                  e.target.value.replace(/\D/g, "").slice(0, 6)
+                                )
+                              }
+                              maxLength={6}
+                            />
+                            <Button
+                              onClick={checkDelivery}
+                              disabled={isCheckingPincode}
+                            >
+                              {isCheckingPincode ? "Checking..." : "Check"}
+                            </Button>
+                          </div>
+                          {deliveryEstimate && (
+                            <p className="text-sm text-muted-foreground mt-2 flex items-center gap-1">
+                              <Truck className="h-4 w-4" />
+                              {deliveryEstimate}
+                            </p>
+                          )}
+                        </div>
 
-                    <Separator />
+                        <Separator />
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-sm text-muted-foreground">
+                          <p className="font-medium text-foreground mb-1">
+                            International shipping
+                          </p>
+                          <p>
+                            Submit an order request and our team will email you
+                            a shipping quote for your country within 24 hours.
+                          </p>
+                        </div>
+                        <Separator />
+                      </>
+                    )}
 
                     <TooltipProvider delayDuration={150}>
                       <div className="grid grid-cols-2 gap-1.5 sm:gap-2 text-sm">

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useCurrency } from "@/lib/contexts/CurrencyContext";
 
 type FloatingWhatsAppProps = {
   phoneNumber: string; // example: 919876543210
@@ -39,7 +40,14 @@ export function FloatingWhatsApp({
   message = "Hi, I need help.",
 }: FloatingWhatsAppProps) {
   const pathname = usePathname() ?? "";
+  const { isINR } = useCurrency();
   const hideOnMobile = HIDE_ON_MOBILE_PREFIXES.some((p) => pathname.startsWith(p));
+
+  // Hide the WhatsApp shortcut entirely for international visitors —
+  // the number is +91 (Indian WhatsApp), so it's not useful for them.
+  // They use the international order request flow + the email address
+  // in the footer for support.
+  if (!isINR) return null;
 
   const href = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 
