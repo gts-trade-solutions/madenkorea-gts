@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseRouteClient } from "@/lib/supabaseRoute";
+import { sendEmail } from "@/lib/ses";
+import { getBusinessInfo } from "@/lib/businessInfo";
+import { FALLBACK_RATES, formatPrice, isSupportedCurrency } from "@/lib/currency";
 
 // International order request endpoint.
 //
 // Non-Indian visitors can't checkout via Razorpay (no shipping
 // integration, no GST, no INR billing setup). Instead, they submit a
 // structured cart-plus-address request from the cart page. We persist
-// it to `international_orders` so admin can see it at
-// /admin/international-orders.
-//
-// While the SES pipeline is offline, the primary delivery channel for
-// the team is a `mailto:` link the customer's own mail app opens —
-// see `components/InternationalOrderModal.tsx`. This endpoint is
-// fire-and-forget from the client's perspective; the customer's
-// outgoing email is what actually reaches the team.
+// it to `international_orders`, email the team a styled summary, and
+// email the customer an acknowledgement.
 //
 // Auth: optional. Signed-in customers get their `user_id` linked to
 // the request; anonymous visitors can submit too.
@@ -57,6 +54,100 @@ type RequestBody = {
   inr_total: number;      // total in INR
   notes?: string;
 };
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildTeamEmail(req: RequestBody, requestId: string): string {
+  const rate = isSupportedCurrency(req.currency_code)
+    ? FALLBACK_RATES[req.currency_code]
+    : FALLBACK_RATES.INR;
+  const lineRows = req.cart
+    .map(
+      (l) => `
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #eee;">
+            ${escapeHtml(l.name)}${l.sku ? ` <span style="color:#888">(${escapeHtml(l.sku)})</span>` : ""}
+          </td>
+          <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center;">${l.quantity}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;">${formatPrice(l.unit_price_inr, rate)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;">${formatPrice(l.line_total_inr ?? l.unit_price_inr * l.quantity, rate)}</td>
+        </tr>`
+    )
+    .join("");
+
+  const addr = req.address;
+  return `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:640px;margin:0 auto;padding:24px;color:#111">
+      <h1 style="font-size:20px;margin:0 0 4px">New international order request</h1>
+      <p style="color:#666;margin:0 0 24px">Request <code>${escapeHtml(requestId)}</code> · ${escapeHtml(req.country)}</p>
+
+      <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.1em;color:#666;margin:24px 0 8px">Customer</h2>
+      <p style="margin:0 0 4px"><strong>${escapeHtml(req.customer_name)}</strong></p>
+      <p style="margin:0 0 4px">${escapeHtml(req.customer_email)}</p>
+      ${req.customer_phone ? `<p style="margin:0 0 4px">${escapeHtml(req.customer_phone)}</p>` : ""}
+
+      <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.1em;color:#666;margin:24px 0 8px">Shipping address</h2>
+      <p style="margin:0;white-space:pre-line">${escapeHtml(addr.line1)}${addr.line2 ? `\n${escapeHtml(addr.line2)}` : ""}\n${escapeHtml(addr.city)}${addr.state ? `, ${escapeHtml(addr.state)}` : ""} ${escapeHtml(addr.postal_code)}\n${escapeHtml(addr.country)}</p>
+
+      <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.1em;color:#666;margin:24px 0 8px">Cart</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:14px">
+        <thead>
+          <tr style="background:#f8f8f8;text-align:left">
+            <th style="padding:8px 12px;border-bottom:1px solid #ddd">Item</th>
+            <th style="padding:8px 12px;border-bottom:1px solid #ddd;text-align:center">Qty</th>
+            <th style="padding:8px 12px;border-bottom:1px solid #ddd;text-align:right">Unit</th>
+            <th style="padding:8px 12px;border-bottom:1px solid #ddd;text-align:right">Total</th>
+          </tr>
+        </thead>
+        <tbody>${lineRows}</tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3" style="padding:12px;text-align:right;font-weight:600">Customer currency</td>
+            <td style="padding:12px;text-align:right;font-weight:600">${formatPrice(req.inr_total, rate)}</td>
+          </tr>
+          <tr>
+            <td colspan="3" style="padding:0 12px 12px;text-align:right;color:#666">INR equivalent</td>
+            <td style="padding:0 12px 12px;text-align:right;color:#666">₹${req.inr_total.toLocaleString("en-IN")}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      ${req.notes ? `<h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.1em;color:#666;margin:24px 0 8px">Notes</h2><p style="margin:0;white-space:pre-line">${escapeHtml(req.notes)}</p>` : ""}
+
+      <p style="margin:32px 0 0;padding:12px;background:#fff8e1;border:1px solid #ffd54f;border-radius:6px;font-size:13px;color:#5a4500">
+        Reply to ${escapeHtml(req.customer_email)} with a shipping quote and payment instructions.
+      </p>
+    </div>
+  `;
+}
+
+function buildCustomerEmail(req: RequestBody, requestId: string): string {
+  return `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111">
+      <h1 style="font-size:20px;margin:0 0 12px">We've received your request</h1>
+      <p style="margin:0 0 16px;color:#444">Hi ${escapeHtml(req.customer_name.split(" ")[0] || "there")},</p>
+      <p style="margin:0 0 16px;color:#444">
+        Thanks for your interest in MadenKorea. We've received your order request
+        (reference <code>${escapeHtml(requestId)}</code>) and our team will get
+        back to you within 24 business hours with a shipping quote, total in
+        ${escapeHtml(req.currency_code)}, and payment instructions for your country.
+      </p>
+      <p style="margin:0 0 16px;color:#444">
+        If you have any questions in the meantime, just reply to this email.
+      </p>
+      <p style="margin:24px 0 0;color:#888;font-size:13px">
+        — The MadenKorea team
+      </p>
+    </div>
+  `;
+}
 
 export async function POST(req: NextRequest) {
   let body: RequestBody;
@@ -122,13 +213,38 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // No server-side email here. The InternationalOrderModal opens the
-  // customer's own mail app via mailto: which carries the structured
-  // request straight to the team — that's the live delivery channel
-  // while SES is offline. This row just gives admin a permanent
-  // record visible at /admin/international-orders.
+  // Notify team + ack customer. Both failures are non-fatal — the
+  // request is already saved and admin can see it at
+  // /admin/international-orders. Email errors are returned as warnings
+  // so the client can soften the success toast if needed.
+  const business = await getBusinessInfo();
+  const teamTo = business.supportEmail || "info@madenkorea.com";
+  const emailErrors: string[] = [];
+
+  try {
+    await sendEmail({
+      to: teamTo,
+      cc: ["operations@madenkorea.com"],
+      subject: `[International Order Request] ${body.country} · ${body.customer_name}`,
+      html: buildTeamEmail(body, inserted.id),
+    });
+  } catch (err: any) {
+    emailErrors.push(`team: ${err?.message ?? "unknown"}`);
+  }
+
+  try {
+    await sendEmail({
+      to: body.customer_email,
+      subject: `We received your order request — MadenKorea`,
+      html: buildCustomerEmail(body, inserted.id),
+    });
+  } catch (err: any) {
+    emailErrors.push(`customer: ${err?.message ?? "unknown"}`);
+  }
+
   return NextResponse.json({
     ok: true,
     request_id: inserted.id,
+    email_warnings: emailErrors.length ? emailErrors : undefined,
   });
 }

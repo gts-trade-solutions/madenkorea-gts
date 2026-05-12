@@ -1782,6 +1782,128 @@ Recommended launch baseline:
 - Marketing emails need physical address, unsubscribe handling, and separate marketing consent.
 - Verify SES bounce/complaint handling updates suppression/unsubscribe state.
 
+## Deferred — flagged 2026-05-09 (not yet fixed)
+
+### D-01: PWA "Add to Home Screen" broken
+
+**Status:** Implementation exists at [app/manifest.ts](app/manifest.ts) and is linked from [app/layout.tsx](app/layout.tsx), but install prompts do not fire on Android Chrome, and iOS Home Screen icons are visibly rescaled / distorted.
+
+**Confidence:** `[VERIFIED-CODE]` + visually confirmed not working
+
+**Root causes:**
+
+1. **Icon dimensions wrong + lying about it.** `public/square-logo.png` and `public/apple-touch-icon.png` are both literal copies (same file, 95k bytes) at **353 × 318 px** — not square despite the name. Manifest declares `square-logo.png` with `sizes: "any"` (only valid for SVG) and `apple-touch-icon.png` with `sizes: "180x180"` (doesn't match actual). Strict browsers reject these entries.
+2. **Missing required icon sizes.** Android Chrome's install prompt criteria require **at least one 192 × 192 PNG and one 512 × 512 PNG**. Neither exists.
+3. **No service worker.** Chrome's `beforeinstallprompt` event won't fire without a registered service worker. iOS can still add via Share menu without SW but with the broken icon.
+4. **No iOS-specific meta tags.** `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, `apple-mobile-web-app-title` all missing from [app/layout.tsx](app/layout.tsx). Installed iOS instances look like plain browser shortcuts, not apps.
+5. **No maskable icon.** Without a `purpose: "maskable"` variant, Android adaptive icons crop the logo to a circle/squircle in unpredictable ways.
+
+**Fix work (~1–2 hrs when ready):**
+- Generate proper PNG icon set from a real square logo: `icon-192.png`, `icon-512.png`, `icon-maskable-192.png` (with 80% safe-zone padding), `apple-touch-icon.png` at actual 180 × 180
+- Update [app/manifest.ts](app/manifest.ts) with correct `sizes` and add maskable entry
+- Add iOS meta tags to root metadata
+- Add minimal service worker (`public/sw.js`) + register it from layout
+- Verify install prompt fires in DevTools → Application → Manifest
+
+---
+
+### D-03: SES email delivery failing site-wide — **RESOLVED 2026-05-09**
+
+**Resolution:** Root cause was confirmed to be (1) email-address identity only. Domain identity `madenkorea.com` verified in SES with Easy DKIM (3 CNAME selectors) + custom MAIL FROM `bounces.madenkorea.com` (MX + SPF TXT). Root SPF TXT updated to include `amazonses.com`. Outbound mail now signs with `d=madenkorea.com`, passes DMARC alignment, lands successfully in Gmail / Outlook. Verified via working forgot-password flow.
+
+**Post-resolution code reverts (2026-05-09):**
+
+- [app/contact/page.tsx](app/contact/page.tsx) — `handleSendEmail()` reverted from `mailto:` + keepalive POST back to a direct `await fetch("/api/contact", ...)` call.
+- [components/InternationalOrderModal.tsx](components/InternationalOrderModal.tsx) — `submit()` reverted from `mailto:` + keepalive POST back to direct `await fetch("/api/international-order", ...)`.
+- [app/api/international-order/route.ts](app/api/international-order/route.ts) — restored the styled-HTML team + customer email templates and the dual `sendEmail()` calls (non-fatal, surfaced via `email_warnings`).
+- Modal copy + button label reverted (no more "Open email & submit" / "your email app will open"). Back to "Submit request" with a 24-hour quote turnaround promise.
+
+**Cleanup still to do (low priority):**
+
+- Delete the standalone `info@madenkorea.com` email-address identity in SES — no longer needed since the domain identity covers any `*@madenkorea.com` sender.
+- Add `Reply-To` to `sendEmail()` so customer replies on order confirmations don't go to the no-reply sender.
+- Add basic exponential retry on SES `Throttling` errors.
+
+**Original problem analysis follows for reference:**
+
+**Confidence:** `[VERIFIED-CODE]` + bounce-trace verified
+
+**Root cause:** outbound mail is DKIM-signed with `d=amazonses.com` instead of `d=madenkorea.com`. DMARC alignment on `madenkorea.com` fails on both DKIM and SPF axes, so strict-policy receivers reject outright.
+
+**Bounce evidence (captured earlier in session):**
+```
+550 5.7.1 Unauthenticated email from madenkorea.com is not accepted
+due to domain's DMARC policy.
+DKIM-Signature: d=amazonses.com; ...
+```
+
+**Four candidate setup problems, ordered by likelihood:**
+
+1. **Email-address identity, not domain identity** — SES has `info@madenkorea.com` verified as an email-address identity. These can't DKIM-sign with your domain; AWS always signs them with `d=amazonses.com`. **Fix:** verify the *domain* `madenkorea.com` as an SES identity, enable DKIM, add the 3 CNAMEs AWS provides.
+2. **Region mismatch** — identity verified in one region but `AWS_SES_REGION` env points to another. AWS treats the identity as unverified in the env's region.
+3. **DKIM CNAMEs missing/stale in DNS** — domain identity exists, DKIM enabled, but the 3 selector CNAMEs aren't actually live at the DNS registrar.
+4. **Custom MAIL FROM domain not set** — `Return-Path:` is `*@amazonses.com`, breaking SPF alignment even if DKIM is fixed. Set a custom MAIL FROM like `bounces.madenkorea.com` with the MX + SPF TXT records AWS provides.
+
+**Code touchpoints currently failing silently or 5xx-ing:**
+- [/api/contact](app/api/contact/route.ts) — contact form *(workaround: mailto, shipped)*
+- [/api/auth/forgot-password](app/api/auth/forgot-password/route.ts) — password reset emails *(no workaround — customers can't reset passwords by email)*
+- [/api/admin/email/send](app/api/admin/email/send/route.ts) — admin broadcasts
+- [lib/dtdc/notifications.ts](lib/dtdc/notifications.ts) — shipping notifications
+- [/api/razorpay/verify](app/api/razorpay/verify/route.ts) — order confirmation emails (inline SES call after payment verify)
+- [/api/international-order](app/api/international-order/route.ts) — international order requests *(workaround: mailto, shipped)*
+
+**Diagnostic checklist for the admin to walk through in AWS console:**
+
+```
+□ SES → Identities: is `madenkorea.com` (domain) verified, NOT just info@madenkorea.com?
+□ Same identity: DKIM status = "Successful"?
+□ Region in URL bar = AWS_SES_REGION env var?
+□ DNS: `dig TXT madenkorea.com` includes `include:amazonses.com`?
+□ DNS: `dig TXT _dmarc.madenkorea.com` — what is the policy? (p=reject is strict)
+□ DNS: 3 DKIM CNAMEs for the selectors AWS shows are resolvable?
+□ SES → Account dashboard: out of Sandbox?
+□ SES → Suppression list: any of our target addresses?
+□ SES → Sending statistics last 24h: bounces % vs complaints %
+□ AWS_FROM_EMAIL env value: sender is on the verified domain?
+```
+
+**No code change will fix this** — fix in AWS + DNS. Once restored, the mailto fallbacks for contact and international order can be reverted to direct `sendEmail()` calls.
+
+**Code-side improvement worth doing while we're at it** (separate, low-priority):
+- Add `Reply-To` to `sendEmail()` so customer replies to order-confirmation emails go to the customer's address or `info@madenkorea.com`, not the no-reply sender.
+- Add basic exponential retry on SES `Throttling` errors.
+
+---
+
+### D-02: Browser URL bar theme color — works inconsistently
+
+**Status:** `viewport.themeColor: "#359fd9"` is set in [app/layout.tsx](app/layout.tsx) and `theme_color` is set in [app/manifest.ts](app/manifest.ts). Mostly a browser-side limitation rather than a code defect.
+
+**Confidence:** `[VERIFIED-CODE]` + behavioural verified
+
+**Browser behavior matrix:**
+
+| Browser / context | Honours theme-color |
+|---|---|
+| Android Chrome (regular tab) | ✅ Yes |
+| Android Chrome (incognito) | ❌ Always neutral |
+| Android Chrome + system dark mode | ⚠️ May auto-invert |
+| iOS Safari 15+ | ⚠️ Muted/desaturated |
+| iOS Safari < 15 | ❌ Ignored |
+| Desktop Chrome / Firefox / Edge | ❌ No chrome to color |
+| In-app browsers (Instagram, FB) | ❌ Mostly ignored |
+| Installed PWA on Android | ✅ Yes (status bar) |
+
+**Additional polish gaps:**
+- No `media="(prefers-color-scheme: dark)"` variant — dark-mode users may see Chrome auto-adapt and pick a tone that doesn't match the brand.
+- On scroll, modern Android Chrome can override `theme-color` with the dominant pixel color near the top of the viewport.
+
+**Fix work (~15 min when ready):**
+- Add a second `theme-color` meta with `media="(prefers-color-scheme: dark)"` if/when we add dark theme support
+- Otherwise: largely browser-side, nothing more to do
+
+---
+
 ## Usage Notes
 
 - Re-verify each issue before implementation, especially `[INFERRED]` and `[UNVERIFIED]` items.

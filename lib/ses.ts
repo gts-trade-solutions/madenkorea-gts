@@ -25,11 +25,20 @@ export async function sendEmail({
   subject,
   html,
   from,
+  cc,
 }: {
   to: string;
   subject: string;
   html: string;
   from?: string;
+  /**
+   * Optional CC recipients. Use for team-facing notifications where
+   * we want a copy to land in multiple inboxes (e.g., info@ + ops@).
+   * Customer-facing emails (password reset, order confirmation to
+   * buyer, shipping updates) should NOT pass this — keeping internal
+   * addresses off customer mail headers.
+   */
+  cc?: string | string[];
 }) {
   const { region, accessKeyId, secretAccessKey, fromEmail, missing } =
     getSesConfig();
@@ -49,9 +58,18 @@ export async function sendEmail({
     },
   });
 
+  // Normalise cc to a clean string[]; SES rejects empty arrays so we
+  // only set CcAddresses when at least one valid recipient is present.
+  const ccList = (Array.isArray(cc) ? cc : cc ? [cc] : [])
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   const command = new SendEmailCommand({
     Source: sender,
-    Destination: { ToAddresses: [to] },
+    Destination: {
+      ToAddresses: [to],
+      ...(ccList.length > 0 ? { CcAddresses: ccList } : {}),
+    },
     Message: {
       Subject: { Data: subject, Charset: "UTF-8" },
       Body: { Html: { Data: html, Charset: "UTF-8" } },

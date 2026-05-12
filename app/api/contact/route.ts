@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
     try {
       await sendEmail({
         to: notifyTo,
+        cc: ["operations@madenkorea.com"],
         subject: `New contact message${subject ? `: ${subject}` : ""}`,
         html: `
           <p><strong>Name:</strong> ${name}</p>

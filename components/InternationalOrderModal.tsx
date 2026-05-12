@@ -15,11 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCurrency } from "@/lib/contexts/CurrencyContext";
-import { convertFromINR, formatPrice } from "@/lib/currency";
-
-// Address where the structured order email gets sent. Keep in sync
-// with what the team monitors.
-const TEAM_EMAIL = "info@madenkorea.com";
+import { convertFromINR } from "@/lib/currency";
 
 // Modal used by the cart page (for non-INR visitors) to submit an
 // international order request. We collect contact + shipping
@@ -74,79 +70,18 @@ export function InternationalOrderModal({
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Build a plain-text email body for the mailto: link. mailto URLs
-  // are length-limited (~2000 chars in most clients), so we keep the
-  // body terse and rely on the team to reply to the customer's email
-  // for follow-up.
-  const buildEmailBody = (displayTotal: number): string => {
-    const lines: string[] = [];
-    lines.push("Hi MadenKorea team,");
-    lines.push("");
-    lines.push(
-      "I'd like to place an international order. My details are below."
-    );
-    lines.push("");
-
-    lines.push("--- CONTACT ---");
-    lines.push(`Name: ${name}`);
-    lines.push(`Email: ${email}`);
-    if (phone) lines.push(`Phone: ${phone}`);
-    lines.push("");
-
-    lines.push("--- SHIPPING ADDRESS ---");
-    lines.push(line1);
-    if (line2) lines.push(line2);
-    lines.push(
-      `${city}${stateRegion ? `, ${stateRegion}` : ""} ${postalCode}`
-    );
-    lines.push(country);
-    lines.push("");
-
-    lines.push("--- CART ---");
-    for (const l of cart) {
-      const lineTotal = l.unit_price_inr * l.quantity;
-      lines.push(
-        `- ${l.name} × ${l.quantity} — INR ${lineTotal.toLocaleString(
-          "en-IN"
-        )}`
-      );
-    }
-    lines.push("");
-
-    lines.push(
-      `Total in INR: INR ${subtotalInr.toLocaleString("en-IN")}`
-    );
-    lines.push(
-      `Total in ${currency}: ${formatPrice(subtotalInr, rate)}`
-    );
-
-    if (notes) {
-      lines.push("");
-      lines.push("--- NOTES ---");
-      lines.push(notes);
+  const submit = async () => {
+    if (!name || !email || !line1 || !city || !postalCode || !country) {
+      toast.error("Please fill in all required fields.");
+      return;
     }
 
-    lines.push("");
-    lines.push(
-      "Please send me a shipping quote and payment instructions."
-    );
-    lines.push("");
-    lines.push(`Thanks,`);
-    lines.push(name);
-
-    return lines.join("\n");
-  };
-
-  // Save the request to the DB in the background. Failure is
-  // non-fatal — the customer's email send is the primary delivery
-  // channel while the SES pipeline is offline. We use keepalive so the
-  // request finishes even if the page navigates after mailto: opens.
-  const saveToDb = (displayTotal: number) => {
+    setSubmitting(true);
     try {
-      fetch("/api/international-order", {
+      const displayTotal = convertFromINR(subtotalInr, rate);
+      const res = await fetch("/api/international-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        keepalive: true,
         body: JSON.stringify({
           customer_name: name,
           customer_email: email,
@@ -169,50 +104,21 @@ export function InternationalOrderModal({
           inr_total: subtotalInr,
           notes: notes || undefined,
         }),
-      }).catch(() => {
-        // best-effort; primary delivery is the mailto: above
       });
-    } catch {
-      // ignore
-    }
-  };
 
-  const submit = () => {
-    if (!name || !email || !line1 || !city || !postalCode || !country) {
-      toast.error("Please fill in all required fields.");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const displayTotal = convertFromINR(subtotalInr, rate);
-
-      // Fire-and-forget DB save so the admin team can still see the
-      // request via /admin/international-orders even if the customer
-      // never sends the mailto.
-      saveToDb(displayTotal);
-
-      // Pop open the customer's default mail app pre-filled with the
-      // structured order details. They review + send manually. This
-      // sidesteps the offline SES pipeline.
-      const subject = `International order request — ${name}, ${country}`;
-      const body = buildEmailBody(displayTotal);
-      const mailto =
-        `mailto:${encodeURIComponent(TEAM_EMAIL)}` +
-        `?subject=${encodeURIComponent(subject)}` +
-        `&body=${encodeURIComponent(body)}`;
-
-      // window.location.href triggers the OS handler. Most browsers
-      // open the user's mail app in a new context.
-      window.location.href = mailto;
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.ok) {
+        toast.error(body?.error || "Could not submit your request.");
+        return;
+      }
 
       toast.success(
-        "Email draft opened in your mail app — please send it to complete your request."
+        "Order request received — we'll email you a quote within 24 hours."
       );
       onSubmitted?.();
       onOpenChange(false);
     } catch (err: any) {
-      toast.error(err?.message || "Could not open mail app.");
+      toast.error(err?.message || "Network error.");
     } finally {
       setSubmitting(false);
     }
@@ -224,11 +130,9 @@ export function InternationalOrderModal({
         <DialogHeader>
           <DialogTitle>Request International Order</DialogTitle>
           <DialogDescription>
-            We ship internationally on a per-order basis. Fill in your
-            details below — when you submit, your email app will open with
-            a pre-filled request to us. Just review and send. We&apos;ll
-            reply with a shipping quote and payment instructions within
-            24 business hours.
+            We ship internationally on a per-order basis. Submit your contact
+            and shipping details — we&apos;ll email a shipping quote and
+            payment instructions for your country within 24 business hours.
           </DialogDescription>
         </DialogHeader>
 
@@ -307,10 +211,10 @@ export function InternationalOrderModal({
             {submitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Opening mail app…
+                Submitting…
               </>
             ) : (
-              "Open email & submit"
+              "Submit request"
             )}
           </Button>
         </div>

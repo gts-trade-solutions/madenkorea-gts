@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Mail, Phone, MapPin, ExternalLink } from "lucide-react";
+import { Loader2, Mail, Phone, MapPin, ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -99,6 +99,7 @@ export default function InternationalOrdersAdminPage() {
 
   const [orders, setOrders] = useState<IntlOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const active = orders.find((o) => o.id === activeId) ?? null;
@@ -127,6 +128,43 @@ export default function InternationalOrdersAdminPage() {
     })();
   }, [hasRole, router]);
 
+  // Realtime subscription: refetch the table whenever a row is inserted
+  // or updated. We refetch instead of merging the payload directly —
+  // simpler, idempotent, handles the rare cases where the payload
+  // doesn't carry all columns (e.g., when RLS strips fields). Admin
+  // RLS lets this user see every row, so refetches are complete.
+  //
+  // Channel is unmounted on cleanup to avoid leaks across navigations.
+  useEffect(() => {
+    if (!hasRole("admin")) return;
+
+    const channel = supabase
+      .channel("admin-international-orders")
+      .on(
+        "postgres_changes",
+        {
+          event: "*", // INSERT | UPDATE | DELETE
+          schema: "public",
+          table: "international_orders",
+        },
+        () => {
+          // No await needed; load() handles its own toast on error.
+          load();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [hasRole]);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
   const updateStatus = async (id: string, status: IntlOrder["status"]) => {
     const prev = orders;
     setOrders((os) => os.map((o) => (o.id === id ? { ...o, status } : o)));
@@ -146,11 +184,13 @@ export default function InternationalOrdersAdminPage() {
     return (
       <div className="min-h-screen bg-muted/30">
         <header className="border-b bg-background">
-          <div className="container mx-auto py-4 flex items-center gap-4">
-            <Button variant="ghost" onClick={() => router.push("/admin")}>
-              ← Back
-            </Button>
-            <h1 className="text-2xl font-bold">International Orders</h1>
+          <div className="container mx-auto py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" onClick={() => router.push("/admin")}>
+                ← Back
+              </Button>
+              <h1 className="text-2xl font-bold">International Orders</h1>
+            </div>
           </div>
         </header>
         <div className="container mx-auto py-12 flex items-center gap-2 text-muted-foreground">
@@ -164,11 +204,30 @@ export default function InternationalOrdersAdminPage() {
   return (
     <div className="min-h-screen bg-muted/30">
       <header className="border-b bg-background">
-        <div className="container mx-auto py-4 flex items-center gap-4">
-          <Button variant="ghost" onClick={() => router.push("/admin")}>
-            ← Back
+        <div className="container mx-auto py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" onClick={() => router.push("/admin")}>
+              ← Back
+            </Button>
+            <h1 className="text-2xl font-bold">International Orders</h1>
+          </div>
+          {/* Manual refresh — the realtime subscription handles most
+              cases, but this is the user-controllable safety net for
+              when the websocket connection drops (e.g., backgrounded
+              tab, flaky network). */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refresh}
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Refresh
           </Button>
-          <h1 className="text-2xl font-bold">International Orders</h1>
         </div>
       </header>
 

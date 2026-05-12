@@ -74,60 +74,34 @@ export default function ContactPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Email path — opens the customer's own mail client with the message
-  // pre-filled (mailto:), and fires off a background POST to /api/contact
-  // so the inquiry is still logged in `contact_messages` for admin
-  // visibility. The customer's mail leaves from their own account, which
-  // sidesteps the SES → DMARC bounce issue entirely; once SES is fixed
-  // upstream, the API route's notification email will start landing too
-  // — no code change needed here.
-  const handleSendEmail = () => {
+  // Email path — POST to /api/contact, which saves to contact_messages
+  // and sends a notification email to the team via SES. SES is now
+  // signing with d=madenkorea.com (custom MAIL FROM + DKIM verified)
+  // so notifications actually reach the inbox.
+  const handleSendEmail = async () => {
     if (!formData.name.trim() || !formData.email.trim() || !formData.message.trim()) {
       toast.error("Name, email, and message are required.");
       return;
     }
 
-    const subject =
-      formData.subject.trim() || `Inquiry from ${formData.name.trim()}`;
-    const body = [
-      `Hi MadenKorea,`,
-      ``,
-      `My name is ${formData.name.trim()}.`,
-      `Email: ${formData.email.trim()}`,
-      ``,
-      formData.message.trim(),
-      ``,
-      `— Sent from the MadenKorea contact form`,
-    ].join("\n");
-
-    const mailto = `mailto:${business.supportEmail}?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(body)}`;
-
-    // Open synchronously in the click handler — browsers gate window
-    // navigation on direct user gesture, and `mailto:` to the same
-    // window navigates without confirmation. This launches the user's
-    // configured mail client immediately.
-    window.location.href = mailto;
-
-    // Fire-and-forget DB save so admin still sees the inquiry even if
-    // the customer never taps Send in their mail client. We don't await
-    // — the user's mail client is already opening.
-    fetch("/api/contact", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-      keepalive: true, // survives the page unloading if mailto navigates away
-    }).catch(() => {
-      // Non-critical; user is already on their way to sending mail.
-    });
-
-    toast.success(
-      "Opening your email app — review the message and tap Send."
-    );
-    // Clear the form. If the user's mail client didn't open, they can
-    // fall back to WhatsApp without re-typing.
-    setFormData({ name: "", email: "", subject: "", message: "" });
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.success) {
+        toast.error(
+          body?.message || "Unable to send your message right now."
+        );
+        return;
+      }
+      toast.success("Thanks — we'll get back to you within 24 hours.");
+      setFormData({ name: "", email: "", subject: "", message: "" });
+    } catch (err) {
+      toast.error("Network error — please try again.");
+    }
   };
 
   // WhatsApp path — opens wa.me with the form fields pre-filled into a

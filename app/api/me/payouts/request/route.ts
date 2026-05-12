@@ -200,6 +200,9 @@ export async function POST(req: NextRequest) {
         Source: fromEmail,
         Destination: {
           ToAddresses: [adminEmail],
+          // Operations is CC'd on all team-facing notifications so
+          // payout requests land in both inboxes.
+          CcAddresses: ["operations@madenkorea.com"],
         },
         Message: {
           Subject: {
