@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Plus, Search, Download } from "lucide-react";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 import { cn } from "@/lib/utils";
 
 type WhatsappTemplate = {
@@ -135,7 +136,9 @@ export default function WhatsappTemplatesPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <>
+    <AdminBackBar title="Templates" to="/admin/whatsapp" />
+    <div className="container mx-auto py-6 space-y-4">
       {/* Header + actions */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -399,6 +402,7 @@ export default function WhatsappTemplatesPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }
 

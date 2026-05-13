@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 
 type Row = {
   id: string;
@@ -41,6 +42,10 @@ export default function BannersAdminPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [msg, setMsg] = useState<string>("");
+  // True while save() is awaiting an image upload + DB insert. Used to
+  // disable the Save button and surface a "Saving…" label so the
+  // admin doesn't think the click was ignored.
+  const [saving, setSaving] = useState(false);
 
   const toPublicUrl = (path?: string | null) =>
     path
@@ -170,12 +175,15 @@ export default function BannersAdminPage() {
   // Create or Save (works even if image_path NOT NULL — we upload first)
   async function save() {
     try {
+      setSaving(true);
       setMsg("");
       if (!alt.trim()) throw new Error("Alt is required.");
 
       const trimmedLink = linkUrl.trim();
+      if (!trimmedLink) {
+        throw new Error("Link URL is required.");
+      }
       if (
-        trimmedLink &&
         !/^https?:\/\//i.test(trimmedLink) &&
         !trimmedLink.startsWith("/")
       ) {
@@ -183,7 +191,7 @@ export default function BannersAdminPage() {
           "Link URL must start with http://, https://, or / (for an internal route)."
         );
       }
-      const linkValue = trimmedLink || null;
+      const linkValue = trimmedLink;
 
       if (mode === "create") {
         // If your DB keeps image_path NOT NULL, require image
@@ -269,12 +277,16 @@ export default function BannersAdminPage() {
       revalidateHome();
     } catch (err: any) {
       setMsg(err.message || "Save failed");
+    } finally {
+      setSaving(false);
     }
   }
 
   const list = useMemo(() => banners, [banners]);
 
   return (
+    <>
+    <AdminBackBar title="Banners" to="/admin/cms" />
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold">Banner Management</h1>
@@ -419,18 +431,19 @@ export default function BannersAdminPage() {
               </label>
 
               <label className="text-sm">
-                Link URL (optional)
+                Link URL <span className="text-red-600">*</span>
                 <input
                   type="url"
+                  required
                   className="mt-1 w-full border rounded px-2 py-1"
                   placeholder="/products/some-slug or https://example.com/…"
                   value={linkUrl}
                   onChange={(e) => setLinkUrl(e.target.value)}
                 />
                 <span className="text-xs text-gray-500">
-                  Where the banner sends users when clicked. Leave blank to make
-                  it non-clickable. Use a path like{" "}
-                  <code>/products/&lt;slug&gt;</code> for internal routes.
+                  Where the banner sends users when clicked. Use a path like{" "}
+                  <code>/products/&lt;slug&gt;</code> for internal routes, or a
+                  full <code>https://</code> URL for external destinations.
                 </span>
               </label>
 
@@ -524,15 +537,23 @@ export default function BannersAdminPage() {
                 Cancel
               </button>
               <button
-                onClick={save} // never disabled; we validate with messages
-                className="px-3 py-2 rounded bg-black text-white hover:opacity-90"
+                onClick={save}
+                disabled={saving}
+                className="px-3 py-2 rounded bg-black text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {mode === "create" ? "Create" : "Save"}
+                {saving
+                  ? mode === "create"
+                    ? "Creating…"
+                    : "Saving…"
+                  : mode === "create"
+                  ? "Create"
+                  : "Save"}
               </button>
             </div>
           </div>
         </div>
       )}
     </div>
+    </>
   );
 }

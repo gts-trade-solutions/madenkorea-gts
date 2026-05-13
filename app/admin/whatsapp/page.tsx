@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
+import { AdminBackBar } from '@/components/admin/AdminBackBar';
 import {
   Card,
   CardHeader,
@@ -100,7 +101,9 @@ export default function WhatsappDashboardPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <>
+    <AdminBackBar title="WhatsApp Marketing" to="/admin" />
+    <div className="container mx-auto py-6 space-y-6">
       {/* Top header + quick actions */}
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -225,6 +228,7 @@ export default function WhatsappDashboardPage() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }
 

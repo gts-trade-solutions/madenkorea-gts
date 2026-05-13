@@ -25,6 +25,9 @@ import {
   Filter,
   Coins,
   Globe2,
+  MessageCircle,
+  Receipt,
+  Inbox,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -477,6 +480,72 @@ export default function AdminDashboard() {
                 onClick={() => router.push("/admin/international-orders")}
               >
                 View Requests
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Invoices */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <Receipt className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>Invoices</CardTitle>
+              <CardDescription>GST-compliant invoices</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                View, create, and edit invoices for orders. Linked from
+                customer order pages for download.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/invoices")}
+              >
+                Manage Invoices
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* WhatsApp Marketing */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <MessageCircle className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>WhatsApp Marketing</CardTitle>
+              <CardDescription>Campaigns, contacts, templates</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Send broadcast campaigns via WhatsApp Cloud API. Manage
+                opted-in contacts and the approved message templates.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/whatsapp")}
+              >
+                Open WhatsApp Panel
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Instagram Engagement */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <Inbox className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>Instagram Engagement</CardTitle>
+              <CardDescription>DMs, comments & posts</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Reply to Instagram direct messages, manage comments on your
+                posts, and review recent published content.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/instagram/inbox")}
+              >
+                Open Engagement
               </Button>
             </CardContent>
           </Card>

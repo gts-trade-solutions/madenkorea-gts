@@ -76,12 +76,26 @@ function persistCurrency(code: CurrencyCode) {
   } catch {}
 }
 
-export function CurrencyProvider({ children }: { children: React.ReactNode }) {
-  // Lazy init: read the cookie synchronously on first render so the
-  // initial paint already uses the right currency. Without this, every
-  // page would flash INR before the cookie value was honoured.
-  const [currency, setCurrencyState] = useState<CurrencyCode>(() =>
-    readInitialCurrency()
+export function CurrencyProvider({
+  children,
+  initialCurrency,
+}: {
+  children: React.ReactNode;
+  /**
+   * Currency to render with on the very first paint. The root layout
+   * (server component) reads the `mik_currency` cookie via
+   * `next/headers` and passes it here so SSR and the client's first
+   * render agree. Without this, the server renders INR (default) and
+   * the client immediately switches to the cookie value, triggering
+   * a React hydration warning.
+   */
+  initialCurrency?: CurrencyCode;
+}) {
+  // Prefer the server-provided value (SSR + first client render
+  // match). Fall back to cookie/localStorage read for legacy callers
+  // that don't pass the prop yet.
+  const [currency, setCurrencyState] = useState<CurrencyCode>(
+    () => initialCurrency ?? readInitialCurrency()
   );
   const [rates, setRates] = useState<Record<CurrencyCode, CurrencyRate>>(
     FALLBACK_RATES

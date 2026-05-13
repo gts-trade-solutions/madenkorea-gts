@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Plus, Search } from "lucide-react";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 
 const STATUS_FILTERS = [
   { value: "all", label: "All" },
@@ -55,7 +56,9 @@ export default function WhatsappCampaignsPage() {
   });
 
   return (
-    <div className="space-y-4">
+    <>
+    <AdminBackBar title="Campaigns" to="/admin/whatsapp" />
+    <div className="container mx-auto py-6 space-y-4">
       {/* Header + New button */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -157,6 +160,7 @@ export default function WhatsappCampaignsPage() {
         </div>
       )}
     </div>
+    </>
   );
 }
 

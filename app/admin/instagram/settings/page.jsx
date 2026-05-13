@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 
 export default function InstagramSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -142,14 +143,18 @@ export default function InstagramSettingsPage() {
 
   if (loading) {
     return (
+      <>
+      <AdminBackBar title="Instagram Settings" to="/admin" />
       <main className="min-h-screen px-4 py-10">
-        <h1 className="text-2xl font-semibold mb-4">Instagram Settings</h1>
         <p>Loading...</p>
       </main>
+      </>
     );
   }
 
   return (
+    <>
+    <AdminBackBar title="Instagram Settings" to="/admin" />
     <main className="min-h-screen px-4 py-10 max-w-xl mx-auto">
       <h1 className="text-2xl font-semibold mb-2">Instagram Settings</h1>
       <p className="text-sm text-gray-600 mb-4">
@@ -384,5 +389,6 @@ export default function InstagramSettingsPage() {
         )}
       </div>
     </main>
+    </>
   );
 }

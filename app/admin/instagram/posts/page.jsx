@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 
 export default function InstagramPostsPage() {
     const [campaigns, setCampaigns] = useState([]);
@@ -134,6 +135,8 @@ export default function InstagramPostsPage() {
     };
 
     return (
+        <>
+        <AdminBackBar title="Instagram Posts" to="/admin" />
         <main className="min-h-screen px-4 py-10 max-w-4xl mx-auto">
             <h1 className="text-2xl font-semibold mb-4">Instagram Campaign Posts</h1>
 
@@ -277,5 +280,6 @@ export default function InstagramPostsPage() {
                 )}
             </section>
         </main>
+        </>
     );
 }

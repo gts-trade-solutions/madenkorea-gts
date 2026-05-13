@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {supabase} from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 
 
 type WhatsappTemplate = {
@@ -239,7 +240,9 @@ export default function NewWhatsappCampaignPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <>
+    <AdminBackBar title="New Campaign" to="/admin/whatsapp/campaigns" />
+    <div className="container mx-auto py-6 max-w-2xl space-y-4">
       <div>
         <h2 className="text-xl font-semibold">New WhatsApp Campaign</h2>
         <p className="text-xs text-muted-foreground">
@@ -403,5 +406,6 @@ export default function NewWhatsappCampaignPage() {
         </div>
       </form>
     </div>
+    </>
   );
 }

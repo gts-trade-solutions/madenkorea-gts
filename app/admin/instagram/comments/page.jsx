@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 
 export default function InstagramCommentsPage() {
   const [posts, setPosts] = useState([]);
@@ -135,6 +136,8 @@ export default function InstagramCommentsPage() {
   };
 
   return (
+    <>
+    <AdminBackBar title="Instagram Comments" to="/admin" />
     <main className="min-h-screen px-4 py-10 max-w-4xl mx-auto">
       <h1 className="text-2xl font-semibold mb-4">
         Instagram Comments Manager
@@ -242,5 +245,6 @@ export default function InstagramCommentsPage() {
         )}
       </section>
     </main>
+    </>
   );
 }

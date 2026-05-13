@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 
 export default function InstagramInboxPage() {
   const [instagramAccounts, setInstagramAccounts] = useState([]);
@@ -171,6 +172,8 @@ export default function InstagramInboxPage() {
   };
 
   return (
+    <>
+    <AdminBackBar title="Instagram Inbox" to="/admin" />
     <main className="min-h-screen px-4 py-8 max-w-6xl mx-auto">
       <h1 className="text-2xl font-semibold mb-4">
         Instagram DM Inbox
@@ -340,5 +343,6 @@ export default function InstagramInboxPage() {
         </section>
       </div>
     </main>
+    </>
   );
 }

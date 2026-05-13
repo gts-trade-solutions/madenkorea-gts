@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 
 const SUPPORT_EMAIL_FALLBACK = "info@madenkorea.com";
 
@@ -149,21 +150,17 @@ export default function InvoiceDetailPage() {
   const sellerSupportEmail = company?.email || SUPPORT_EMAIL_FALLBACK;
 
   return (
+    <>
+    <div className="print:hidden">
+      <AdminBackBar title="Invoice" to="/admin/invoices" />
+    </div>
     <div className="container mx-auto max-w-5xl py-6 space-y-4">
-      {/* Top action bar (hidden in print) */}
-      <div className="flex items-center justify-between gap-3 print:hidden">
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/admin/invoices")}
-          >
-            Back to list
-          </Button>
-          <Button size="sm" onClick={handlePrint}>
-            Print Invoice
-          </Button>
-        </div>
+      {/* Top action bar (hidden in print). Back-to-list is in the
+          AdminBackBar above; keep print here on the right. */}
+      <div className="flex items-center justify-end gap-3 print:hidden">
+        <Button size="sm" onClick={handlePrint}>
+          Print Invoice
+        </Button>
       </div>
 
       <Card className="p-6 print:shadow-none print:border-none">
@@ -343,5 +340,6 @@ export default function InvoiceDetailPage() {
         </div>
       </Card>
     </div>
+    </>
   );
 }

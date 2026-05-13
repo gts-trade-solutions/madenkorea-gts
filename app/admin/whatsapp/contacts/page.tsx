@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Plus, Upload, Download, Search } from "lucide-react";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 
 type WhatsappContact = {
   id: string;
@@ -464,7 +465,9 @@ export default function WhatsappContactsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <>
+    <AdminBackBar title="Contacts" to="/admin/whatsapp" />
+    <div className="container mx-auto py-6 space-y-4">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -690,5 +693,6 @@ export default function WhatsappContactsPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }

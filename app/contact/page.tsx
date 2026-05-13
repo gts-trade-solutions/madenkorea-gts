@@ -84,6 +84,7 @@ export default function ContactPage() {
       return;
     }
 
+    setIsLoading(true);
     try {
       const res = await fetch("/api/contact", {
         method: "POST",
@@ -101,6 +102,8 @@ export default function ContactPage() {
       setFormData({ name: "", email: "", subject: "", message: "" });
     } catch (err) {
       toast.error("Network error — please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -231,7 +234,7 @@ export default function ContactPage() {
                     disabled={isLoading}
                   >
                     <Mail className="mr-2 h-4 w-4" />
-                    Send via email
+                    {isLoading ? "Sending…" : "Send via email"}
                   </Button>
                   <Button
                     type="button"
@@ -246,9 +249,8 @@ export default function ContactPage() {
                 </div>
 
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  We pre-fill the message and open your own email or
-                  WhatsApp app &mdash; you tap Send inside it. Nothing
-                  leaves your device automatically.
+                  Email goes straight to our team. WhatsApp opens a chat in your
+                  own app with the message pre-filled &mdash; you tap Send inside it.
                 </p>
               </form>
             </CardContent>

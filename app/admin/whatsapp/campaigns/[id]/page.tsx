@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, CheckCircle2, RefreshCw, Send } from "lucide-react";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 
 export default function WhatsappCampaignDetailPage() {
   const params = useParams();
@@ -163,7 +164,9 @@ export default function WhatsappCampaignDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+    <AdminBackBar title="Campaign Details" to="/admin/whatsapp/campaigns" />
+    <div className="container mx-auto py-6 space-y-6">
       {/* Title row */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -302,6 +305,7 @@ export default function WhatsappCampaignDetailPage() {
         </Card>
       </div>
     </div>
+    </>
   );
 }
 

@@ -17,7 +17,7 @@ const certifications = [
   { id: 8, name: "Certification 8", src: "/certifications/8.png" },
   { id: 9, name: "Certification 9", src: "/certifications/9.png" },
   { id: 10, name: "Certification 10", src: "/certifications/10.png" },
-  { id: 10, name: "Certification 11", src: "/certifications/11.jpg" },
+  { id: 11, name: "Certification 11", src: "/certifications/11.jpg" },
 ];
 
 const CertificationSwiper: React.FC = () => {

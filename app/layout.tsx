@@ -2,6 +2,8 @@ import "./globals.css";
 import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { cookies } from "next/headers";
+import { isSupportedCurrency, type CurrencyCode } from "@/lib/currency";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
 import { CartProvider } from "@/lib/contexts/CartContext";
 import { WishlistProvider } from "@/lib/contexts/WishlistContext";
@@ -131,6 +133,17 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Read the `mik_currency` cookie that middleware seeds on first
+  // visit (and CurrencySwitcher writes when the user picks a
+  // currency). Passing it to CurrencyProvider keeps SSR HTML aligned
+  // with the client's first render — without this, the server renders
+  // INR while the client reads the cookie and re-renders the user's
+  // actual currency, producing a hydration mismatch.
+  const cookieCurrency = cookies().get("mik_currency")?.value;
+  const initialCurrency: CurrencyCode = isSupportedCurrency(cookieCurrency)
+    ? cookieCurrency
+    : "INR";
+
   return (
     <html lang="en-IN" suppressHydrationWarning>
       <head>
@@ -155,7 +168,7 @@ export default function RootLayout({
         >
           <AuthProvider>
             <CookieConsentProvider>
-              <CurrencyProvider>
+              <CurrencyProvider initialCurrency={initialCurrency}>
               <CartProvider>
                 <WishlistProvider>
                   {/* Google Analytics — only loads once the user grants

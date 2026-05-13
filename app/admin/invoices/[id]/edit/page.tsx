@@ -13,6 +13,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -308,6 +309,8 @@ export default function EditInvoicePage() {
   const sellerSupportEmail = selectedCompany?.email || SUPPORT_EMAIL_FALLBACK;
 
   return (
+    <>
+    <AdminBackBar title="Edit Invoice" to={`/admin/invoices/${invoiceId}`} />
     <div className="container mx-auto max-w-6xl py-6 space-y-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Edit Invoice</h2>
@@ -599,5 +602,6 @@ export default function EditInvoicePage() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

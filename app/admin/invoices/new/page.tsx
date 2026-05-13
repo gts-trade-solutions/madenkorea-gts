@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -256,6 +257,8 @@ export default function NewInvoicePage() {
   const sellerSupportEmail = selectedCompany?.email || SUPPORT_EMAIL_FALLBACK;
 
   return (
+    <>
+    <AdminBackBar title="New Invoice" to="/admin/invoices" />
     <div className="container mx-auto max-w-6xl py-6 space-y-6">
       <Card>
         <CardHeader>
@@ -577,5 +580,6 @@ export default function NewInvoicePage() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

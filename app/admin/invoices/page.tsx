@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 
 type InvoiceRow = {
   id: string;
@@ -101,6 +102,8 @@ export default function InvoicesListPage() {
   };
 
   return (
+    <>
+    <AdminBackBar title="Invoices" to="/admin" />
     <div className="container mx-auto max-w-6xl py-6 space-y-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4">
@@ -216,5 +219,6 @@ export default function InvoicesListPage() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

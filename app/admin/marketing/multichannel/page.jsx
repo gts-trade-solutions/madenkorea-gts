@@ -16,6 +16,7 @@ import {
   Edit,
   X,
 } from "lucide-react";
+import { AdminBackBar } from "@/components/admin/AdminBackBar";
 
 function cn(...classes) {
   return classes.filter(Boolean).join(" ");
@@ -655,6 +656,8 @@ export default function MultiChannelCampaignPage() {
 
   // ============== RENDER ==============
   return (
+    <>
+    <AdminBackBar title="Multichannel Marketing" to="/admin" />
     <div className="min-h-screen bg-[#02010a] text-zinc-100">
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {/* Header */}
@@ -1361,5 +1364,6 @@ export default function MultiChannelCampaignPage() {
         </div>
       )}
     </div>
+    </>
   );
 }
