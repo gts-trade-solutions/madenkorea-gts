@@ -16,6 +16,7 @@ import {
 import { createClient } from "@supabase/supabase-js";
 import { useCart } from "@/lib/contexts/CartContext";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { useCurrency } from "@/lib/contexts/CurrencyContext";
 
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -76,24 +77,13 @@ type HeaderDictCache = {
 let headerDictMemoryCache: HeaderDictCache | null = null;
 let headerDictFetchPromise: Promise<HeaderDictCache> | null = null;
 
-function formatINR(value?: number | null, currency?: string | null) {
-  if (value == null) return "";
-  const code = (currency ?? "INR").toUpperCase();
-  if (code === "INR") return `₹${value.toLocaleString("en-IN")}`;
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: code,
-      maximumFractionDigits: 0,
-    }).format(value);
-  } catch {
-    return `${code} ${value.toLocaleString()}`;
-  }
-}
-
 export function Header() {
   const { totalItems } = useCart();
   const { isAuthenticated } = useAuth();
+  // `formatPrice` accepts an INR amount and renders it in the visitor's
+  // active currency at the live FX rate. The ticker's product prices
+  // are stored in INR in the DB, so this is a straight pass-through.
+  const { formatPrice } = useCurrency();
   const t = useTranslations("header");
   const tc = useTranslations("common");
 
@@ -299,7 +289,7 @@ export function Header() {
                 {item.name}
                 {price != null && (
                   <span className="ml-2 opacity-80">
-                    {formatINR(price, item.currency)}
+                    {formatPrice(price)}
                   </span>
                 )}
               </Link>
