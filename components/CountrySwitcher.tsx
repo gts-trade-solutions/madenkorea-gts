@@ -18,6 +18,7 @@ import {
 } from "@/lib/countries";
 import { LOCALE_INFO, SUPPORTED_LOCALES, type SupportedLocale } from "@/lib/locales";
 import { SUPPORTED_CURRENCIES, type CurrencyCode } from "@/lib/currency";
+import { Flag } from "@/components/Flag";
 
 // Single header control that lets the visitor change country,
 // language, and currency from one popover. Picking a country
@@ -58,24 +59,30 @@ export function CountrySwitcher() {
     } catch {}
   };
 
-  // Locale changes require a full reload: next-intl's
-  // NextIntlClientProvider snapshots `messages` at SSR time, so a
-  // client-only locale change updates LocaleContext but doesn't swap
-  // the strings rendered by `useTranslations()`. Reloading lets the
-  // server re-read the `mik_locale` cookie and serve the new bundle.
-  const reloadForLocale = () => {
+  // A full page reload is needed any time the server-rendered output
+  // depends on a cookie we just changed:
+  //  • locale → next-intl message bundles are snapshotted at SSR, so
+  //    a client-only change leaves rendered strings stale.
+  //  • country → home banners are fetched per country in the RSC
+  //    (getBanners reads `mik_country`), so without a reload the new
+  //    country's banner set never gets queried.
+  // Currency is client-side only (formatPrice re-renders) and does
+  // not require a reload.
+  const reload = () => {
     if (typeof window !== "undefined") window.location.reload();
   };
 
   const handleCountry = (next: CountryCode) => {
     const p = COUNTRY_PROFILES[next];
-    const localeChanged = p.defaultLocale !== locale;
     setCountry(next);
     setLocale(p.defaultLocale);
     setCurrency(p.defaultCurrency);
     syncToProfile(p.defaultLocale, next);
     setOpen(false);
-    if (localeChanged) reloadForLocale();
+    // Always reload — even when locale didn't change, the country
+    // change must propagate to server-rendered country-scoped data
+    // (banners today; pricing/shipping rules in future phases).
+    reload();
   };
 
   const handleLanguage = (next: SupportedLocale) => {
@@ -83,7 +90,7 @@ export function CountrySwitcher() {
     setLocale(next);
     syncToProfile(next, country);
     setOpen(false);
-    if (localeChanged) reloadForLocale();
+    if (localeChanged) reload();
   };
 
   const handleCurrency = (next: CurrencyCode) => {
@@ -104,7 +111,7 @@ export function CountrySwitcher() {
         "
         aria-label={`Country: ${profile.name}. Change country, language, or currency`}
       >
-        <span className="text-base leading-none" aria-hidden>{profile.flag}</span>
+        <Flag code={profile.code} width={20} className="rounded-[2px] shrink-0" alt="" />
         <span className="hidden sm:inline">{profile.code}</span>
         <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden />
       </PopoverTrigger>
@@ -147,7 +154,7 @@ export function CountrySwitcher() {
                       "
                     >
                       <span className="flex items-center gap-2 min-w-0">
-                        <span className="text-base leading-none" aria-hidden>{p.flag}</span>
+                        <Flag code={p.code} width={20} className="rounded-[2px] shrink-0" alt="" />
                         <span className="font-medium truncate">{p.name}</span>
                         <span className="text-xs text-muted-foreground">
                           {p.defaultLocale} · {p.defaultCurrency}

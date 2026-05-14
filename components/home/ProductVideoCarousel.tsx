@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { HomeProductVideo } from "@/types/home_product_videos";
 import { VideoReel } from "./VideoReel";
 import { VideoPlayerModal, type VideoModalItem } from "./VideoPlayerModal";
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function ProductVideoCarousel({ videos = [] }: Props) {
+  const t = useTranslations("home");
   const items = useMemo(() => videos.filter((v) => !!v.video_url), [videos]);
 
   const [openIndex, setOpenIndex] = useState<number | null>(null);
@@ -31,8 +33,11 @@ export function ProductVideoCarousel({ videos = [] }: Props) {
   return (
     <>
       <VideoReel
-        heading="한국 최고 상품을 드려요! - KOREA'S BEST FOR YOU"
-        subheading="Watch and discover the best Consumer Innovations products in action"
+        // The Korean flourish is part of the brand voice and must read
+        // identically in every locale, so it's hardcoded here. Only the
+        // right-hand half flows through next-intl and gets translated.
+        heading={`한국 최고 상품을 드려요! — ${t("productVideosHeading")}`}
+        subheading={t("productVideosSubheading")}
         items={items}
         onCardClick={(idx) => setOpenIndex(idx)}
         paused={openIndex !== null}
