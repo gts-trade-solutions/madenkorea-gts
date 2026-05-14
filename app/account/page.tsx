@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +43,7 @@ function storagePublicUrl(path?: string | null) {
 
 export default function AccountPage() {
   const router = useRouter();
+  const t = useTranslations("account");
   const { user, isAuthenticated, logout } = useAuth();
   const [fullName, setFullName] = useState<string>("");
   const [recentlyViewed, setRecentlyViewed] = useState<DbProduct[]>([]);
@@ -58,7 +60,7 @@ export default function AccountPage() {
         .select("full_name")
         .eq("id", user?.id)
         .maybeSingle();
-      setFullName(profile?.full_name || user?.email || "User");
+      setFullName(profile?.full_name || user?.email || t("fallbackUserName"));
 
       // recently viewed (ids from localStorage)
       const viewedIds: string[] = JSON.parse(
@@ -93,7 +95,7 @@ export default function AccountPage() {
 
   const handleLogout = async () => {
     await logout();
-    toast.success("Logged out successfully");
+    toast.success(t("loggedOutToast"));
     router.push("/");
   };
 
@@ -102,12 +104,12 @@ export default function AccountPage() {
       <div className="container mx-auto py-8">
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold mb-2">My Account</h1>
-            <p className="text-muted-foreground">Welcome back, {fullName}</p>
+            <h1 className="text-3xl font-bold mb-2">{t("dashboardTitle")}</h1>
+            <p className="text-muted-foreground">{t("welcomeBack", { name: fullName })}</p>
           </div>
           <Button variant="outline" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
-            Logout
+            {t("logoutBtn")}
           </Button>
         </div>
 
@@ -115,8 +117,8 @@ export default function AccountPage() {
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader>
               <ShoppingBag className="h-8 w-8 mb-2 text-primary" />
-              <CardTitle>My Orders</CardTitle>
-              <CardDescription>Track and manage your orders</CardDescription>
+              <CardTitle>{t("dashboardOrdersCardTitle")}</CardTitle>
+              <CardDescription>{t("dashboardOrdersCardDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <Button
@@ -124,7 +126,7 @@ export default function AccountPage() {
                 className="w-full"
                 onClick={() => router.push("/account/orders")}
               >
-                View Orders
+                {t("viewOrdersBtn")}
               </Button>
             </CardContent>
           </Card>
@@ -132,8 +134,8 @@ export default function AccountPage() {
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader>
               <Heart className="h-8 w-8 mb-2 text-primary" />
-              <CardTitle>Wishlist</CardTitle>
-              <CardDescription>View your saved products</CardDescription>
+              <CardTitle>{t("dashboardWishlistCardTitle")}</CardTitle>
+              <CardDescription>{t("dashboardWishlistCardDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <Button
@@ -141,7 +143,7 @@ export default function AccountPage() {
                 className="w-full"
                 onClick={() => router.push("/account/wishlist")}
               >
-                View Wishlist
+                {t("viewWishlistBtn")}
               </Button>
             </CardContent>
           </Card>
@@ -149,8 +151,8 @@ export default function AccountPage() {
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader>
               <User className="h-8 w-8 mb-2 text-primary" />
-              <CardTitle>Profile Settings</CardTitle>
-              <CardDescription>Manage your account details</CardDescription>
+              <CardTitle>{t("dashboardProfileCardTitle")}</CardTitle>
+              <CardDescription>{t("dashboardProfileCardDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <Button
@@ -158,7 +160,7 @@ export default function AccountPage() {
                 className="w-full"
                 onClick={() => router.push("/account/settings")}
               >
-                Edit Profile
+                {t("editProfileBtn")}
               </Button>
             </CardContent>
           </Card>
@@ -168,7 +170,7 @@ export default function AccountPage() {
           <div className="mt-12">
             <div className="flex items-center gap-2 mb-6">
               <Eye className="h-6 w-6" />
-              <h2 className="text-2xl font-bold">Recently Viewed</h2>
+              <h2 className="text-2xl font-bold">{t("recentlyViewedHeading")}</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {recentlyViewed.map((product) => (

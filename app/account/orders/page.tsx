@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +42,7 @@ type OrderItem = {
 
 export default function OrdersPage() {
   const router = useRouter();
+  const t = useTranslations("account");
   const { isAuthenticated, ready } = useAuth();
   const { addItem } = useCart();
 
@@ -70,7 +72,7 @@ useEffect(() => {
     if (uerr || !user) {
       setOrders([]);
       setItems([]);
-      setLoadError(uerr?.message || "Not signed in");
+      setLoadError(uerr?.message || t("loadErrNotSignedIn"));
       setLoading(false);
       router.push("/auth/login?redirect=/account/orders");
       return;
@@ -89,7 +91,7 @@ useEffect(() => {
     if (oerr) {
       setOrders([]);
       setItems([]);
-      setLoadError(oerr.message || "Failed to load orders");
+      setLoadError(oerr.message || t("loadErrFailOrders"));
       setLoading(false);
       return;
     }
@@ -106,7 +108,7 @@ useEffect(() => {
 
       if (ierr) {
         setItems([]);
-        setLoadError(ierr.message || "Failed to load order items");
+        setLoadError(ierr.message || t("loadErrFailItems"));
       } else {
         setItems(its ?? []);
       }
@@ -144,13 +146,13 @@ useEffect(() => {
     const its = itemsByOrder.get(orderId) || [];
     const reOrderables = its.filter((it) => !!it.product_id);
     if (!reOrderables.length) {
-      toast.info("No re-orderable items in this order");
+      toast.info(t("reorderNoneToast"));
       return;
     }
     for (const it of reOrderables) {
       await addItem(it.product_id as string, Math.max(1, it.quantity || 1));
     }
-    toast.success("Items added to cart");
+    toast.success(t("reorderAddedToast"));
     router.push("/cart");
   };
 
@@ -166,7 +168,7 @@ useEffect(() => {
     body = (
       <Card>
         <CardContent className="py-16 text-center text-muted-foreground">
-          Loading orders…
+          {t("ordersLoading")}
         </CardContent>
       </Card>
     );
@@ -174,7 +176,7 @@ useEffect(() => {
     body = (
       <Card>
         <CardContent className="py-16 text-center text-muted-foreground">
-          Redirecting to sign in…
+          {t("ordersRedirecting")}
         </CardContent>
       </Card>
     );
@@ -182,7 +184,7 @@ useEffect(() => {
     body = (
       <Card>
         <CardContent className="py-16 text-center text-muted-foreground">
-          Loading…
+          {t("ordersGenericLoading")}
         </CardContent>
       </Card>
     );
@@ -191,12 +193,12 @@ useEffect(() => {
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-16">
           <Package className="h-16 w-16 text-muted-foreground mb-4" />
-          <h3 className="text-xl font-semibold mb-2">No orders yet</h3>
+          <h3 className="text-xl font-semibold mb-2">{t("ordersEmptyTitle")}</h3>
           <p className="text-muted-foreground mb-6 text-center">
-            Start shopping to see your orders here.
+            {t("ordersEmptyBody")}
           </p>
           <Button asChild>
-            <Link href="/">Start Shopping</Link>
+            <Link href="/">{t("ordersStartShopping")}</Link>
           </Button>
         </CardContent>
       </Card>
@@ -214,14 +216,15 @@ useEffect(() => {
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="text-lg">
-                      Order {order.order_number}
+                      {t("orderNumberLabel", { n: order.order_number })}
                     </CardTitle>
                     <CardDescription>
-                      Placed on{" "}
-                      {new Date(order.created_at).toLocaleDateString("en-IN", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
+                      {t("placedOnLabel", {
+                        date: new Date(order.created_at).toLocaleDateString("en-IN", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        }),
                       })}
                     </CardDescription>
                   </div>
@@ -235,7 +238,7 @@ useEffect(() => {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">
-                      {itemCount} {itemCount === 1 ? "item" : "items"}
+                      {t("itemCount", { count: itemCount })}
                     </p>
                     <p className="text-lg font-bold">
                       ₹{order.total.toLocaleString("en-IN")}
@@ -248,7 +251,7 @@ useEffect(() => {
                       onClick={() => handleInvoice(order.id)}
                     >
                       <Download className="mr-2 h-4 w-4" />
-                      Invoice
+                      {t("invoiceBtn")}
                     </Button>
                     {canReorder(order.status) && (
                       <Button
@@ -257,7 +260,7 @@ useEffect(() => {
                         onClick={() => handleReorder(order.id)}
                       >
                         <ShoppingCart className="mr-2 h-4 w-4" />
-                        Reorder
+                        {t("reorderBtn")}
                       </Button>
                     )}
                     <Button
@@ -265,7 +268,7 @@ useEffect(() => {
                       size="sm"
                       onClick={() => router.push(`/account/orders/${order.id}`)}
                     >
-                      View Details
+                      {t("viewDetailsBtn")}
                       <ChevronRight className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
@@ -282,12 +285,10 @@ useEffect(() => {
     <CustomerLayout>
       <div className="container mx-auto py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">My Orders</h1>
-          <p className="text-muted-foreground">
-            View and track your order history
-          </p>
+          <h1 className="text-3xl font-bold mb-2">{t("ordersTitle")}</h1>
+          <p className="text-muted-foreground">{t("ordersSubtitle")}</p>
           {loadError && (
-            <p className="mt-2 text-sm text-red-600">Error: {loadError}</p>
+            <p className="mt-2 text-sm text-red-600">{t("loadErrorPrefix")} {loadError}</p>
           )}
         </div>
         {body}

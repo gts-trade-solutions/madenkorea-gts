@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { Facebook, Instagram, Youtube } from "lucide-react";
 import { FaThreads } from "react-icons/fa6";
 import { ManageCookiesButton } from "@/components/ManageCookiesButton";
@@ -12,6 +13,7 @@ import { ManageCookiesButton } from "@/components/ManageCookiesButton";
 // legal-doc links.
 
 export function Footer() {
+  const t = useTranslations("footer");
   return (
     <footer
       className="text-white"
@@ -48,13 +50,9 @@ export function Footer() {
               />
               <h3 className="text-lg font-semibold">MadenKorea</h3>
             </div>
-            <p className="text-sm text-white/90">
-              Authentic Korean beauty and lifestyle products, curated and
-              delivered across India.
-            </p>
+            <p className="text-sm text-white/90">{t("tagline")}</p>
             <p className="mt-3 text-xs text-white/75 italic">
-              We are solely a reseller of Korean beauty products and have no
-              involvement in their formulation or manufacturing.
+              {t("resellerDisclaimer")}
             </p>
           </div>
 
@@ -66,22 +64,22 @@ export function Footer() {
             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
               <div>
                 <h4 className="text-sm font-semibold mb-2 uppercase tracking-wide">
-                  Help
+                  {t("helpHeading")}
                 </h4>
                 <ul className="space-y-1.5 text-sm">
                   <li>
                     <Link href="/faq" className="text-white/90 hover:text-white">
-                      FAQ
+                      {t("links.faq")}
                     </Link>
                   </li>
                   <li>
                     <Link href="/contact" className="text-white/90 hover:text-white">
-                      Contact us
+                      {t("links.contact")}
                     </Link>
                   </li>
                   <li>
                     <Link href="/about" className="text-white/90 hover:text-white">
-                      About us
+                      {t("links.about")}
                     </Link>
                   </li>
                 </ul>
@@ -89,7 +87,7 @@ export function Footer() {
 
               <div>
                 <h4 className="text-sm font-semibold mb-2 uppercase tracking-wide">
-                  Policies
+                  {t("policiesHeading")}
                 </h4>
                 <ul className="space-y-1.5 text-sm">
                   <li>
@@ -97,7 +95,7 @@ export function Footer() {
                       href="/policies/shipping-returns"
                       className="text-white/90 hover:text-white"
                     >
-                      Shipping &amp; returns
+                      {t("links.shippingReturns")}
                     </Link>
                   </li>
                   <li>
@@ -105,7 +103,7 @@ export function Footer() {
                       href="/policies/cancellation"
                       className="text-white/90 hover:text-white"
                     >
-                      Cancellation
+                      {t("links.cancellation")}
                     </Link>
                   </li>
                   <li>
@@ -113,7 +111,7 @@ export function Footer() {
                       href="/policies/refunds"
                       className="text-white/90 hover:text-white"
                     >
-                      Refunds
+                      {t("links.refunds")}
                     </Link>
                   </li>
                   <li>
@@ -121,17 +119,17 @@ export function Footer() {
                       href="/policies/replacements"
                       className="text-white/90 hover:text-white"
                     >
-                      Replacements
+                      {t("links.replacements")}
                     </Link>
                   </li>
                   <li>
                     <Link href="/privacy" className="text-white/90 hover:text-white">
-                      Privacy
+                      {t("links.privacy")}
                     </Link>
                   </li>
                   <li>
                     <Link href="/terms" className="text-white/90 hover:text-white">
-                      Terms
+                      {t("links.terms")}
                     </Link>
                   </li>
                   <li>
@@ -139,7 +137,7 @@ export function Footer() {
                       href="/policies/cookies"
                       className="text-white/90 hover:text-white"
                     >
-                      Cookies
+                      {t("links.cookies")}
                     </Link>
                   </li>
                 </ul>
@@ -149,7 +147,7 @@ export function Footer() {
             <div className="mt-3">
               <ManageCookiesButton
                 variant="link"
-                label="Manage cookies"
+                label={t("manageCookies")}
                 className="text-white/90 hover:text-white p-0 h-auto text-sm"
               />
             </div>
@@ -164,7 +162,7 @@ export function Footer() {
               shows a logo, no need for two. */}
           <div className="md:col-span-3 flex flex-col items-start md:items-end gap-3">
             <h4 className="text-sm font-semibold uppercase tracking-wide">
-              Follow us
+              {t("followUsHeading")}
             </h4>
             <div className="flex flex-wrap gap-2">
               <SocialIconLink
@@ -200,11 +198,11 @@ export function Footer() {
         {/* Bottom strip: copyright + back-pointer to Contact for anything
             customers can't find on the policy pages. */}
         <div className="border-t border-white/20 mt-8 pt-4 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between text-xs text-white/75">
-          <p>&copy; {new Date().getFullYear()} MadenKorea. All rights reserved.</p>
+          <p>{t("copyright", { year: new Date().getFullYear() })}</p>
           <p>
-            Need to reach us?{" "}
+            {t("needHelpPrefix")}{" "}
             <Link href="/contact" className="underline hover:text-white">
-              Visit our Contact page
+              {t("needHelpLink")}
             </Link>
             .
           </p>

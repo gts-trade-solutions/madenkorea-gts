@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Trash2, ShoppingBag, Tag, Check, X, Loader2 } from "lucide-react";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { Button } from "@/components/ui/button";
@@ -113,6 +114,7 @@ function formatINR(v?: number | null, currency?: string | null) {
 
 export default function CartPage() {
   const router = useRouter();
+  const t = useTranslations("cart");
   const { ready: cartReady, loading, items, setQty, removeItem } = useCart();
   const { isAuthenticated } = useAuth();
   const shippingConfig = useShippingConfig();
@@ -230,7 +232,7 @@ export default function CartPage() {
             product: {
               id: it.product_id,
               slug: "",
-              name: "No longer available",
+              name: t("rowNoLongerAvailable"),
               price: null,
               currency: "INR",
               compare_at_price: null,
@@ -324,7 +326,7 @@ async function recalcTotals() {
     setTotals(data);
   } catch (e: any) {
     console.error(e);
-    toast.error("Failed to calculate totals");
+    toast.error(t("calcFailedToast"));
     setTotals(null);
   } finally {
     setLoadingTotals(false);
@@ -343,11 +345,11 @@ async function clearPromo() {
   });
 
   if (!res.ok) {
-    toast.error("Could not remove promo");
+    toast.error(t("promoRemoveFailedToast"));
     return;
   }
 
-  toast.info("Promo removed");
+  toast.info(t("promoRemovedToast"));
   await recalcTotals();
 }
 
@@ -363,11 +365,11 @@ async function clearPromo() {
 
   const removeLine = async (rowId: string) => {
     if (removing[rowId]) return;
-    if (!window.confirm("Remove this item from cart?")) return;
+    if (!window.confirm(t("confirmRemove"))) return;
     setRemoving((prev) => ({ ...prev, [rowId]: true }));
     try {
       await removeItem(rowId);
-      toast.success("Item removed");
+      toast.success(t("itemRemovedToast"));
     } finally {
       setRemoving((prev) => ({ ...prev, [rowId]: false }));
     }
@@ -386,12 +388,12 @@ async function clearPromo() {
           body: JSON.stringify({ code }),
         });
         const j = await res.json();
-        if (!res.ok || !j?.ok) throw new Error(j?.error || "Invalid code");
-        toast.success(`Promo applied: ${j?.promo?.code || code}`);
+        if (!res.ok || !j?.ok) throw new Error(j?.error || t("promoInvalidToast"));
+        toast.success(t("promoAppliedToast", { code: j?.promo?.code || code }));
         setPromoCode("");
         await recalcTotals();
       } catch (err: any) {
-        toast.error(err?.message || "Could not apply promo");
+        toast.error(err?.message || t("promoApplyFailedToast"));
       }
     });
   }
@@ -400,7 +402,7 @@ async function clearPromo() {
     return (
       <CustomerLayout>
         <div className="container mx-auto py-16 text-muted-foreground">
-          Loading cart…
+          {t("loadingCart")}
         </div>
       </CustomerLayout>
     );
@@ -413,14 +415,12 @@ async function clearPromo() {
           <Card className="max-w-md mx-auto text-center">
             <CardHeader>
               <ShoppingBag className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-              <CardTitle>Your cart is empty</CardTitle>
+              <CardTitle>{t("emptyTitle")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground mb-6">
-                Looks like you haven&apos;t added anything to your cart yet.
-              </p>
+              <p className="text-muted-foreground mb-6">{t("emptyBody")}</p>
               <Button asChild>
-                <Link href="/">Continue Shopping</Link>
+                <Link href="/">{t("continueShopping")}</Link>
               </Button>
             </CardContent>
           </Card>
@@ -443,11 +443,11 @@ async function clearPromo() {
     <CustomerLayout>
       <div className="container mx-auto py-8">
         <h1 className="text-3xl font-bold mb-8">
-          Shopping Cart ({rows.reduce((n, r) => n + r.quantity, 0)} items)
+          {t("headingWithCount", { count: rows.reduce((n, r) => n + r.quantity, 0) })}
         </h1>
         {unavailableCount > 0 && (
           <div className="mb-4 rounded-md border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
-            {unavailableCount} item{unavailableCount === 1 ? "" : "s"} in your cart {unavailableCount === 1 ? "is" : "are"} no longer available and excluded from totals.
+            {t("unavailableNotice", { count: unavailableCount })}
           </div>
         )}
 
@@ -476,7 +476,7 @@ async function clearPromo() {
                             />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                              No image
+                              {t("noImage")}
                             </div>
                           )}
                         </Link>
@@ -491,7 +491,7 @@ async function clearPromo() {
                             </h3>
                           </Link>
                           {row.unavailable && (
-                            <p className="text-xs text-orange-700">This item is no longer available. Please remove it to continue.</p>
+                            <p className="text-xs text-orange-700">{t("rowRemovePrompt")}</p>
                           )}
                           {p.brands?.name && (
                             <p className="text-sm text-muted-foreground mb-1">
@@ -542,7 +542,7 @@ async function clearPromo() {
                           variant="ghost"
                           size="icon"
                           onClick={() => removeLine(row.id)}
-                          title="Remove"
+                          title={t("removeTitle")}
                           disabled={removing[row.id] || qtyUpdating[row.id]}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -559,7 +559,7 @@ async function clearPromo() {
             <Card className="lg:sticky lg:top-20">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <span>Order Summary</span>
+                  <span>{t("orderSummary")}</span>
                   {loadingTotals && (
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   )}
@@ -574,14 +574,14 @@ async function clearPromo() {
                   <div className="flex items-center gap-2">
                     <Tag className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm font-medium">
-                      Have a promo code?
+                      {t("havePromo")}
                     </span>
                   </div>
 
                   {!promoActive ? (
                     <form onSubmit={onApplyPromo} className="flex gap-2">
                       <Input
-                        placeholder="Enter promo code"
+                        placeholder={t("promoPlaceholder")}
                         value={promoCode}
                         onChange={(e) =>
                           setPromoCode(e.target.value.toUpperCase())
@@ -594,7 +594,7 @@ async function clearPromo() {
                         variant="secondary"
                         disabled={applyingPromo || !promoCode.trim()}
                       >
-                        {applyingPromo ? "Applying…" : "Apply"}
+                        {applyingPromo ? t("applying") : t("apply")}
                       </Button>
                     </form>
                   ) : (
@@ -603,12 +603,12 @@ async function clearPromo() {
                         <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
                         <div>
                           <p className="text-sm font-medium text-green-900 dark:text-green-100">
-                            Promo applied: {totals?.applied?.code}
+                            {t("promoAppliedLabel", { code: totals?.applied?.code ?? "" })}
                           </p>
                           <p className="text-xs text-green-700 dark:text-green-300">
                             {totals?.applied?.scope === "global"
-                              ? "Global (cart-wide)"
-                              : "Product-specific"}
+                              ? t("promoScopeGlobal")
+                              : t("promoScopeProduct")}
                           </p>
                         </div>
                       </div>
@@ -617,7 +617,7 @@ async function clearPromo() {
                         size="icon"
                         onClick={clearPromo}
                         className="h-8 w-8"
-                        title="Remove promo"
+                        title={t("removePromoTitle")}
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -628,7 +628,7 @@ async function clearPromo() {
                 <Separator />
 
                 <div className="flex justify-between">
-                  <span>Subtotal</span>
+                  <span>{t("subtotal")}</span>
                   <span className="font-semibold">
                     {formatPrice(displaySubtotal)}
                   </span>
@@ -636,7 +636,7 @@ async function clearPromo() {
 
                 {displayDiscount > 0 && (
                   <div className="flex justify-between text-emerald-600">
-                    <span>Discount</span>
+                    <span>{t("discount")}</span>
                     <span className="font-semibold">
                       -{formatPrice(displayDiscount)}
                     </span>
@@ -644,50 +644,62 @@ async function clearPromo() {
                 )}
 
                 <div className="flex justify-between">
-                  <span>Shipping</span>
+                  <span>{t("shipping")}</span>
                   <span className="font-semibold">
                     {!isINR
-                      ? "Quoted on request"
+                      ? t("shippingQuoted")
                       : displayShipping === 0
-                      ? "FREE"
+                      ? t("shippingFree")
                       : formatPrice(displayShipping)}
                   </span>
                 </div>
 
                 {/* Shipping copy is India-specific (free above threshold,
                     K Plus benefit). For international visitors, shipping
-                    is quoted manually when they submit the order request. */}
-                {isINR && membershipActive ? (
-                  <p className="text-sm text-muted-foreground">
-                    {shippingMessage(displaySubtotal, membership, shippingConfig)}
-                  </p>
-                ) : isINR && displaySubtotal < shippingConfig.deliveryThreshold ? (
-                  <p className="text-sm text-muted-foreground">
-                    Add{" "}
-                    {formatPrice(
-                      shippingConfig.deliveryThreshold - displaySubtotal,
-                    )}{" "}
-                    more for FREE shipping
-                  </p>
-                ) : isINR ? (
-                  <p className="text-sm text-muted-foreground">
-                    {shippingMessage(displaySubtotal, membership, shippingConfig)}
-                  </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    International shipping is quoted when our team responds to
-                    your order request.
-                  </p>
-                )}
+                    is quoted manually when they submit the order request.
+                    `shippingMessage()` now returns a kind+params discriminated
+                    union — we translate it locally here. */}
+                {(() => {
+                  if (!isINR) {
+                    return (
+                      <p className="text-sm text-muted-foreground">
+                        {t("shippingIntl")}
+                      </p>
+                    );
+                  }
+                  if (displaySubtotal < shippingConfig.deliveryThreshold && !membershipActive) {
+                    return (
+                      <p className="text-sm text-muted-foreground">
+                        {t("shippingAddMore", {
+                          amount: formatPrice(
+                            shippingConfig.deliveryThreshold - displaySubtotal
+                          ),
+                        })}
+                      </p>
+                    );
+                  }
+                  const msg = shippingMessage(displaySubtotal, membership, shippingConfig);
+                  if (msg.kind === "membership") {
+                    return <p className="text-sm text-muted-foreground">{t("shippingMembership")}</p>;
+                  }
+                  if (msg.kind === "free") {
+                    return <p className="text-sm text-muted-foreground">{t("shippingFreeApplied")}</p>;
+                  }
+                  return (
+                    <p className="text-sm text-muted-foreground">
+                      {t("shippingThreshold", { amount: formatPrice(msg.threshold) })}
+                    </p>
+                  );
+                })()}
 
                 <Separator />
 
                 <div className="flex justify-between text-lg font-bold">
-                  <span>Total</span>
+                  <span>{t("total")}</span>
                   <span>{formatPrice(displayTotal)}</span>
                 </div>
                 {loadingTotals && (
-                  <p className="text-xs text-muted-foreground">Updating totals...</p>
+                  <p className="text-xs text-muted-foreground">{t("updatingTotals")}</p>
                 )}
               </CardContent>
               <CardFooter className="flex flex-col gap-2">
@@ -709,10 +721,10 @@ async function clearPromo() {
                       return;
                     }
                     if (!isAuthenticated) {
-                      toast.message("Sign in to continue", {
-                        description: "Your cart will be preserved.",
+                      toast.message(t("signInToastTitle"), {
+                        description: t("signInToastBody"),
                         action: {
-                          label: "Sign in",
+                          label: t("signInToastAction"),
                           onClick: () => router.push("/auth/login?redirect=/checkout"),
                         },
                       });
@@ -721,10 +733,10 @@ async function clearPromo() {
                     router.push("/checkout");
                   }}
                 >
-                  {isINR ? "Proceed to Checkout" : "Request International Order"}
+                  {isINR ? t("checkoutBtn") : t("intlOrderBtn")}
                 </Button>
                 <Button asChild variant="outline" className="w-full">
-                  <Link href="/">Continue Shopping</Link>
+                  <Link href="/">{t("continueShopping")}</Link>
                 </Button>
               </CardFooter>
             </Card>

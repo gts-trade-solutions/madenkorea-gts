@@ -63,22 +63,25 @@ export function computeShippingFee(
   return config.defaultShippingFee;
 }
 
+/**
+ * Returns a discriminated kind describing the current shipping state.
+ * The caller (cart / checkout) is responsible for translating it via
+ * `useTranslations()` — keeping this function locale-agnostic so it
+ * works in server contexts too.
+ */
+export type ShippingMessage =
+  | { kind: "membership" }
+  | { kind: "free" }
+  | { kind: "threshold"; threshold: number };
+
 export function shippingMessage(
   subtotal: number,
   membership?: Pick<MembershipRow, "status" | "ends_at"> | null,
   config: ShippingConfig = DEFAULT_SHIPPING_CONFIG
-) {
-  if (hasActiveMembership(membership)) {
-    return `${MEMBERSHIP_PLAN_NAME} benefit applied: Free delivery`;
-  }
-
-  if (subtotal >= config.deliveryThreshold) {
-    return "Free delivery applied";
-  }
-
-  return `Free delivery on orders above ₹${config.deliveryThreshold.toLocaleString(
-    "en-IN"
-  )}`;
+): ShippingMessage {
+  if (hasActiveMembership(membership)) return { kind: "membership" };
+  if (subtotal >= config.deliveryThreshold) return { kind: "free" };
+  return { kind: "threshold", threshold: config.deliveryThreshold };
 }
 
 export async function syncMembershipStatus(userId: string) {

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import {
   ShoppingCart,
@@ -35,7 +36,7 @@ import {
 import { ScrollArea } from "./ui/scroll-area";
 import { Separator } from "./ui/separator";
 import { SearchAutocomplete } from "./SearchAutocomplete";
-import { CurrencySwitcher } from "./CurrencySwitcher";
+import { CountrySwitcher } from "./CountrySwitcher";
 
 type DictRow = {
   slug: string;
@@ -93,6 +94,8 @@ function formatINR(value?: number | null, currency?: string | null) {
 export function Header() {
   const { totalItems } = useCart();
   const { isAuthenticated } = useAuth();
+  const t = useTranslations("header");
+  const tc = useTranslations("common");
 
   const [showSearch, setShowSearch] = useState(false);
   // Close the search popup on Esc — standard dismissal pattern, paired
@@ -322,7 +325,7 @@ export function Header() {
       <div className="flex items-center justify-between">
         {children}
       </div>
-      <p className="mt-1 text-xs text-muted-foreground/90">Coming soon</p>
+      <p className="mt-1 text-xs text-muted-foreground/90">{t("comingSoon")}</p>
     </div>
   );
 
@@ -397,7 +400,7 @@ export function Header() {
                   variant="ghost"
                   size="icon"
                   className="md:hidden"
-                  aria-label="Open menu"
+                  aria-label={tc("openMenu")}
                 >
                   <Menu className="h-5 w-5" />
                 </Button>
@@ -431,14 +434,14 @@ export function Header() {
                     asChild
                     className="w-full rounded-full bg-gradient-to-r from-pink-500 via-rose-500 to-amber-400 text-sm font-semibold text-white shadow-lg shadow-pink-500/40"
                   >
-                    <Link href="/influencer-request">K- PartnerUp</Link>
+                    <Link href="/influencer-request">{t("partnerUp")}</Link>
                   </Button>
                 </div>
 
                 <div className="px-5 pb-3 flex items-center gap-2 md:hidden">
                   <Button asChild variant="outline" className="flex-1">
                     <Link href={isAuthenticated ? "/account" : "/auth/login"}>
-                      <User className="mr-2 h-4 w-4" /> Account
+                      <User className="mr-2 h-4 w-4" /> {t("account")}
                     </Link>
                   </Button>
                 </div>
@@ -454,23 +457,23 @@ export function Header() {
                   <nav className="px-3">
                     <div className="mb-4 space-y-3">
                       <Link href="/best-seller" className="block text-base uppercase">
-                        BEST SELLER
+                        {t("navBestSeller")}
                       </Link>
                       <Link href="/shop-199" className="block text-base uppercase">
-                        SHOP@199
+                        {t("navShop199")}
                       </Link>
                       <Link href="/contact" className="block text-base uppercase">
-                        SUPPORT
+                        {t("navSupport")}
                       </Link>
                       <Link href="/k-plus" className="block text-base uppercase">
-                        K-PLUS
+                        {t("navKPlus")}
                       </Link>
                     </div>
 
                     <Accordion type="multiple" className="w-full">
                       <AccordionItem value="categories">
                         <AccordionTrigger className="text-base uppercase">
-                          CATEGORIES
+                          {t("navCategories")}
                         </AccordionTrigger>
                         <AccordionContent>
                           <ul className="space-y-1">
@@ -497,7 +500,7 @@ export function Header() {
                             })}
                             {!sortedCats.length && (
                               <li className="px-3 py-2 text-sm text-muted-foreground">
-                                {loadingDicts ? "Loading…" : "No categories"}
+                                {loadingDicts ? tc("loading") : t("noCategories")}
                               </li>
                             )}
                           </ul>
@@ -506,7 +509,7 @@ export function Header() {
 
                       <AccordionItem value="brands">
                         <AccordionTrigger className="text-base uppercase">
-                          BRANDS
+                          {t("navBrands")}
                         </AccordionTrigger>
                         <AccordionContent>
                           <ul className="space-y-1">
@@ -533,7 +536,7 @@ export function Header() {
                             })}
                             {!sortedBrands.length && (
                               <li className="px-3 py-2 text-sm text-muted-foreground">
-                                {loadingDicts ? "Loading…" : "No brands"}
+                                {loadingDicts ? tc("loading") : t("noBrands")}
                               </li>
                             )}
                           </ul>
@@ -543,7 +546,7 @@ export function Header() {
 
                     <div className="mt-4 space-y-3">
                       <Link href="/bundles" className="block text-base uppercase">
-                        BUNDLES
+                        {t("navBundles")}
                       </Link>
                     </div>
 
@@ -571,13 +574,13 @@ export function Header() {
                       href="/best-seller"
                       className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium uppercase transition-colors hover:bg-accent hover:text-accent-foreground"
                     >
-                      BEST SELLER
+                      {t("navBestSeller")}
                     </Link>
                   </NavigationMenuItem>
 
                   <NavigationMenuItem>
                     <NavigationMenuTrigger className="text-sm uppercase">
-                      CATEGORIES
+                      {t("navCategories")}
                     </NavigationMenuTrigger>
                     <NavigationMenuContent>
                       <div className="grid w-[640px] max-w-[80vw] grid-cols-2 gap-2 p-4 md:grid-cols-3">
@@ -591,7 +594,7 @@ export function Header() {
                             >
                               <div className="font-medium">{c.name}</div>
                               <div className="text-xs text-muted-foreground">
-                                Coming soon
+                                {t("comingSoon")}
                               </div>
                             </div>
                           ) : (
@@ -602,14 +605,14 @@ export function Header() {
                             >
                               <div className="font-medium">{c.name}</div>
                               <div className="text-xs text-muted-foreground">
-                                Shop {c.name}
+                                {t("shopCategory", { name: c.name })}
                               </div>
                             </Link>
                           );
                         })}
                         {!sortedCats.length && (
                           <div className="col-span-full p-3 text-sm text-muted-foreground">
-                            {loadingDicts ? "Loading categories…" : "No categories found"}
+                            {loadingDicts ? t("loadingCategories") : t("noCategories")}
                           </div>
                         )}
                       </div>
@@ -618,7 +621,7 @@ export function Header() {
 
                   <NavigationMenuItem>
                     <NavigationMenuTrigger className="text-sm uppercase">
-                      BRANDS
+                      {t("navBrands")}
                     </NavigationMenuTrigger>
                     <NavigationMenuContent>
                       <div className="grid w-[720px] max-w-[90vw] grid-cols-2 gap-2 p-4 md:grid-cols-3 lg:grid-cols-4">
@@ -632,7 +635,7 @@ export function Header() {
                             >
                               <div className="font-medium">{b.name}</div>
                               <div className="text-xs text-muted-foreground">
-                                Coming soon
+                                {t("comingSoon")}
                               </div>
                             </div>
                           ) : (
@@ -643,14 +646,14 @@ export function Header() {
                             >
                               <div className="font-medium">{b.name}</div>
                               <div className="text-xs text-muted-foreground">
-                                Explore {b.name}
+                                {t("exploreBrand", { name: b.name })}
                               </div>
                             </Link>
                           );
                         })}
                         {!sortedBrands.length && (
                           <div className="col-span-full p-3 text-sm text-muted-foreground">
-                            {loadingDicts ? "Loading brands…" : "No brands found"}
+                            {loadingDicts ? t("loadingBrands") : t("noBrands")}
                           </div>
                         )}
                       </div>
@@ -662,7 +665,7 @@ export function Header() {
                       href="/bundles"
                       className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium uppercase transition-colors hover:bg-accent hover:text-accent-foreground"
                     >
-                      BUNDLES
+                      {t("navBundles")}
                     </Link>
                   </NavigationMenuItem>
 
@@ -671,7 +674,7 @@ export function Header() {
                       href="/shop-199"
                       className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium uppercase transition-colors hover:bg-accent hover:text-accent-foreground"
                     >
-                      SHOP@199
+                      {t("navShop199")}
                     </Link>
                   </NavigationMenuItem>
 
@@ -680,7 +683,7 @@ export function Header() {
                       href="/contact"
                       className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium uppercase transition-colors hover:bg-accent hover:text-accent-foreground"
                     >
-                      SUPPORT
+                      {t("navSupport")}
                     </Link>
                   </NavigationMenuItem>
 
@@ -690,7 +693,7 @@ export function Header() {
   className="inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-sky-600 via-indigo-600 to-violet-600 px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white shadow-md shadow-indigo-500/25"
 >
   <Sparkles className="mr-2 h-4 w-4" />
-  K-PLUS
+  {t("navKPlus")}
 </Link>
                   </NavigationMenuItem>
                 </NavigationMenuList>
@@ -704,15 +707,16 @@ export function Header() {
               size="icon"
               className="relative md:hidden"
               onClick={() => setShowSearch((s) => !s)}
-              aria-label="Toggle search"
+              aria-label={tc("toggleSearch")}
             >
               {showSearch ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
             </Button>
 
-            {/* Mobile currency switcher — compact (symbol only). The
-                desktop equivalent shows symbol + code. */}
+            {/* Mobile country switcher — compact (flag only). The
+                desktop equivalent also shows the country code.
+                Contains country / language / currency controls. */}
             <div className="md:hidden">
-              <CurrencySwitcher />
+              <CountrySwitcher />
             </div>
 
             <Button
@@ -720,7 +724,7 @@ export function Header() {
               size="icon"
               className="relative md:hidden"
               asChild
-              aria-label="Cart"
+              aria-label={t("cart")}
             >
               <Link href="/cart">
                 <ShoppingCart className="h-5 w-5" />
@@ -732,7 +736,7 @@ export function Header() {
                     {totalItems}
                   </Badge>
                 )}
-                <span className="sr-only">Cart</span>
+                <span className="sr-only">{t("cart")}</span>
               </Link>
             </Button>
 
@@ -740,7 +744,7 @@ export function Header() {
               asChild
               className="hidden sm:inline-flex items-center justify-center rounded-full bg-gradient-to-r from-pink-500 via-rose-500 to-amber-400 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-pink-500/40"
             >
-              <Link href="/influencer-request">K- PartnerUp</Link>
+              <Link href="/influencer-request">{t("partnerUp")}</Link>
             </Button>
 
             <Button
@@ -748,15 +752,16 @@ export function Header() {
               size="icon"
               className="hidden md:inline-flex"
               onClick={() => setShowSearch((s) => !s)}
-              aria-label="Toggle search"
+              aria-label={tc("toggleSearch")}
             >
               {showSearch ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
             </Button>
 
-            {/* Currency switcher — visible on desktop only. Mobile
-                exposes the same control inside the slide-out menu. */}
+            {/* Country switcher — visible on desktop. The popover
+                holds country / language / currency tabs so visitors
+                can change any of the three from one trigger. */}
             <div className="hidden md:inline-flex">
-              <CurrencySwitcher />
+              <CountrySwitcher />
             </div>
 
             <Button
@@ -764,11 +769,11 @@ export function Header() {
               size="icon"
               className="hidden md:inline-flex"
               asChild
-              aria-label="Account"
+              aria-label={t("account")}
             >
               <Link href={isAuthenticated ? "/account" : "/auth/login"}>
                 <User className="h-5 w-5" />
-                <span className="sr-only">Account</span>
+                <span className="sr-only">{t("account")}</span>
               </Link>
             </Button>
 
@@ -777,7 +782,7 @@ export function Header() {
               size="icon"
               className="relative hidden md:inline-flex"
               asChild
-              aria-label="Cart"
+              aria-label={t("cart")}
             >
               <Link href="/cart">
                 <ShoppingCart className="h-5 w-5" />
@@ -789,7 +794,7 @@ export function Header() {
                     {totalItems}
                   </Badge>
                 )}
-                <span className="sr-only">Cart</span>
+                <span className="sr-only">{t("cart")}</span>
               </Link>
             </Button>
           </div>
@@ -813,7 +818,7 @@ export function Header() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setShowSearch(false)}
-                  aria-label="Close search"
+                  aria-label={tc("closeSearch")}
                   className="shrink-0 h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-4 w-4" />

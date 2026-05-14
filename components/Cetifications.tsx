@@ -1,5 +1,6 @@
 'use client'
 import React from "react";
+import { useTranslations } from "next-intl";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay } from "swiper/modules";   // ✅ register module
 
@@ -21,6 +22,7 @@ const certifications = [
 ];
 
 const CertificationSwiper: React.FC = () => {
+  const t = useTranslations("home");
   return (
     <section className="certification-swiper" style={{ padding: "5px" }}>
       {/* Title */}
@@ -33,7 +35,7 @@ const CertificationSwiper: React.FC = () => {
           marginBottom: "12px",
         }}
       >
-        Trusted Quality &amp; Global Certifications
+        {t("certificationsTitle")}
       </h2>
 
       <Swiper

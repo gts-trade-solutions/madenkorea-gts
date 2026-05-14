@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Search, Package } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,7 @@ type SearchAutocompleteProps = {
 
 export function SearchAutocomplete({ autoFocus = false }: SearchAutocompleteProps = {}) {
   const router = useRouter();
+  const t = useTranslations('searchAuto');
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -205,7 +207,7 @@ export function SearchAutocomplete({ autoFocus = false }: SearchAutocompleteProp
         <Input
           ref={inputRef}
           type="search"
-          placeholder="Search products..."
+          placeholder={t('placeholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -219,7 +221,7 @@ export function SearchAutocomplete({ autoFocus = false }: SearchAutocompleteProp
       {isOpen && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-background border rounded-lg shadow-lg max-h-96 overflow-y-auto z-50">
           {loading ? (
-            <div className="p-4 text-sm text-muted-foreground">Searching...</div>
+            <div className="p-4 text-sm text-muted-foreground">{t('searching')}</div>
           ) : errorState ? (
             <div className="p-4 text-sm text-destructive">{errorState}</div>
           ) : suggestions.length > 0 ? (
@@ -247,14 +249,14 @@ export function SearchAutocomplete({ autoFocus = false }: SearchAutocompleteProp
 
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{highlightMatch(s.title)}</div>
-                    <div className="text-xs text-muted-foreground capitalize">product</div>
+                    <div className="text-xs text-muted-foreground capitalize">{t('productLabel')}</div>
                   </div>
                 </button>
               ))}
             </div>
           ) : showNoResults ? (
             <div className="p-4 text-sm text-muted-foreground">
-              No matches - search for "{trimmedQuery}" anyway
+              {t('noMatchesPrefix')} <strong>{trimmedQuery}</strong> {t('noMatchesSuffix')}
             </div>
           ) : null}
 
@@ -266,7 +268,7 @@ export function SearchAutocomplete({ autoFocus = false }: SearchAutocompleteProp
               >
                 <Search className="h-4 w-4" />
                 <span>
-                  Search for <strong>"{trimmedQuery}"</strong>
+                  {t('searchForPrefix')} <strong>{trimmedQuery}</strong>
                 </span>
               </button>
             </div>

@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations, useLocale } from "next-intl";
 import { supabase } from "@/lib/supabaseClient";
 import { ProductCard } from "@/components/ProductCard";
 import { CustomerLayout } from "@/components/CustomerLayout";
+import {
+  mergeTranslations,
+  PRODUCT_TRANSLATABLE_FIELDS,
+} from "@/lib/contentTranslations";
 
 type Product = {
   id: string;
@@ -28,6 +33,8 @@ type Product = {
 };
 
 export default function BestSellerPage() {
+  const t = useTranslations("bestSeller");
+  const locale = useLocale();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [usedFallback, setUsedFallback] = useState(false);
@@ -45,7 +52,8 @@ export default function BestSellerPage() {
           price, currency, compare_at_price, sale_price, sale_starts_at, sale_ends_at,
           hero_image_path, is_featured, is_trending, is_bundle,
           short_description, volume_ml, net_weight_g, country_of_origin, stock_qty,
-          brands ( name )
+          brands ( name ),
+          product_translations!left ( locale, short_description, description )
         `)
         .eq("is_published", true)
         .eq("is_trending", true)
@@ -57,7 +65,12 @@ export default function BestSellerPage() {
           setProducts([]);
           setUsedFallback(false);
         } else {
-          const trending = (data ?? []) as Product[];
+          const trending = mergeTranslations(
+            (data ?? []) as any[],
+            locale,
+            PRODUCT_TRANSLATABLE_FIELDS,
+            "product_translations"
+          ) as Product[];
           const minTarget = 8;
 
           if (trending.length >= minTarget) {
@@ -72,7 +85,8 @@ export default function BestSellerPage() {
                 price, currency, compare_at_price, sale_price, sale_starts_at, sale_ends_at,
                 hero_image_path, is_featured, is_trending, is_bundle,
                 short_description, volume_ml, net_weight_g, country_of_origin, stock_qty,
-                brands ( name )
+                brands ( name ),
+                product_translations!left ( locale, short_description, description )
               `)
               .eq("is_published", true)
               .neq("is_trending", true)
@@ -80,9 +94,12 @@ export default function BestSellerPage() {
               .order("created_at", { ascending: false })
               .limit(Math.max(0, minTarget - trending.length));
 
-            const fallback = ((fallbackData ?? []) as Product[]).filter(
-              (p) => !existingIds.has(p.id)
-            );
+            const fallback = (mergeTranslations(
+              (fallbackData ?? []) as any[],
+              locale,
+              PRODUCT_TRANSLATABLE_FIELDS,
+              "product_translations"
+            ) as Product[]).filter((p) => !existingIds.has(p.id));
             setProducts([...trending, ...fallback]);
             setUsedFallback(fallback.length > 0);
           }
@@ -95,20 +112,15 @@ export default function BestSellerPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale]);
 
   return (
     <CustomerLayout>
     <div className="container mx-auto py-10">
-      <h1 className="mb-2 text-3xl font-bold uppercase">Best Seller</h1>
-      <p className="mb-8 text-sm text-muted-foreground">
-        Our most-loved picks, chosen by everyone.
-      </p>
+      <h1 className="mb-2 text-3xl font-bold uppercase">{t("title")}</h1>
+      <p className="mb-8 text-sm text-muted-foreground">{t("subtitle")}</p>
       {!loading && usedFallback && (
-        <p className="mb-6 text-sm text-muted-foreground">
-          We&apos;re showing additional published picks while trending best sellers
-          are limited.
-        </p>
+        <p className="mb-6 text-sm text-muted-foreground">{t("fallbackNotice")}</p>
       )}
 
       {loading ? (
@@ -118,7 +130,7 @@ export default function BestSellerPage() {
           ))}
         </div>
       ) : products.length === 0 ? (
-        <p className="text-muted-foreground">Our next crowd-favorite is getting ready. Check back soon for the most-loved picks.</p>
+        <p className="text-muted-foreground">{t("empty")}</p>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {products.map((product) => (

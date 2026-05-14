@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Script from "next/script";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -101,6 +102,7 @@ function formatINR(v?: number | null, currency?: string | null) {
 export default function CheckoutPage() {
   const router = useRouter();
   const params = useSearchParams();
+  const t = useTranslations("checkoutPage");
   const debug = params.get("debug") === "1";
 
   const { items } = useCart();
@@ -216,7 +218,7 @@ export default function CheckoutPage() {
 
       if (error) {
         console.error("Load products @ checkout:", error);
-        toast.error("Could not load products for checkout");
+        toast.error(t("errLoadProducts"));
         setDbProducts({});
       } else {
         const map: Record<string, DbProduct> = {};
@@ -386,13 +388,13 @@ export default function CheckoutPage() {
 
     const phone = formData.phone.replace(/\D/g, "");
     if (!/^[6-9]\d{9}$/.test(phone)) {
-      toast.error("Please enter a valid 10-digit phone number.");
+      toast.error(t("errInvalidPhone"));
       return;
     }
 
     const pincode = formData.pincode.replace(/\D/g, "");
     if (!/^\d{6}$/.test(pincode)) {
-      toast.error("Please enter a valid 6-digit pincode.");
+      toast.error(t("errInvalidPincode"));
       return;
     }
 
@@ -409,9 +411,7 @@ export default function CheckoutPage() {
         serviceable: boolean | null;
       } | null;
       if (sres.ok && sj?.ok && sj.serviceable === false) {
-        toast.error(
-          `We don't deliver to ${pincode} yet. Please use a different pincode or email info@madenkorea.com.`
-        );
+        toast.error(t("errUnservicedPincode", { pincode }));
         return;
       }
     } catch {
@@ -419,7 +419,7 @@ export default function CheckoutPage() {
     }
 
     if (!calc) {
-      toast.error("Totals not ready yet.");
+      toast.error(t("errTotalsNotReady"));
       return;
     }
 
@@ -536,7 +536,7 @@ export default function CheckoutPage() {
           <div className="flex flex-col items-center gap-4 px-6 text-center">
             <div className="h-12 w-12 animate-spin rounded-full border-4 border-muted border-t-primary" />
             <div>
-              <p className="text-lg font-semibold">Confirming your payment…</p>
+              <p className="text-lg font-semibold">{t("confirmingPayment")}</p>
               <p className="text-sm text-muted-foreground">
                 Please don&apos;t close or refresh this page.
               </p>
@@ -547,7 +547,7 @@ export default function CheckoutPage() {
 
       <div className="container mx-auto py-8">
         <div className="mb-2 flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Checkout</h1>
+          <h1 className="text-3xl font-bold">{t("title")}</h1>
           {debug && (
             <button
               onClick={recalcNow}
@@ -564,11 +564,11 @@ export default function CheckoutPage() {
             <div className="space-y-6 lg:col-span-2">
               <Card>
                 <CardHeader>
-                  <CardTitle>Contact & Shipping</CardTitle>
+                  <CardTitle>{t("contactHeading")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label htmlFor="name">Full Name *</Label>
+                    <Label htmlFor="name">{t("fullNameLabel")}</Label>
                     <Input
                       id="name"
                       name="name"
@@ -581,7 +581,7 @@ export default function CheckoutPage() {
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
-                      <Label htmlFor="email">Email *</Label>
+                      <Label htmlFor="email">{t("emailLabel")}</Label>
                       <Input
                         id="email"
                         name="email"
@@ -593,7 +593,7 @@ export default function CheckoutPage() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="phone">Phone *</Label>
+                      <Label htmlFor="phone">{t("phoneLabel")}</Label>
                       <Input
                         id="phone"
                         name="phone"
@@ -601,7 +601,7 @@ export default function CheckoutPage() {
                         autoComplete="tel"
                         inputMode="numeric"
                         pattern="[6-9][0-9]{9}"
-                        title="Enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9"
+                        title={t("phoneTooltip")}
                         maxLength={10}
                         value={formData.phone}
                         onChange={handleChange}
@@ -611,7 +611,7 @@ export default function CheckoutPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="address">Address *</Label>
+                    <Label htmlFor="address">{t("addressLabel")}</Label>
                     <Input
                       id="address"
                       name="address"
@@ -624,7 +624,7 @@ export default function CheckoutPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
-                      <Label htmlFor="city">City *</Label>
+                      <Label htmlFor="city">{t("cityLabel")}</Label>
                       <Input
                         id="city"
                         name="city"
@@ -635,7 +635,7 @@ export default function CheckoutPage() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="state">State *</Label>
+                      <Label htmlFor="state">{t("stateLabel")}</Label>
                       <Input
                         id="state"
                         name="state"
@@ -646,7 +646,7 @@ export default function CheckoutPage() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="pincode">Pincode *</Label>
+                      <Label htmlFor="pincode">{t("pincodeLabel")}</Label>
                       <Input
                         id="pincode"
                         name="pincode"
@@ -656,7 +656,7 @@ export default function CheckoutPage() {
                         required
                         inputMode="numeric"
                         pattern="\d{6}"
-                        title="Enter a valid 6-digit pincode"
+                        title={t("pincodeTooltip")}
                         maxLength={6}
                       />
                     </div>
@@ -666,7 +666,7 @@ export default function CheckoutPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Payment Method</CardTitle>
+                  <CardTitle>{t("paymentMethodHeading")}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
                   You’ll be redirected to the Razorpay secure checkout to
@@ -678,7 +678,7 @@ export default function CheckoutPage() {
             <div className="lg:col-span-1">
               <Card>
                 <CardHeader>
-                  <CardTitle>Order Summary</CardTitle>
+                  <CardTitle>{t("summaryHeading")}</CardTitle>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
@@ -743,7 +743,7 @@ export default function CheckoutPage() {
                   ) : (
                     <>
                       <div className="flex justify-between">
-                        <span>Subtotal</span>
+                        <span>{t("subtotal")}</span>
                         <span className="font-semibold">
                           {formatPrice(calc.subtotal)}
                         </span>
@@ -751,31 +751,40 @@ export default function CheckoutPage() {
 
                       <div className="flex justify-between">
                         <span>
-                          Shipping{" "}
+                          {t("shipping")}{" "}
                           {isINR && calc.subtotal < shippingConfig.deliveryThreshold && !membershipActive && (
                             <span className="text-xs text-muted-foreground">
-                              (Free over {formatPrice(shippingConfig.deliveryThreshold)})
+                              {t("freeOverHint", { amount: formatPrice(shippingConfig.deliveryThreshold) })}
                             </span>
                           )}
                         </span>
                         <span className="font-semibold">
                           {!isINR
-                            ? "Quoted on request"
+                            ? t("shippingQuoted")
                             : calc.shipping_fee === 0
-                            ? "FREE"
+                            ? t("shippingFree")
                             : formatPrice(calc.shipping_fee)}
                         </span>
                       </div>
 
-                      {isINR && (
-                        <div className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-muted-foreground">
-                          {shippingMessage(calc.subtotal, membership, shippingConfig)}
-                        </div>
-                      )}
+                      {isINR && (() => {
+                        const msg = shippingMessage(calc.subtotal, membership, shippingConfig);
+                        const text =
+                          msg.kind === "membership"
+                            ? t("shippingMembership")
+                            : msg.kind === "free"
+                            ? t("shippingFreeApplied")
+                            : t("shippingThreshold", { amount: `₹${msg.threshold.toLocaleString("en-IN")}` });
+                        return (
+                          <div className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-muted-foreground">
+                            {text}
+                          </div>
+                        );
+                      })()}
 
                       {calc.sale_savings && calc.sale_savings > 0 && (
                         <div className="flex justify-between text-emerald-700">
-                          <span>You save on sale</span>
+                          <span>{t("saleSavings")}</span>
                           <span className="font-semibold">
                             {formatPrice(calc.sale_savings)}
                           </span>
@@ -784,7 +793,7 @@ export default function CheckoutPage() {
 
                       {calc.discount_total > 0 && (
                         <div className="flex justify-between text-emerald-700">
-                          <span>Promo discount</span>
+                          <span>{t("promoDiscount")}</span>
                           <span className="font-semibold">
                             - {formatPrice(calc.discount_total)}
                           </span>
@@ -794,7 +803,7 @@ export default function CheckoutPage() {
                       <Separator />
 
                       <div className="flex justify-between text-lg font-bold">
-                        <span>Total</span>
+                        <span>{t("total")}</span>
                         <span>{formatPrice(calc.total)}</span>
                       </div>
 
@@ -804,7 +813,7 @@ export default function CheckoutPage() {
                         size="lg"
                         disabled={isProcessing || loadingProducts || loadingTotals}
                       >
-                        {isProcessing ? "Processing…" : "Pay with Razorpay"}
+                        {isProcessing ? t("processing") : t("payWithRazorpay")}
                       </Button>
                     </>
                   )}

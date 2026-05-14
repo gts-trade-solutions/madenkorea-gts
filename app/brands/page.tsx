@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
+import { getTranslations } from 'next-intl/server';
 import { CustomerLayout } from '@/components/CustomerLayout';
 import { Card } from '@/components/ui/card';
 import { publicURL } from '@/lib/storage-public-url';
@@ -94,6 +95,7 @@ async function getLiveBrands(): Promise<BrandCard[]> {
 }
 
 export default async function BrandsPage() {
+  const t = await getTranslations('brandsPage');
   const brands = await getLiveBrands();
 
   const groupedBrands = brands.reduce((acc, brand) => {
@@ -111,10 +113,8 @@ export default async function BrandsPage() {
     <CustomerLayout>
       <div className="container mx-auto py-8">
         <div className="mb-12">
-          <h1 className="text-4xl font-bold mb-4">All Brands</h1>
-          <p className="text-lg text-muted-foreground">
-            Discover premium Korean beauty brands at MadenKorea
-          </p>
+          <h1 className="text-4xl font-bold mb-4">{t('title')}</h1>
+          <p className="text-lg text-muted-foreground">{t('subtitle')}</p>
         </div>
 
         <div className="space-y-12">
@@ -136,7 +136,7 @@ export default async function BrandsPage() {
                       <h3 className="font-semibold text-center mb-1">{brand.name}</h3>
                       {brand.product_count !== undefined && (
                         <p className="text-sm text-muted-foreground text-center">
-                          {brand.product_count} products
+                          {t('productCount', { count: brand.product_count })}
                         </p>
                       )}
                     </Card>

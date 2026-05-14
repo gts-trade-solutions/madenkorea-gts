@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { PolicyHero } from "@/components/PolicyHero";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ function WhatsAppIcon({ className }: { className?: string }) {
 }
 
 export default function ContactPage() {
+  const t = useTranslations("contactPage");
   // Pull live business / legal / Grievance Officer info on mount. The
   // page is `'use client'` because of the form below; the policy
   // disclosures used to live in the footer but are now surfaced here on
@@ -80,7 +82,7 @@ export default function ContactPage() {
   // so notifications actually reach the inbox.
   const handleSendEmail = async () => {
     if (!formData.name.trim() || !formData.email.trim() || !formData.message.trim()) {
-      toast.error("Name, email, and message are required.");
+      toast.error(t("errMissingRequired"));
       return;
     }
 
@@ -93,15 +95,13 @@ export default function ContactPage() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body?.success) {
-        toast.error(
-          body?.message || "Unable to send your message right now."
-        );
+        toast.error(body?.message || t("errSend"));
         return;
       }
-      toast.success("Thanks — we'll get back to you within 24 hours.");
+      toast.success(t("successToast"));
       setFormData({ name: "", email: "", subject: "", message: "" });
     } catch (err) {
-      toast.error("Network error — please try again.");
+      toast.error(t("errNetwork"));
     } finally {
       setIsLoading(false);
     }
@@ -115,7 +115,7 @@ export default function ContactPage() {
   // only exists in the resulting WhatsApp thread.
   const handleSendWhatsApp = () => {
     if (!formData.name.trim() || !formData.message.trim()) {
-      toast.error("Please enter your name and a message.");
+      toast.error(t("errMissingWhatsapp"));
       return;
     }
     const lines = [
@@ -137,9 +137,9 @@ export default function ContactPage() {
   return (
     <CustomerLayout>
       <PolicyHero
-        eyebrow="We're here to help"
-        title="Get in touch"
-        description="Questions about a product, an order, or anything K-beauty? Reach us through the form below or any of the channels on the right — we typically reply within 24 hours during business hours."
+        eyebrow={t("heroEyebrow")}
+        title={t("heroTitle")}
+        description={t("heroDescription")}
       />
 
       <div className="container mx-auto px-4 py-10 sm:py-14">
@@ -149,10 +149,8 @@ export default function ContactPage() {
           {/* ---------- Form ---------- */}
           <Card className="lg:col-span-3 border-none shadow-md">
             <CardHeader className="border-b bg-muted/30 rounded-t-lg">
-              <CardTitle className="text-2xl">Send us a message</CardTitle>
-              <CardDescription>
-                Fill the form and pick whichever channel is easiest for you.
-              </CardDescription>
+              <CardTitle className="text-2xl">{t("formHeading")}</CardTitle>
+              <CardDescription>{t("formDescription")}</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               {/* The form `onSubmit` defaults to the email path so pressing
@@ -168,21 +166,21 @@ export default function ContactPage() {
               >
                 <div className="grid gap-5 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label htmlFor="name">Name</Label>
+                    <Label htmlFor="name">{t("nameLabel")}</Label>
                     <Input
                       id="name"
                       name="name"
                       value={formData.name}
                       onChange={handleChange}
-                      placeholder="Your name"
+                      placeholder={t("namePlaceholder")}
                       required
                     />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="email" className="flex items-baseline justify-between">
-                      <span>Email</span>
+                      <span>{t("emailLabel")}</span>
                       <span className="text-xs text-muted-foreground font-normal">
-                        Required for email
+                        {t("emailRequiredHint")}
                       </span>
                     </Label>
                     <Input
@@ -191,16 +189,16 @@ export default function ContactPage() {
                       type="email"
                       value={formData.email}
                       onChange={handleChange}
-                      placeholder="you@example.com"
+                      placeholder={t("emailPlaceholder")}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="subject" className="flex items-baseline justify-between">
-                    <span>Subject</span>
+                    <span>{t("subjectLabel")}</span>
                     <span className="text-xs text-muted-foreground font-normal">
-                      Optional
+                      {t("subjectOptional")}
                     </span>
                   </Label>
                   <Input
@@ -208,19 +206,19 @@ export default function ContactPage() {
                     name="subject"
                     value={formData.subject}
                     onChange={handleChange}
-                    placeholder="What's this about?"
+                    placeholder={t("subjectPlaceholder")}
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="message">Message</Label>
+                  <Label htmlFor="message">{t("messageLabel")}</Label>
                   <Textarea
                     id="message"
                     name="message"
                     rows={6}
                     value={formData.message}
                     onChange={handleChange}
-                    placeholder="Tell us how we can help…"
+                    placeholder={t("messagePlaceholder")}
                     required
                   />
                 </div>
@@ -234,7 +232,7 @@ export default function ContactPage() {
                     disabled={isLoading}
                   >
                     <Mail className="mr-2 h-4 w-4" />
-                    {isLoading ? "Sending…" : "Send via email"}
+                    {isLoading ? t("sending") : t("sendEmail")}
                   </Button>
                   <Button
                     type="button"
@@ -244,13 +242,12 @@ export default function ContactPage() {
                     className="w-full sm:flex-1 bg-[#25D366] text-white hover:bg-[#1fb958] focus-visible:ring-[#25D366]"
                   >
                     <WhatsAppIcon className="mr-2 h-4 w-4" />
-                    Send via WhatsApp
+                    {t("sendWhatsApp")}
                   </Button>
                 </div>
 
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Email goes straight to our team. WhatsApp opens a chat in your
-                  own app with the message pre-filled &mdash; you tap Send inside it.
+                  {t("channelFootnote")}
                 </p>
               </form>
             </CardContent>
@@ -260,35 +257,33 @@ export default function ContactPage() {
           <div className="lg:col-span-2 space-y-4">
             <Card className="border-none shadow-md">
               <CardHeader className="border-b bg-muted/30 rounded-t-lg">
-                <CardTitle className="text-lg">Reach us directly</CardTitle>
-                <CardDescription>
-                  Prefer a quick channel? Pick one of these.
-                </CardDescription>
+                <CardTitle className="text-lg">{t("directHeading")}</CardTitle>
+                <CardDescription>{t("directDescription")}</CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-5">
                 <ContactRow
                   icon={<Mail className="h-4 w-4" />}
-                  label="Email"
+                  label={t("rowEmail")}
                   value={business.supportEmail}
                   href={`mailto:${business.supportEmail}`}
                 />
                 {hasSupportPhone && (
                   <ContactRow
                     icon={<Phone className="h-4 w-4" />}
-                    label="Phone"
+                    label={t("rowPhone")}
                     value={supportPhone}
                     href={`tel:${supportPhone.replace(/\s+/g, "")}`}
                   />
                 )}
                 <ContactRow
                   icon={<Clock className="h-4 w-4" />}
-                  label="Business hours"
+                  label={t("rowHours")}
                   value={business.businessHours}
                 />
                 {hasSupportAddress && (
                   <ContactRow
                     icon={<MapPin className="h-4 w-4" />}
-                    label="Address"
+                    label={t("rowAddress")}
                     value={supportAddress}
                   />
                 )}
@@ -303,11 +298,10 @@ export default function ContactPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <h3 className="text-lg font-semibold mb-1">
-                      Chat on WhatsApp
+                      {t("whatsappCardTitle")}
                     </h3>
                     <p className="text-sm text-white/90 mb-4">
-                      Skip the form &mdash; open a chat with us on WhatsApp
-                      for the quickest response.
+                      {t("whatsappCardBody")}
                     </p>
                     <a
                       href={`https://wa.me/${WHATSAPP_PHONE_NUMBER}`}
@@ -316,7 +310,7 @@ export default function ContactPage() {
                       className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-medium text-[#1fa855] hover:bg-white/90 transition-colors"
                     >
                       <WhatsAppIcon className="h-4 w-4" />
-                      Start a chat
+                      {t("whatsappCardCta")}
                     </a>
                   </div>
                 </div>
@@ -332,10 +326,9 @@ export default function ContactPage() {
         {(business.grievanceOfficerName || business.legalEntityName) && (
           <div className="max-w-6xl mx-auto mt-16 pt-10 border-t">
             <div className="text-center mb-8">
-              <h2 className="text-xl font-semibold">Legal &amp; company information</h2>
+              <h2 className="text-xl font-semibold">{t("legalHeading")}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Statutory disclosures &mdash; for grievances, GST queries, or
-                regulatory questions.
+                {t("legalDescription")}
               </p>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
@@ -345,12 +338,11 @@ export default function ContactPage() {
                     <div className="flex items-center gap-2">
                       <ShieldCheck className="h-5 w-5 text-primary" />
                       <CardTitle className="text-base">
-                        Grievance Redressal Officer
+                        {t("grievanceTitle")}
                       </CardTitle>
                     </div>
                     <CardDescription className="text-xs">
-                      For unresolved complaints &middot; acknowledged within
-                      48 hrs &middot; resolved within one month.
+                      {t("grievanceDescription")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-0 text-sm space-y-1">
@@ -372,7 +364,7 @@ export default function ContactPage() {
                     )}
                     {hasSupportPhone && (
                       <p className="text-muted-foreground">
-                        Phone: {supportPhone}
+                        {t("phoneInlineLabel")} {supportPhone}
                       </p>
                     )}
                   </CardContent>
@@ -384,10 +376,10 @@ export default function ContactPage() {
                   <CardHeader className="pb-3">
                     <div className="flex items-center gap-2">
                       <Building2 className="h-5 w-5 text-primary" />
-                      <CardTitle className="text-base">Company information</CardTitle>
+                      <CardTitle className="text-base">{t("companyTitle")}</CardTitle>
                     </div>
                     <CardDescription className="text-xs">
-                      Operator of the MadenKorea storefront.
+                      {t("companyDescription")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-0 text-sm space-y-1">
@@ -399,12 +391,12 @@ export default function ContactPage() {
                     )}
                     {business.gstin && (
                       <p className="text-muted-foreground">
-                        GSTIN: <span className="font-mono">{business.gstin}</span>
+                        {t("gstinInlineLabel")} <span className="font-mono">{business.gstin}</span>
                       </p>
                     )}
                     {business.cdscoRegistration && (
                       <p className="text-muted-foreground">
-                        CDSCO reg.:{" "}
+                        {t("cdscoInlineLabel")}{" "}
                         <span className="font-mono">{business.cdscoRegistration}</span>
                       </p>
                     )}

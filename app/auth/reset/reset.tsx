@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { CustomerLayout } from '@/components/CustomerLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,9 +23,27 @@ function hasSymbol(s: string) { return /[^A-Za-z0-9\s]/.test(s); }
 function hasSequence(s: string) { return /(0123|1234|2345|3456|4567|5678|6789|abcd|bcde|cdef|defg|qwer|asdf|zxcv)/i.test(s); }
 function hasRepeat(s: string) { return /(.)\1{2,}/.test(s); }
 
-function scorePassword(pw: string): Strength {
-  const tips: string[] = [];
-  if (!pw) return { score: 0, label: 'Too weak', tips: ['Use at least 8 characters'] };
+type StrengthTipId =
+  | 'tipLonger'
+  | 'tipUppercase'
+  | 'tipNumber'
+  | 'tipSymbol'
+  | 'tipNoSequence'
+  | 'tipNoRepeat';
+
+type Strength2 = { score: 0|1|2|3|4; labelKey: string; tips: StrengthTipId[] };
+
+const STRENGTH_LABEL_KEYS = [
+  'strengthTooWeak',
+  'strengthWeak',
+  'strengthOkay',
+  'strengthStrong',
+  'strengthVeryStrong',
+] as const;
+
+function scorePassword(pw: string): Strength2 {
+  const tips: StrengthTipId[] = [];
+  if (!pw) return { score: 0, labelKey: STRENGTH_LABEL_KEYS[0], tips: ['tipLonger'] };
 
   let score = 0;
 
@@ -40,15 +59,14 @@ function scorePassword(pw: string): Strength {
 
   score = Math.max(0, Math.min(4, score));
 
-  if (pw.length < 12) tips.push('Make it longer (12+ chars)');
-  if (!hasUpper(pw)) tips.push('Add uppercase letter');
-  if (!hasNumber(pw)) tips.push('Add a number');
-  if (!hasSymbol(pw)) tips.push('Add a symbol');
-  if (hasSequence(pw)) tips.push('Avoid common sequences (e.g., 1234, abcd)');
-  if (hasRepeat(pw)) tips.push('Avoid repeated characters');
+  if (pw.length < 12) tips.push('tipLonger');
+  if (!hasUpper(pw)) tips.push('tipUppercase');
+  if (!hasNumber(pw)) tips.push('tipNumber');
+  if (!hasSymbol(pw)) tips.push('tipSymbol');
+  if (hasSequence(pw)) tips.push('tipNoSequence');
+  if (hasRepeat(pw)) tips.push('tipNoRepeat');
 
-  const labels = ['Too weak', 'Weak', 'Okay', 'Strong', 'Very strong'] as const;
-  return { score: score as 0|1|2|3|4, label: labels[score], tips };
+  return { score: score as 0|1|2|3|4, labelKey: STRENGTH_LABEL_KEYS[score], tips };
 }
 
 function segClass(active: boolean, idx: number, score: number) {
@@ -63,6 +81,9 @@ function segClass(active: boolean, idx: number, score: number) {
 
 export default function ResetPasswordPage() {
   const sp = useSearchParams();
+  const t = useTranslations('auth.reset');
+  const tSignUp = useTranslations('auth.signUp');
+  const tSignIn = useTranslations('auth.signIn');
   const token = (sp.get('token') || '').trim();
 
   const [checking, setChecking] = useState(true);
@@ -116,11 +137,11 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!meetsMin || !hasU || !hasN || !hasS) {
-      toast.error('Please meet the minimum password requirements.');
+      toast.error(t('errWeak'));
       return;
     }
     if (!match) {
-      toast.error('Passwords do not match.');
+      toast.error(t('errMismatch'));
       return;
     }
 
@@ -134,11 +155,11 @@ export default function ResetPasswordPage() {
     setSubmitting(false);
 
     if (!res.ok || !data?.ok) {
-      toast.error(data?.error || 'Could not reset password');
+      toast.error(data?.error || t('errGeneric'));
       return;
     }
 
-    toast.success('Password changed successfully.');
+    toast.success(t('successToast'));
     setDone(true);
   };
 
@@ -162,8 +183,8 @@ export default function ResetPasswordPage() {
       <CustomerLayout>
         <div className="container mx-auto py-16">
           <Card className="max-w-md mx-auto">
-            <CardHeader><CardTitle>Reset password</CardTitle></CardHeader>
-            <CardContent><p className="text-muted-foreground">Verifying your link...</p></CardContent>
+            <CardHeader><CardTitle>{t('title')}</CardTitle></CardHeader>
+            <CardContent><p className="text-muted-foreground">{t('verifyingLink')}</p></CardContent>
           </Card>
         </div>
       </CustomerLayout>
@@ -176,11 +197,11 @@ export default function ResetPasswordPage() {
         <div className="container mx-auto py-16">
           <Card className="max-w-md mx-auto">
             <CardHeader>
-              <CardTitle>Link expired</CardTitle>
-              <CardDescription>Your reset link is invalid or has expired.</CardDescription>
+              <CardTitle>{t('linkExpiredTitle')}</CardTitle>
+              <CardDescription>{t('linkExpiredBody')}</CardDescription>
             </CardHeader>
             <CardFooter>
-              <Link href="/auth/forgot" className="text-primary hover:underline">Send a new reset link</Link>
+              <Link href="/auth/forgot" className="text-primary hover:underline">{t('sendNewLink')}</Link>
             </CardFooter>
           </Card>
         </div>
@@ -194,12 +215,12 @@ export default function ResetPasswordPage() {
         <div className="container mx-auto py-16">
           <Card className="max-w-md mx-auto">
             <CardHeader>
-              <CardTitle>Password updated</CardTitle>
-              <CardDescription>Your password has been reset successfully.</CardDescription>
+              <CardTitle>{t('passwordUpdatedTitle')}</CardTitle>
+              <CardDescription>{t('passwordUpdatedBody')}</CardDescription>
             </CardHeader>
             <CardFooter>
               <Button asChild className="w-full">
-                <Link href="/auth/login">Go to Sign in</Link>
+                <Link href="/auth/login">{t('goToSignIn')}</Link>
               </Button>
             </CardFooter>
           </Card>
@@ -213,14 +234,14 @@ export default function ResetPasswordPage() {
       <div className="container mx-auto py-16">
         <Card className="max-w-md mx-auto">
           <CardHeader>
-            <CardTitle className="text-2xl">Set a new password</CardTitle>
-            <CardDescription>Choose a strong password you don't use elsewhere.</CardDescription>
+            <CardTitle className="text-2xl">{t('titleNew')}</CardTitle>
+            <CardDescription>{t('descriptionNew')}</CardDescription>
           </CardHeader>
 
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="password">New password</Label>
+                <Label htmlFor="password">{t('newPasswordLabel')}</Label>
                 <div className="flex gap-2">
                   <Input
                     id="password"
@@ -240,8 +261,8 @@ export default function ResetPasswordPage() {
                     onMouseLeave={() => holdToPeek('pw', false)}
                     onTouchStart={() => holdToPeek('pw', true)}
                     onTouchEnd={() => holdToPeek('pw', false)}
-                    aria-label={showPw ? 'Hide password' : 'Show password'}
-                    title="Click to toggle • Hold to peek"
+                    aria-label={showPw ? tSignIn('hidePassword') : tSignIn('showPassword')}
+                    title={t('holdPeekTooltip')}
                   >
                     {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
@@ -257,39 +278,39 @@ export default function ResetPasswordPage() {
                     ))}
                   </div>
                   <div className="mt-1 flex items-center justify-between text-xs">
-                    <span className="font-medium">{strength.label}</span>
-                    <span className="text-muted-foreground">{password.length} chars</span>
+                    <span className="font-medium">{tSignUp(strength.labelKey)}</span>
+                    <span className="text-muted-foreground">{tSignUp('charsCount', { count: password.length })}</span>
                   </div>
 
                   <ul className="mt-2 space-y-1 text-xs">
                     <li className="flex items-center gap-1">
                       {meetsMin ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground" />}
-                      At least 8 characters
+                      {tSignUp('requireMinLength')}
                     </li>
                     <li className="flex items-center gap-1">
                       {hasU ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground" />}
-                      Uppercase letter
+                      {tSignUp('requireUppercase')}
                     </li>
                     <li className="flex items-center gap-1">
                       {hasN ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground" />}
-                      Number
+                      {tSignUp('requireNumber')}
                     </li>
                     <li className="flex items-center gap-1">
                       {hasS ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground" />}
-                      Symbol
+                      {tSignUp('requireSymbol')}
                     </li>
                   </ul>
 
                   {strength.score < 3 && strength.tips.length > 0 && (
                     <div className="mt-2 text-[11px] text-muted-foreground">
-                      Try: {strength.tips.slice(0,3).join(' • ')}
+                      {tSignUp('tipsPrefix')} {strength.tips.slice(0,3).map((id) => tSignUp(id)).join(' • ')}
                     </div>
                   )}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirm">Confirm password</Label>
+                <Label htmlFor="confirm">{t('confirmPasswordLabel')}</Label>
                 <div className="flex gap-2">
                   <Input
                     id="confirm"
@@ -309,15 +330,15 @@ export default function ResetPasswordPage() {
                     onMouseLeave={() => holdToPeek('confirm', false)}
                     onTouchStart={() => holdToPeek('confirm', true)}
                     onTouchEnd={() => holdToPeek('confirm', false)}
-                    aria-label={showConfirm ? 'Hide password' : 'Show password'}
-                    title="Click to toggle • Hold to peek"
+                    aria-label={showConfirm ? tSignIn('hidePassword') : tSignIn('showPassword')}
+                    title={t('holdPeekTooltip')}
                   >
                     {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
                 {confirm.length > 0 && (
                   <p className={`text-xs mt-1 ${match ? 'text-emerald-600' : 'text-destructive'}`}>
-                    {match ? 'Passwords match' : 'Passwords do not match'}
+                    {match ? tSignUp('passwordsMatch') : tSignUp('passwordsDoNotMatch')}
                   </p>
                 )}
               </div>
@@ -325,11 +346,11 @@ export default function ResetPasswordPage() {
 
             <CardFooter className="flex flex-col gap-4">
               <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? 'Updating...' : 'Update password'}
+                {submitting ? t('submitting') : t('submit')}
               </Button>
               <p className="text-sm text-center text-muted-foreground">
-                Remembered it?{' '}
-                <Link href="/auth/login" className="text-primary hover:underline">Sign in</Link>
+                {t('rememberedItPrefix')}{' '}
+                <Link href="/auth/login" className="text-primary hover:underline">{t('signInLink')}</Link>
               </p>
             </CardFooter>
           </form>

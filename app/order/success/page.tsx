@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { CheckCircle } from 'lucide-react';
 import { CustomerLayout } from '@/components/CustomerLayout';
 import { Button } from '@/components/ui/button';
@@ -35,16 +36,17 @@ function formatMoney(v?: number | null, currency?: string | null) {
 }
 
 function SuccessFallback() {
+  const t = useTranslations('orderSuccess');
   return (
     <CustomerLayout>
       <div className="container mx-auto py-16">
         <Card className="max-w-2xl mx-auto text-center">
           <CardHeader>
             <CheckCircle className="h-20 w-20 mx-auto text-green-500 mb-4" />
-            <CardTitle className="text-3xl">Order Placed Successfully!</CardTitle>
+            <CardTitle className="text-3xl">{t('title')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">Loading your order...</p>
+            <p className="text-muted-foreground">{t('loadingOrder')}</p>
           </CardContent>
         </Card>
       </div>
@@ -64,6 +66,7 @@ function OrderSuccessInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { ready, isAuthenticated } = useAuth();
+  const t = useTranslations('orderSuccess');
 
   const queryOrderId = searchParams.get('order') || searchParams.get('order_id');
 
@@ -116,7 +119,7 @@ function OrderSuccessInner() {
       const user = authData?.user;
 
       if (authError || !user) {
-        setError(authError?.message || 'Unable to load session.');
+        setError(authError?.message || t('errUnableSession'));
         setLoading(false);
         return;
       }
@@ -148,16 +151,16 @@ function OrderSuccessInner() {
 
         if (latestError) {
           console.error('[order-success] latest-order error:', latestError);
-          setInfo('Your order was placed successfully. You can view full details in My Orders.');
+          setInfo(t('fallbackInfoMyOrders'));
           setLoading(false);
           return;
         }
 
         data = (latest as OrderRow | null) ?? null;
         if (data && !resolvedOrderId) {
-          setInfo('Your order was placed successfully. Showing your latest order details.');
+          setInfo(t('fallbackInfoLatest'));
         } else if (!data) {
-          setInfo('Your order was placed successfully. You can view full details in My Orders.');
+          setInfo(t('fallbackInfoMyOrders'));
         }
       }
 
@@ -172,13 +175,13 @@ function OrderSuccessInner() {
         <Card className="max-w-2xl mx-auto text-center">
           <CardHeader>
             <CheckCircle className="h-20 w-20 mx-auto text-green-500 mb-4" />
-            <CardTitle className="text-3xl">Order Placed Successfully!</CardTitle>
+            <CardTitle className="text-3xl">{t('title')}</CardTitle>
           </CardHeader>
 
           <CardContent className="space-y-6">
             {!ready || loading ? (
               <div>
-                <p className="text-muted-foreground">Loading your order...</p>
+                <p className="text-muted-foreground">{t('loadingOrder')}</p>
               </div>
             ) : error ? (
               <div className="space-y-4">
@@ -186,10 +189,10 @@ function OrderSuccessInner() {
 
                 <div className="flex gap-4 justify-center flex-wrap">
                   <Button asChild variant="outline" size="lg">
-                    <Link href="/account/orders">Go to My Orders</Link>
+                    <Link href="/account/orders">{t('goToMyOrders')}</Link>
                   </Button>
                   <Button asChild size="lg">
-                    <Link href="/">Continue Shopping</Link>
+                    <Link href="/">{t('continueShopping')}</Link>
                   </Button>
                 </div>
               </div>
@@ -197,7 +200,7 @@ function OrderSuccessInner() {
               <>
                 {order ? (
                   <div>
-                    <p className="text-muted-foreground mb-2">Your order number is</p>
+                    <p className="text-muted-foreground mb-2">{t('orderNumberLabel')}</p>
                     <p className="text-2xl font-bold">
                       {order?.order_number || order?.id}
                     </p>
@@ -207,24 +210,22 @@ function OrderSuccessInner() {
                 {order ? (
                   <div className="space-y-1 text-sm text-muted-foreground">
                     <p>
-                      Placed on{' '}
-                      {order?.created_at
-                        ? new Date(order.created_at).toLocaleDateString('en-IN', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                          })
-                        : '--'}
+                      {t('placedOn', {
+                        date: order?.created_at
+                          ? new Date(order.created_at).toLocaleDateString('en-IN', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                            })
+                          : '--',
+                      })}
                     </p>
-                    <p>Status: {order?.status || '--'}</p>
-                    <p>Total paid: {formatMoney(order?.total, order?.currency)}</p>
+                    <p>{t('statusLabel', { status: order?.status || '--' })}</p>
+                    <p>{t('totalPaidLabel', { total: formatMoney(order?.total, order?.currency) })}</p>
                   </div>
                 ) : null}
 
-                <p className="text-muted-foreground">
-                  We&apos;ve sent a confirmation email with your order details. You can
-                  track your order status and view your invoice from your account.
-                </p>
+                <p className="text-muted-foreground">{t('confirmationEmailBody')}</p>
                 {info ? (
                   <p className="text-sm text-muted-foreground">{info}</p>
                 ) : null}
@@ -233,17 +234,17 @@ function OrderSuccessInner() {
                   {order?.id ? (
                     <Button asChild size="lg">
                       <Link href={`/account/orders/${order.id}`}>
-                        View Order Details
+                        {t('viewOrderDetails')}
                       </Link>
                     </Button>
                   ) : null}
 
                   <Button asChild variant="outline" size="lg">
-                    <Link href="/account/orders">View Orders</Link>
+                    <Link href="/account/orders">{t('viewOrders')}</Link>
                   </Button>
 
                   <Button asChild variant="outline" size="lg">
-                    <Link href="/">Continue Shopping</Link>
+                    <Link href="/">{t('continueShopping')}</Link>
                   </Button>
                 </div>
               </>

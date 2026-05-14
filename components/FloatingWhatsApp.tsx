@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useCurrency } from "@/lib/contexts/CurrencyContext";
 
 type FloatingWhatsAppProps = {
@@ -41,6 +42,7 @@ export function FloatingWhatsApp({
 }: FloatingWhatsAppProps) {
   const pathname = usePathname() ?? "";
   const { isINR } = useCurrency();
+  const t = useTranslations("floatingWhatsapp");
   const hideOnMobile = HIDE_ON_MOBILE_PREFIXES.some((p) => pathname.startsWith(p));
 
   // Hide the WhatsApp shortcut entirely for international visitors —
@@ -56,7 +58,7 @@ export function FloatingWhatsApp({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label="Chat on WhatsApp"
+      aria-label={t("open")}
       // z-40 sits below shadcn Dialog (z-50) and Sheet (z-50) so the
       // button never overlays open modals (Razorpay, lightbox, share,
       // mobile menu). It still floats above page content (z-auto).

@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Volume2, VolumeX } from "lucide-react";
 
@@ -309,6 +310,7 @@ function ReelCard<T extends ReelItem>({
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const t = useTranslations("home");
 
   const [isMuted, setIsMuted] = useState(true);
   const [showControls, setShowControls] = useState(false);
@@ -376,7 +378,7 @@ function ReelCard<T extends ReelItem>({
             // placeholder behind the actual <video> element below, but
             // it's the only image asset Googlebot sees on this card. A
             // generic "Product video preview" is more useful than empty.
-            alt="Product video preview"
+            alt={t("productVideoAlt")}
             fill
             className={[
               "object-cover transition-opacity duration-300",
@@ -422,7 +424,7 @@ function ReelCard<T extends ReelItem>({
               size="icon"
               className="rounded-full shadow-lg backdrop-blur-sm bg-white/90 hover:bg-white h-8 w-8"
               onClick={toggleMute}
-              aria-label={isMuted ? "Unmute" : "Mute"}
+              aria-label={isMuted ? t("unmute") : t("mute")}
             >
               {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             </Button>

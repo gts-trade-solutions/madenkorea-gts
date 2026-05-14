@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { supabase } from "@/lib/supabaseClient";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { Button } from "@/components/ui/button";
@@ -33,10 +34,30 @@ function hasSequence(s: string) {
 }
 function hasRepeat(s: string) { return /(.)\1{2,}/.test(s); }
 
-// Full scoring logic preserved
+// Strength tips are returned as stable IDs (not translated text) so the
+// caller can resolve them via useTranslations() — this lets the same
+// helper work across every locale without re-running on locale change.
+type StrengthTipId =
+  | "tipLonger"
+  | "tipUppercase"
+  | "tipNumber"
+  | "tipSymbol"
+  | "tipNoSequence"
+  | "tipNoRepeat";
+
+const STRENGTH_LABEL_KEYS = [
+  "strengthTooWeak",
+  "strengthWeak",
+  "strengthOkay",
+  "strengthStrong",
+  "strengthVeryStrong",
+] as const;
+
 function scorePassword(pw: string) {
-  const tips: string[] = [];
-  if (!pw) return { score: 0, label: "Too weak", tips: ["Use at least 8 characters"] };
+  const tips: StrengthTipId[] = [];
+  if (!pw) {
+    return { score: 0, labelKey: STRENGTH_LABEL_KEYS[0], tips: ["tipLonger" as StrengthTipId] };
+  }
 
   let score = 0;
 
@@ -57,16 +78,15 @@ function scorePassword(pw: string) {
   if (hasRepeat(pw)) score -= 1;
 
   score = Math.max(0, Math.min(4, score));
-  const labels = ["Too weak", "Weak", "Okay", "Strong", "Very strong"] as const;
 
-  if (pw.length < 12) tips.push("Make it longer (12+ chars)");
-  if (!hasUpper(pw)) tips.push("Add uppercase letter");
-  if (!hasNumber(pw)) tips.push("Add a number");
-  if (!hasSymbol(pw)) tips.push("Add a symbol");
-  if (hasSequence(pw)) tips.push("Avoid common sequences (1234, abcd)");
-  if (hasRepeat(pw)) tips.push("Avoid repeated characters");
+  if (pw.length < 12) tips.push("tipLonger");
+  if (!hasUpper(pw)) tips.push("tipUppercase");
+  if (!hasNumber(pw)) tips.push("tipNumber");
+  if (!hasSymbol(pw)) tips.push("tipSymbol");
+  if (hasSequence(pw)) tips.push("tipNoSequence");
+  if (hasRepeat(pw)) tips.push("tipNoRepeat");
 
-  return { score, label: labels[score], tips };
+  return { score, labelKey: STRENGTH_LABEL_KEYS[score], tips };
 }
 
 function segClass(active: boolean, idx: number, score: number) {
@@ -82,6 +102,9 @@ function segClass(active: boolean, idx: number, score: number) {
 export default function RegisterPage() {
   const router = useRouter();
   const params = useSearchParams();
+  const t = useTranslations("auth.signUp");
+  const tIn = useTranslations("auth.signIn");
+  const tLinks = useTranslations("footer.links");
 
   const redirect = params.get("redirect") || "/account";
   const mode = params.get("mode");
@@ -169,15 +192,15 @@ export default function RegisterPage() {
     e.preventDefault();
 
     if (!agree) {
-      toast.error("Please accept the Terms & Privacy Policy");
+      toast.error(t("errAgree"));
       return;
     }
     if (!meetsMin || !hasU || !hasN || !hasS) {
-      toast.error("Please meet the minimum password requirements.");
+      toast.error(t("errPasswordRequirements"));
       return;
     }
     if (!match) {
-      toast.error("Passwords do not match.");
+      toast.error(t("errPasswordsMismatch"));
       return;
     }
 
@@ -195,15 +218,13 @@ export default function RegisterPage() {
       });
 
       if (error) {
-        toast.error(error.message || "Could not create account");
+        toast.error(error.message || t("errGeneric"));
         return;
       }
 
       if (!data.session) {
-        setVerificationNotice(
-          "Account created. Please verify your email address using the link we sent before signing in."
-        );
-        toast.success("Verification email sent.");
+        setVerificationNotice(t("verificationSent"));
+        toast.success(t("verificationEmailToast"));
         return;
       }
 
@@ -218,10 +239,10 @@ export default function RegisterPage() {
         body: JSON.stringify({ kind: "signup" }),
       }).catch(() => {});
 
-      toast.success("Account created!");
+      toast.success(t("successToast"));
       router.replace(mode === "influencer" ? "/influencer-request" : redirect);
     } catch (err: any) {
-      toast.error(err.message || "Something went wrong");
+      toast.error(err.message || t("errGeneric"));
     } finally {
       setSubmitting(false);
     }
@@ -235,8 +256,8 @@ export default function RegisterPage() {
       <div className="container mx-auto py-16">
         <Card className="max-w-md mx-auto">
           <CardHeader>
-            <CardTitle className="text-2xl">Create account</CardTitle>
-            <CardDescription>Sign up with your email to get started</CardDescription>
+            <CardTitle className="text-2xl">{t("title")}</CardTitle>
+            <CardDescription>{t("description")}</CardDescription>
           </CardHeader>
 
           <form onSubmit={onSubmit}>
@@ -244,7 +265,7 @@ export default function RegisterPage() {
 
               {/* Full Name */}
               <div className="space-y-2">
-                <Label htmlFor="full_name">Full name</Label>
+                <Label htmlFor="full_name">{t("fullNameLabel")}</Label>
                 <Input
                   id="full_name"
                   name="full_name"
@@ -256,7 +277,7 @@ export default function RegisterPage() {
 
               {/* Email */}
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t("emailLabel")}</Label>
                 <Input
                   id="email"
                   name="email"
@@ -269,7 +290,7 @@ export default function RegisterPage() {
 
               {/* Password */}
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t("passwordLabel")}</Label>
                 <div className="flex gap-2">
                   <Input
                     id="password"
@@ -304,9 +325,9 @@ export default function RegisterPage() {
                     ))}
                   </div>
                   <div className="mt-1 flex items-center justify-between text-xs">
-                    <span className="font-medium">{strength.label}</span>
+                    <span className="font-medium">{t(strength.labelKey)}</span>
                     <span className="text-muted-foreground">
-                      {form.password.length} chars
+                      {t("charsCount", { count: form.password.length })}
                     </span>
                   </div>
 
@@ -317,7 +338,7 @@ export default function RegisterPage() {
                       ) : (
                         <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
-                      At least 8 characters
+                      {t("requireMinLength")}
                     </li>
 
                     <li className="flex items-center gap-1">
@@ -326,7 +347,7 @@ export default function RegisterPage() {
                       ) : (
                         <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
-                      Uppercase letter
+                      {t("requireUppercase")}
                     </li>
 
                     <li className="flex items-center gap-1">
@@ -335,7 +356,7 @@ export default function RegisterPage() {
                       ) : (
                         <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
-                      Number
+                      {t("requireNumber")}
                     </li>
 
                     <li className="flex items-center gap-1">
@@ -344,13 +365,13 @@ export default function RegisterPage() {
                       ) : (
                         <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
-                      Symbol
+                      {t("requireSymbol")}
                     </li>
                   </ul>
 
                   {strength.score < 3 && strength.tips.length > 0 && (
                     <div className="mt-2 text-[11px] text-muted-foreground">
-                      Try: {strength.tips.slice(0, 3).join(" • ")}
+                      {t("tipsPrefix")} {strength.tips.slice(0, 3).map((id) => t(id)).join(" • ")}
                     </div>
                   )}
                 </div>
@@ -358,7 +379,7 @@ export default function RegisterPage() {
 
               {/* Confirm Password */}
               <div className="space-y-2">
-                <Label htmlFor="confirm">Confirm password</Label>
+                <Label htmlFor="confirm">{t("confirmPasswordLabel")}</Label>
                 <div className="flex gap-2">
                   <Input
                     id="confirm"
@@ -388,7 +409,7 @@ export default function RegisterPage() {
                       match ? "text-emerald-600" : "text-destructive"
                     }`}
                   >
-                    {match ? "Passwords match" : "Passwords do not match"}
+                    {match ? t("passwordsMatch") : t("passwordsDoNotMatch")}
                   </p>
                 )}
               </div>
@@ -401,29 +422,33 @@ export default function RegisterPage() {
                   onCheckedChange={(v: any) => setAgree(!!v)}
                 />
                 <label htmlFor="agree" className="text-sm text-muted-foreground">
-                  I agree to the{" "}
+                  {t("agreePrefix")}{" "}
                   <Link href="/terms" className="text-primary hover:underline">
-                    Terms
+                    {tLinks("terms")}
                   </Link>{" "}
-                  and{" "}
+                  {t("agreeAnd")}{" "}
                   <Link href="/privacy" className="text-primary hover:underline">
-                    Privacy Policy
+                    {tLinks("privacy")}
                   </Link>
-                  .
+                  {t("agreeSuffix")}
                 </label>
               </div>
               <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? "Creating…" : "Create account"}
+                {submitting ? t("submitting") : t("submit")}
               </Button>
               {verificationNotice ? (
                 <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
                   {verificationNotice}
                 </p>
               ) : null}
-              {/* Divider */}
+              {/* Divider — reuses the signIn namespace so the
+                  "or continue with" / OAuth button labels translate
+                  consistently across both auth pages. */}
               <div className="relative flex items-center py-2 mt-4">
                 <div className="flex-1 border-t" />
-                <span className="px-2 text-xs text-muted-foreground">or continue with</span>
+                <span className="px-2 text-xs text-muted-foreground">
+                  {tIn("orContinueWith")}
+                </span>
                 <div className="flex-1 border-t" />
               </div>
 
@@ -435,7 +460,9 @@ export default function RegisterPage() {
                   disabled={oauthLoading !== null}
                   className="w-full bg-white text-black border border-gray-300 hover:bg-gray-100"
                 >
-                  {oauthLoading === "google" ? "Redirecting to Google…" : "Continue with Google"}
+                  {oauthLoading === "google"
+                    ? tIn("redirectingToGoogle")
+                    : tIn("continueWithGoogle")}
                 </Button>
 
                 <Button
@@ -444,7 +471,9 @@ export default function RegisterPage() {
                   disabled={oauthLoading !== null}
                   className="w-full bg-[#1877F2] text-white hover:bg-[#166FE5]"
                 >
-                  {oauthLoading === "facebook" ? "Redirecting to Facebook…" : "Continue with Facebook"}
+                  {oauthLoading === "facebook"
+                    ? tIn("redirectingToFacebook")
+                    : tIn("continueWithFacebook")}
                 </Button>
               </div>
 
@@ -454,12 +483,12 @@ export default function RegisterPage() {
 
 
               <p className="text-sm text-center text-muted-foreground">
-                Already have an account?{" "}
+                {t("alreadyHaveAccountPrefix")}{" "}
                 <Link
                   href={`/auth/login?redirect=${encodeURIComponent(redirect)}`}
                   className="text-primary hover:underline"
                 >
-                  Sign in
+                  {t("signInLink")}
                 </Link>
               </p>
             </CardFooter>

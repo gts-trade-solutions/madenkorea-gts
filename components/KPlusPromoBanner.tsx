@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { Truck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +12,7 @@ import {
 import { useCurrency } from "@/lib/contexts/CurrencyContext";
 
 export function KPlusPromoBanner() {
+  const t = useTranslations("kplusBanner");
   const { isINR } = useCurrency();
   // K Plus is an India-only product (free shipping benefits apply
   // only to Razorpay/Indian-pincode flows). Hide it entirely for
@@ -24,7 +26,7 @@ export function KPlusPromoBanner() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/80">
               <Sparkles className="h-3.5 w-3.5" />
-              Membership
+              {t("membershipTag")}
             </div>
 
             <h2 className="mt-4 text-3xl font-bold md:text-4xl">
@@ -32,20 +34,21 @@ export function KPlusPromoBanner() {
             </h2>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/80 md:text-base">
-              Free delivery for {MEMBERSHIP_DURATION_DAYS / 30} months at just ₹
-              {MEMBERSHIP_PRICE}. Skip shipping charges and shop your K-beauty
-              favorites with more value on every order.
+              {t("tagline", {
+                months: MEMBERSHIP_DURATION_DAYS / 30,
+                price: MEMBERSHIP_PRICE,
+              })}
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3 text-sm text-white/85">
               <div className="rounded-full border border-white/15 bg-white/10 px-4 py-2">
-                Free delivery on eligible orders
+                {t("perkFreeDelivery")}
               </div>
               <div className="rounded-full border border-white/15 bg-white/10 px-4 py-2">
-                Instant activation after payment
+                {t("perkInstant")}
               </div>
               <div className="rounded-full border border-white/15 bg-white/10 px-4 py-2">
-                Great for frequent shoppers
+                {t("perkFrequent")}
               </div>
             </div>
           </div>
@@ -57,12 +60,12 @@ export function KPlusPromoBanner() {
               </div>
 
               <p className="mt-4 text-sm uppercase tracking-[0.2em] text-white/60">
-                Limited value plan
+                {t("limitedPlan")}
               </p>
 
               <p className="mt-2 text-4xl font-bold">₹{MEMBERSHIP_PRICE}</p>
               <p className="mt-1 text-sm text-white/70">
-                for {MEMBERSHIP_DURATION_DAYS} days
+                {t("forDays", { days: MEMBERSHIP_DURATION_DAYS })}
               </p>
             </div>
 
@@ -71,11 +74,11 @@ export function KPlusPromoBanner() {
                 asChild
                 className="w-full rounded-full bg-white text-black hover:bg-white/90"
               >
-                <Link href="/k-plus">Join {MEMBERSHIP_PLAN_NAME}</Link>
+                <Link href="/k-plus">{t("joinCta", { plan: MEMBERSHIP_PLAN_NAME })}</Link>
               </Button>
 
               <p className="text-center text-xs text-white/60">
-                Activate once and enjoy shipping-free orders for 3 months.
+                {t("footnote")}
               </p>
             </div>
           </div>

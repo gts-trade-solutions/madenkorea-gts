@@ -2,10 +2,17 @@
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
+import { getTranslations, getLocale } from "next-intl/server";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductFilters } from "@/components/ProductFilters";
 import { BreadcrumbJsonLd } from "@/components/BreadcrumbJsonLd";
+import {
+  mergeTranslation,
+  mergeTranslations,
+  BRAND_TRANSLATABLE_FIELDS,
+  PRODUCT_TRANSLATABLE_FIELDS,
+} from "@/lib/contentTranslations";
 
 export const revalidate = 300; // ISR: refresh every 5 minutes
 
@@ -104,20 +111,29 @@ export default async function BrandPage({
   params: { slug: string };
   searchParams?: { sort?: string; price?: string; in_stock?: string };
 }) {
+  const t = await getTranslations("brandPage");
+  const locale = await getLocale();
   const supabase = supabaseServer();
 
-  // 1) Brand lookup
-  const { data: brand, error: brandErr } = await supabase
+  // 1) Brand lookup with translation embed (description only — brand
+  // names stay in canonical English per the K-beauty branding norm).
+  const { data: brandRow, error: brandErr } = await supabase
     .from("brands")
-    .select("*")
+    .select(`*, brand_translations!left ( locale, description )`)
     .eq("slug", params.slug)
-    .maybeSingle<BrandRow>();
+    .maybeSingle();
 
-  if (brandErr || !brand) {
+  if (brandErr || !brandRow) {
     notFound();
   }
+  const brand = mergeTranslation(
+    brandRow as any,
+    locale,
+    BRAND_TRANSLATABLE_FIELDS,
+    "brand_translations"
+  ) as BrandRow;
 
-  // 2) Fetch this brand's published products
+  // 2) Fetch this brand's published products + translations
   const { data: products, error: prodErr } = await supabase
     .from("products")
     .select(
@@ -127,23 +143,29 @@ export default async function BrandPage({
       compare_at_price, sale_price, sale_starts_at, sale_ends_at,
       short_description, volume_ml, net_weight_g, country_of_origin,
       hero_image_path, created_at, stock_qty, is_featured, is_trending, is_bundle,
-      brands ( name )
+      brands ( name ),
+      product_translations!left ( locale, short_description, description )
     `
     )
     .eq("brand_id", brand.id)
     .eq("is_published", true)
-    .order("created_at", { ascending: false })
-    .returns<ProductRow[]>();
+    .order("created_at", { ascending: false });
 
   if (prodErr) {
     // Optionally log or surface to an error boundary
   }
 
-  // 3) Map hero_image_path -> public URL (same shape as CategoryPage)
-  const items = (products ?? []).map((p) => ({
+  // 3) Merge translations + map hero_image_path -> public URL
+  const translated = mergeTranslations(
+    products ?? [],
+    locale,
+    PRODUCT_TRANSLATABLE_FIELDS,
+    "product_translations"
+  );
+  const items = translated.map((p) => ({
     ...p,
     hero_image_url: storagePublicUrl(p.hero_image_path) ?? undefined,
-  }));
+  })) as ProductRow[];
 
   const selectedSort = searchParams?.sort || "newest";
   const selectedPrice = searchParams?.price || "all";
@@ -185,7 +207,7 @@ export default async function BrandPage({
     <CustomerLayout>
       <BreadcrumbJsonLd
         items={[
-          { name: "Home", url: "/" },
+          { name: t("breadcrumbHome"), url: "/" },
           { name: brand.name, url: `/brand/${brand.slug}` },
         ]}
       />
@@ -228,9 +250,7 @@ export default async function BrandPage({
         {/* Products grid */}
         {sortedItems.length === 0 ? (
           <div className="text-center py-10 sm:py-12">
-            <p className="text-sm sm:text-base text-muted-foreground">
-              No products available from this brand yet.
-            </p>
+            <p className="text-sm sm:text-base text-muted-foreground">{t("empty")}</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-6">

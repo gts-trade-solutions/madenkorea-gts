@@ -9,6 +9,7 @@ Orientation for Claude Code working in this repository. Keep this file lean: dee
 - [REQUIREMENTS.md](REQUIREMENTS.md) — original product requirements. Some sections are dated; trust CODEBASE_REFERENCE over REQUIREMENTS when they conflict.
 - [ANALYTICS.md](ANALYTICS.md) — first-party event log + conversion funnel (admin pages at `/admin/analytics/funnel` and `/admin/analytics/sessions`). Lists every captured event, where it fires from, the props payload, and the privacy/PII posture. Read before adding new events.
 - [SEO.md](SEO.md) — SEO audit + action plan (internal gaps, external off-site actions, sequencing). Living document; update checkboxes as items ship. Last audit: 2026-05-08.
+- [MULTILANGUAGE.md](MULTILANGUAGE.md) — Phase 2 (multi-language) reference: i18n architecture, static + dynamic translation pipelines, admin layer, operational guide, loose ends, next phases. Last updated 2026-05-14.
 - [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) — historical milestone log (2025-10). Mostly historical; do not assume it reflects current state.
 
 When you fix an issue, update both the issue register status and any relevant notes in CODEBASE_REFERENCE.md.

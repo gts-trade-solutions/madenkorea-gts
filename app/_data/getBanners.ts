@@ -6,6 +6,8 @@ import type { Banner } from '@/types/banner';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
+const FALLBACK_COUNTRY = 'IN';
+
 type BannerRow = {
   id: string;
   alt: string;
@@ -16,24 +18,54 @@ type BannerRow = {
   page_scope: string;
   active: boolean;
   updated_at: string | null;
+  country: string;
 };
 
-// Underlying fetcher. Wrapped below with unstable_cache so we can
-// invalidate via the 'banners' tag from the admin save handler.
-async function fetchBanners(scope: string): Promise<Banner[]> {
+// Underlying fetcher. Strict country targeting with India fallback:
+//   1. Query banners where country = <visitor country>
+//   2. If empty AND visitor's country isn't already 'IN', requery
+//      with country = 'IN'.
+//
+// This mirrors the user-stated rule: each banner is authored for a
+// single country, and when there's nothing for the visitor's region
+// the storefront shows the Indian (default-market) set instead of a
+// blank carousel.
+//
+// Wrapped below with unstable_cache so cache invalidation via the
+// 'banners' tag (the admin save handler revalidates) still works.
+// The cache key naturally includes the (scope, country) tuple
+// because unstable_cache hashes its arguments.
+async function fetchBanners(scope: string, country: string): Promise<Banner[]> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  const { data, error } = await supabase
-    .from('home_banners_live')
-    .select(
-      'id, alt, image_path, video_url, link_url, position, page_scope, active, updated_at'
-    )
-    .eq('page_scope', scope)
-    .order('position', { ascending: true });
+  async function query(targetCountry: string) {
+    return supabase
+      .from('home_banners_live')
+      .select(
+        'id, alt, image_path, video_url, link_url, position, page_scope, active, updated_at, country'
+      )
+      .eq('page_scope', scope)
+      .eq('country', targetCountry)
+      .order('position', { ascending: true });
+  }
 
+  let { data, error } = await query(country);
   if (error) {
     console.error('getBanners error:', error);
     return [];
+  }
+
+  // Strict fallback: if the visitor's country has no banners and
+  // they're not already on IN, retry with the default market. A
+  // blank hero on a region that hasn't been customised yet is much
+  // worse UX than seeing the India catalogue.
+  if ((data ?? []).length === 0 && country !== FALLBACK_COUNTRY) {
+    const fallback = await query(FALLBACK_COUNTRY);
+    if (fallback.error) {
+      console.error('getBanners fallback error:', fallback.error);
+      return [];
+    }
+    data = fallback.data;
   }
 
   // Append ?v={updated_at} so the public image URL changes whenever the
@@ -63,7 +95,8 @@ async function fetchBanners(scope: string): Promise<Banner[]> {
 }
 
 export const getBanners = unstable_cache(
-  async (scope: string = 'home') => fetchBanners(scope),
-  ['banners-by-scope'],
+  async (scope: string = 'home', country: string = FALLBACK_COUNTRY) =>
+    fetchBanners(scope, country),
+  ['banners-by-scope-country'],
   { tags: ['banners'] }
 );

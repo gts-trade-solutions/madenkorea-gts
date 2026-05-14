@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { InfluencerVideo } from "@/types/influencer_video";
 import { VideoReel } from "./VideoReel";
 import { VideoPlayerModal, type VideoModalItem } from "./VideoPlayerModal";
 
 export function InstagramVideoCarousel({ videos }: { videos: InfluencerVideo[] }) {
+  const t = useTranslations("home");
   const items = useMemo(
     () => (videos ?? []).filter((v) => !!v.video_url),
     [videos]
@@ -21,17 +23,17 @@ export function InstagramVideoCarousel({ videos }: { videos: InfluencerVideo[] }
         thumbnail_url: v.thumbnail_url ?? null,
         caption: v.caption ?? null,
         externalLink: v.instagram_link ?? null,
-        externalLinkLabel: "View post",
+        externalLinkLabel: t("viewPost"),
         products: v.products ?? [],
       })),
-    [items]
+    [items, t]
   );
 
   return (
     <>
       <VideoReel
-        heading="Creator Videos"
-        subheading="Short clips from influencers and reviewers"
+        heading={t("creatorVideosHeading")}
+        subheading={t("creatorVideosSubheading")}
         items={items.map((v) => ({
           id: v.id,
           video_url: v.video_url,

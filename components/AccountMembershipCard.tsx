@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { MEMBERSHIP_PLAN_NAME } from "@/lib/membership";
 
@@ -21,6 +22,7 @@ type MembershipRow = {
 };
 
 export function AccountMembershipCard() {
+  const t = useTranslations("membershipCard");
   const [loading, setLoading] = useState(true);
   const [membership, setMembership] = useState<MembershipRow | null>(null);
 
@@ -65,37 +67,36 @@ export function AccountMembershipCard() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm uppercase tracking-[0.22em] text-muted-foreground">
-            Membership
+            {t("label")}
           </p>
           <h3 className="mt-2 text-2xl font-bold">{MEMBERSHIP_PLAN_NAME}</h3>
         </div>
       </div>
 
       {loading ? (
-        <p className="mt-4 text-sm text-muted-foreground">
-          Checking membership status...
-        </p>
+        <p className="mt-4 text-sm text-muted-foreground">{t("checking")}</p>
       ) : membership ? (
         <div className="mt-4 rounded-xl border border-green-600 bg-green-50 p-4">
           <p className="text-sm font-medium text-green-700">
-            {membership.plan_name || MEMBERSHIP_PLAN_NAME} is active
+            {t("activeStatus", { plan: membership.plan_name || MEMBERSHIP_PLAN_NAME })}
           </p>
           <p className="mt-2 text-sm text-green-700">
-            Valid until{" "}
-            {new Date(membership.ends_at).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
+            {t("validUntil", {
+              date: new Date(membership.ends_at).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              }),
             })}
           </p>
         </div>
       ) : (
         <div className="mt-4">
           <p className="text-sm text-muted-foreground">
-            You don’t have an active {MEMBERSHIP_PLAN_NAME} membership yet.
+            {t("inactiveBody", { plan: MEMBERSHIP_PLAN_NAME })}
           </p>
           <Button asChild className="mt-4">
-            <Link href="/k-plus">Join {MEMBERSHIP_PLAN_NAME}</Link>
+            <Link href="/k-plus">{t("joinCta", { plan: MEMBERSHIP_PLAN_NAME })}</Link>
           </Button>
         </div>
       )}

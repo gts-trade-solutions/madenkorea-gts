@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +49,7 @@ export function ProductFilters({
   selectedBrand,
   brandOptions,
 }: ProductFiltersProps) {
+  const t = useTranslations("productFilters");
   const [open, setOpen] = useState(false);
 
   const showBrand = selectedBrand !== undefined;
@@ -71,20 +73,20 @@ export function ProductFilters({
         defaultValue={selectedSort}
         className="block h-9 w-full sm:w-auto min-w-0 max-w-full rounded-md border bg-background px-2 text-sm"
       >
-        <option value="newest">Newest</option>
-        <option value="price_asc">Price: Low to high</option>
-        <option value="price_desc">Price: High to low</option>
-        <option value="popular">Most Popular</option>
+        <option value="newest">{t("sortNewest")}</option>
+        <option value="price_asc">{t("sortPriceAsc")}</option>
+        <option value="price_desc">{t("sortPriceDesc")}</option>
+        <option value="popular">{t("sortPopular")}</option>
       </select>
       <select
         name="price"
         defaultValue={selectedPrice}
         className="block h-9 w-full sm:w-auto min-w-0 max-w-full rounded-md border bg-background px-2 text-sm"
       >
-        <option value="all">All prices</option>
-        <option value="0-5000">INR 0 - INR 5,000</option>
-        <option value="5000-10000">INR 5,000 - INR 10,000</option>
-        <option value="10000+">INR 10,000+</option>
+        <option value="all">{t("priceAll")}</option>
+        <option value="0-5000">{t("priceLow")}</option>
+        <option value="5000-10000">{t("priceMid")}</option>
+        <option value="10000+">{t("priceHigh")}</option>
       </select>
       {showBrand && (
         <select
@@ -92,7 +94,7 @@ export function ProductFilters({
           defaultValue={selectedBrand}
           className="block h-9 w-full sm:w-auto min-w-0 max-w-full rounded-md border bg-background px-2 text-sm"
         >
-          <option value="all">All brands</option>
+          <option value="all">{t("brandAll")}</option>
           {(brandOptions ?? []).map((b) => {
             const value = b?.slug || b?.name || "";
             if (!value) return null;
@@ -111,7 +113,7 @@ export function ProductFilters({
           value="1"
           defaultChecked={inStockOnly}
         />
-        In stock only
+        {t("inStockOnly")}
       </label>
     </>
   );
@@ -119,7 +121,7 @@ export function ProductFilters({
   return (
     <div className="flex items-center justify-between gap-3 mb-4 sm:mb-6 min-w-0">
       <p className="text-xs sm:text-sm text-muted-foreground shrink-0">
-        {itemCount} {itemCount === 1 ? "product" : "products"}
+        {t("productCount", { count: itemCount })}
       </p>
 
       {/* MOBILE — single button opens a bottom sheet */}
@@ -133,7 +135,7 @@ export function ProductFilters({
               type="button"
             >
               <SlidersHorizontal className="h-4 w-4" />
-              Filters
+              {t("filtersTitle")}
               {activeCount > 0 && (
                 <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-medium text-primary-foreground">
                   {activeCount}
@@ -143,13 +145,13 @@ export function ProductFilters({
           </SheetTrigger>
           <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto">
             <SheetHeader className="text-left">
-              <SheetTitle>Filter products</SheetTitle>
+              <SheetTitle>{t("filterProducts")}</SheetTitle>
             </SheetHeader>
             <form method="get" className="flex flex-col gap-3 py-4">
               {selects}
               <SheetFooter className="flex flex-col gap-2 sm:flex-col">
                 <Button type="submit" className="w-full">
-                  Apply filters
+                  {t("applyFilters")}
                 </Button>
                 <Button
                   asChild
@@ -158,7 +160,7 @@ export function ProductFilters({
                   className="w-full"
                 >
                   {/* Reset = visit the same page with no params */}
-                  <a href="?">Reset</a>
+                  <a href="?">{t("reset")}</a>
                 </Button>
               </SheetFooter>
             </form>
@@ -173,7 +175,7 @@ export function ProductFilters({
       >
         {selects}
         <Button type="submit" size="sm" className="h-9">
-          Apply
+          {t("apply")}
         </Button>
       </form>
     </div>

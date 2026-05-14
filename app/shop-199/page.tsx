@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations, useLocale } from "next-intl";
 import { supabase } from "@/lib/supabaseClient";
 import { ProductCard } from "@/components/ProductCard";
 import { CustomerLayout } from "@/components/CustomerLayout";
+import {
+  mergeTranslations,
+  PRODUCT_TRANSLATABLE_FIELDS,
+} from "@/lib/contentTranslations";
 
 type Product = {
   id: string;
@@ -28,6 +33,8 @@ type Product = {
 };
 
 export default function Shop199Page() {
+  const t = useTranslations("shop199Page");
+  const locale = useLocale();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -45,7 +52,8 @@ export default function Shop199Page() {
           price, currency, compare_at_price, sale_price, sale_starts_at, sale_ends_at,
           hero_image_path, is_featured, is_trending, is_bundle,
           short_description, volume_ml, net_weight_g, country_of_origin, stock_qty,
-          brands ( name )
+          brands ( name ),
+          product_translations!left ( locale, short_description, description )
         `)
         .eq("is_published", true)
         .lte("sale_price", 199)
@@ -64,7 +72,13 @@ export default function Shop199Page() {
           // need to re-check it here. (Earlier code referenced an undefined
           // `isSaleActive` helper which threw and left the page stuck on the
           // loading skeleton whenever there were matching products.)
-          setProducts((data ?? []) as Product[]);
+          const translated = mergeTranslations(
+            (data ?? []) as any[],
+            locale,
+            PRODUCT_TRANSLATABLE_FIELDS,
+            "product_translations"
+          ) as Product[];
+          setProducts(translated);
         }
         setLoading(false);
       }
@@ -74,15 +88,13 @@ export default function Shop199Page() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale]);
 
   return (
     <CustomerLayout>
     <div className="container mx-auto py-10">
-      <h1 className="mb-2 text-3xl font-bold uppercase">Shop@199</h1>
-      <p className="mb-8 text-sm text-muted-foreground">
-       Grab the glow before the deals are gone
-      </p>
+      <h1 className="mb-2 text-3xl font-bold uppercase">{t("title")}</h1>
+      <p className="mb-8 text-sm text-muted-foreground">{t("subtitle")}</p>
 
       {loading ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -91,7 +103,7 @@ export default function Shop199Page() {
           ))}
         </div>
       ) : products.length === 0 ? (
-        <p className="text-muted-foreground">No deals under ₹199 right now.</p>
+        <p className="text-muted-foreground">{t("empty")}</p>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {products.map((product) => (

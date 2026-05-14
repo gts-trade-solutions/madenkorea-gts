@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { supabase } from "@/lib/supabaseClient";
 import { CustomerLayout } from '@/components/CustomerLayout';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -87,6 +88,7 @@ function formatINR(v?: number | null, currency?: string | null) {
 
 export default function WishlistPage() {
   const router = useRouter();
+  const t = useTranslations('account');
   const { isAuthenticated } = useAuth();
   const { addItem } = useCart();
   const { removeFromWishlist } = useWishlist();
@@ -125,7 +127,7 @@ export default function WishlistPage() {
 
       if (error) {
         console.error(error);
-        toast.error('Failed to load wishlist');
+        toast.error(t('wishlistErrLoad'));
         setRows([]);
         setLoading(false);
         return;
@@ -193,7 +195,7 @@ export default function WishlistPage() {
     const { error } = await supabase.from('wishlist_items').delete().eq('id', id);
 
     if (error) {
-      toast.error('Could not remove from wishlist');
+      toast.error(t('wishlistErrRemove'));
       return;
     }
 
@@ -204,7 +206,7 @@ export default function WishlistPage() {
       return c;
     });
     if (item) removeFromWishlist(item.product_id);
-    toast.success('Removed');
+    toast.success(t('wishlistRemovedToast'));
   };
 
   const onUpdatePriority = async (id: string, priority: number) => {
@@ -214,7 +216,7 @@ export default function WishlistPage() {
       .eq('id', id);
 
     if (error) {
-      toast.error('Could not update priority');
+      toast.error(t('wishlistErrPriority'));
       return;
     }
 
@@ -228,22 +230,22 @@ export default function WishlistPage() {
       .eq('id', id);
 
     if (error) {
-      toast.error('Could not save note');
+      toast.error(t('wishlistErrNote'));
       return;
     }
 
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, note } : r)));
-    toast.success('Note saved');
+    toast.success(t('wishlistNoteSavedToast'));
   };
 
   const addToCartOne = async (productId: string) => {
     try {
       setAddingOneId(productId);
       await addItem(productId, 1);
-      toast.success('Added to cart');
+      toast.success(t('wishlistAddedToCartToast'));
     } catch (error) {
       console.error(error);
-      toast.error('Could not add to cart');
+      toast.error(t('wishlistErrAddCart'));
     } finally {
       setAddingOneId(null);
     }
@@ -261,11 +263,11 @@ export default function WishlistPage() {
         }
       }
 
-      toast.success('Selected items added to cart');
+      toast.success(t('wishlistSelectedAddedToast'));
       router.push('/cart');
     } catch (error) {
       console.error(error);
-      toast.error('Could not add selected items to cart');
+      toast.error(t('wishlistErrAddSelected'));
     } finally {
       setAddingSelected(false);
     }
@@ -282,14 +284,14 @@ export default function WishlistPage() {
     const { error } = await supabase.from('wishlist_items').delete().in('id', ids);
 
     if (error) {
-      toast.error('Could not remove selected');
+      toast.error(t('wishlistErrRemoveSelected'));
       return;
     }
 
     setRows((prev) => prev.filter((r) => !selected.has(r.id)));
     setSelected(new Set());
     selectedProductIds.forEach((productId) => removeFromWishlist(productId));
-    toast.success('Removed selected');
+    toast.success(t('wishlistRemovedSelectedToast'));
   };
 
   if (!isAuthenticated) return null;
@@ -300,16 +302,16 @@ export default function WishlistPage() {
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">
             <Heart className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold">My Wishlist</h1>
+            <h1 className="text-3xl font-bold">{t('wishlistTitle')}</h1>
           </div>
           <p className="text-muted-foreground">
-            {rows.length} {rows.length === 1 ? 'item' : 'items'} saved
+            {t('wishlistSavedCount', { count: rows.length })}
           </p>
         </div>
 
         <Card className="mb-6">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Manage</CardTitle>
+            <CardTitle className="text-base">{t('wishlistManage')}</CardTitle>
           </CardHeader>
 
           <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -320,12 +322,12 @@ export default function WishlistPage() {
                 onCheckedChange={(v: any) => selectAll(!!v)}
               />
               <label htmlFor="selectAll" className="text-sm">
-                Select all
+                {t('wishlistSelectAll')}
               </label>
 
               {selected.size > 0 && (
                 <Badge variant="secondary" className="ml-2">
-                  {selected.size} selected
+                  {t('wishlistSelectedBadge', { count: selected.size })}
                 </Badge>
               )}
             </div>
@@ -335,7 +337,7 @@ export default function WishlistPage() {
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search wishlist"
+                placeholder={t('wishlistSearchPlaceholder')}
               />
             </div>
 
@@ -345,12 +347,12 @@ export default function WishlistPage() {
                 value={sort}
                 onChange={(e) => setSort(e.target.value as any)}
               >
-                <option value="added_desc">Newest added</option>
-                <option value="added_asc">Oldest added</option>
-                <option value="price_asc">Price: Low to high</option>
-                <option value="price_desc">Price: High to low</option>
-                <option value="prio_desc">Priority: High to low</option>
-                <option value="prio_asc">Priority: Low to high</option>
+                <option value="added_desc">{t('wishlistSortNewest')}</option>
+                <option value="added_asc">{t('wishlistSortOldest')}</option>
+                <option value="price_asc">{t('wishlistSortPriceAsc')}</option>
+                <option value="price_desc">{t('wishlistSortPriceDesc')}</option>
+                <option value="prio_desc">{t('wishlistSortPrioHigh')}</option>
+                <option value="prio_asc">{t('wishlistSortPrioLow')}</option>
               </select>
 
               <Button
@@ -359,7 +361,7 @@ export default function WishlistPage() {
                 disabled={selected.size === 0 || addingSelected}
               >
                 <ShoppingCart className="h-4 w-4 mr-2" />
-                {addingSelected ? 'Adding...' : 'Add selected to cart'}
+                {addingSelected ? t('wishlistAdding') : t('wishlistAddSelected')}
               </Button>
 
               <Button
@@ -368,34 +370,30 @@ export default function WishlistPage() {
                 disabled={selected.size === 0}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Remove selected
+                {t('wishlistRemoveSelected')}
               </Button>
             </div>
           </CardContent>
         </Card>
 
         {loading ? (
-          <div className="text-muted-foreground">Loading wishlist...</div>
+          <div className="text-muted-foreground">{t('wishlistLoading')}</div>
         ) : !hasRows ? (
           <Card>
             <CardContent className="py-16 text-center">
               <Heart className="mx-auto h-10 w-10 text-muted-foreground mb-4" />
-              <h2 className="text-xl font-semibold mb-2">Your wishlist is empty</h2>
-              <p className="text-muted-foreground mb-6">
-                Save products you love and come back to them later.
-              </p>
+              <h2 className="text-xl font-semibold mb-2">{t('wishlistEmptyTitle')}</h2>
+              <p className="text-muted-foreground mb-6">{t('wishlistEmptyBody')}</p>
               <Button asChild>
-                <Link href="/products">Browse Products</Link>
+                <Link href="/products">{t('wishlistBrowseCta')}</Link>
               </Button>
             </CardContent>
           </Card>
         ) : hasNoMatches ? (
           <Card>
             <CardContent className="py-16 text-center">
-              <h2 className="text-xl font-semibold mb-2">No matches found</h2>
-              <p className="text-muted-foreground mb-6">
-                Try a different search term or reset filters.
-              </p>
+              <h2 className="text-xl font-semibold mb-2">{t('wishlistNoMatchesTitle')}</h2>
+              <p className="text-muted-foreground mb-6">{t('wishlistNoMatchesBody')}</p>
               <Button
                 variant="outline"
                 onClick={() => {
@@ -403,7 +401,7 @@ export default function WishlistPage() {
                   setSort('added_desc');
                 }}
               >
-                Reset Filters
+                {t('wishlistResetFilters')}
               </Button>
             </CardContent>
           </Card>
@@ -436,7 +434,7 @@ export default function WishlistPage() {
                             />
                           ) : (
                             <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
-                              No image
+                              {t('wishlistNoImage')}
                             </div>
                           )}
                         </Link>
@@ -450,7 +448,7 @@ export default function WishlistPage() {
                           </Link>
 
                           <div className="text-sm text-muted-foreground mt-1">
-                            {product.brands?.name || 'No brand'}
+                            {product.brands?.name || t('wishlistNoBrand')}
                           </div>
 
                           <div className="flex items-center gap-3 mt-3 flex-wrap">
@@ -471,7 +469,7 @@ export default function WishlistPage() {
                               disabled={addingOneId === product.id}
                             >
                               <ShoppingCart className="h-4 w-4 mr-2" />
-                              {addingOneId === product.id ? 'Adding...' : 'Add to Cart'}
+                              {addingOneId === product.id ? t('wishlistAdding') : t('wishlistAddOneBtn')}
                             </Button>
 
                             <Button
@@ -479,7 +477,7 @@ export default function WishlistPage() {
                               onClick={() => onRemove(row.id)}
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
-                              Remove
+                              {t('wishlistRemoveBtn')}
                             </Button>
                           </div>
                         </div>
@@ -490,7 +488,7 @@ export default function WishlistPage() {
                       <div className="lg:w-72 space-y-4">
                         <div>
                           <label className="text-sm font-medium mb-2 block">
-                            Priority
+                            {t('wishlistPriorityLabel')}
                           </label>
                           <div className="flex gap-2">
                             {[1, 2, 3, 4, 5].map((p) => (
@@ -511,11 +509,11 @@ export default function WishlistPage() {
 
                         <div>
                           <label className="text-sm font-medium mb-2 block">
-                            Note
+                            {t('wishlistNoteLabel')}
                           </label>
                           <Input
                             defaultValue={row.note || ''}
-                            placeholder="Add a note"
+                            placeholder={t('wishlistNotePlaceholder')}
                             onBlur={(e) => onSaveNote(row.id, e.target.value)}
                           />
                         </div>

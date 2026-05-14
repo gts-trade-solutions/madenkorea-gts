@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
@@ -14,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Trash2, Upload } from "lucide-react";
 import ProductStoryEditor from "@/components/admin/ProductStoryEditor";
+import { TranslationStatusBadge } from "@/components/admin/TranslationStatusBadge";
 
 /* ───────── helpers ───────── */
 function slugify(s: string) {
@@ -429,6 +431,30 @@ export function AdminProductEditor({ productId }: { productId: string }) {
         // Best-effort — admin still saw the save succeed locally.
       }
 
+      // Auto-translate published products. Fire-and-forget — the
+      // admin shouldn't wait for Anthropic to process 8 locales.
+      // The translate API itself is diff-aware (only changed source
+      // content triggers a re-run, human-edited rows are locked) so
+      // it's safe to call on every save.
+      if (model.is_published) {
+        try {
+          const { data: s } = await supabase.auth.getSession();
+          const token = s?.session?.access_token;
+          void fetch("/api/admin/content-translations/translate", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "content-type": "application/json",
+              ...(token ? { authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ kind: "products", id: model.id }),
+          }).catch(() => {});
+        } catch {
+          // Best-effort — translation can be re-triggered manually
+          // from /admin/translations/products if anything fails.
+        }
+      }
+
       toast.success("Saved");
       if (backAfter) router.push("/admin/products");
     } catch (e: any) {
@@ -466,7 +492,16 @@ export function AdminProductEditor({ productId }: { productId: string }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Admin Edit — {model.name || "Product"}</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle>Admin Edit — {model.name || "Product"}</CardTitle>
+            {/* Translation coverage at-a-glance. Visible only after
+                the row is saved (i.e. has an id). Hidden on unpublished
+                drafts because the auto-translate hook skips them, so
+                the number would always read 0/8 and confuse the admin. */}
+            {model.id && model.is_published && (
+              <TranslationStatusBadge kind="products" id={model.id} />
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="details" className="w-full">

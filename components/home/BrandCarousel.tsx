@@ -3,6 +3,7 @@
 import { useMemo, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { Card } from '../ui/card';
 import {
   Carousel,
@@ -20,13 +21,16 @@ type Brand = {
 };
 
 export function BrandCarousel({ brands }: { brands: Brand[] }) {
-  if (!brands || brands.length === 0) return null;
+  // All hooks must run unconditionally (React rules-of-hooks), so we
+  // call them before any early return.
+  const t = useTranslations('home');
 
   const SLIDES_PER_VIEW_2XL = 7;
   const MIN_FOR_LOOP = SLIDES_PER_VIEW_2XL * 2; // Embla needs >= 2x slidesInView
 
   // Duplicate brands only when needed so loop always works
   const items = useMemo(() => {
+    if (!brands || brands.length === 0) return [];
     if (brands.length >= MIN_FOR_LOOP) return brands.map((b, i) => ({ brand: b, key: `${b.id}-${i}` }));
     const copies = Math.ceil(MIN_FOR_LOOP / brands.length);
     const out: { brand: Brand; key: string }[] = [];
@@ -48,13 +52,13 @@ export function BrandCarousel({ brands }: { brands: Brand[] }) {
     })
   );
 
+  if (!brands || brands.length === 0) return null;
+
   return (
     <section>
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold mb-2">Shop by Brand</h2>
-        <p className="text-muted-foreground">
-          Discover products from your favorite Korean brands
-        </p>
+        <h2 className="text-3xl font-bold mb-2">{t('shopByBrandTitle')}</h2>
+        <p className="text-muted-foreground">{t('shopByBrandDescription')}</p>
       </div>
 
       <Carousel

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { Cookie } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +24,7 @@ import { useCookieConsent } from "@/lib/contexts/CookieConsentContext";
  * the footer to revisit.
  */
 export function CookieConsentBanner() {
+  const t = useTranslations("cookieConsent");
   const {
     consent,
     needsDecision,
@@ -69,7 +71,7 @@ export function CookieConsentBanner() {
       {needsDecision && (
         <div
           role="dialog"
-          aria-label="Cookie consent"
+          aria-label={t("ariaLabel")}
           // Bigger, more visible card. Centered max-width so it doesn't
           // stretch edge-to-edge on huge displays. z-40 sits above page
           // content but below shadcn Dialog (z-50). Mobile safe-area
@@ -83,17 +85,14 @@ export function CookieConsentBanner() {
                 <Cookie className="h-5 w-5" />
               </div>
               <div className="min-w-0">
-                <h3 className="text-base font-semibold mb-1">We use cookies</h3>
+                <h3 className="text-base font-semibold mb-1">{t("title")}</h3>
                 <p className="text-sm text-muted-foreground">
-                  Cookies keep you signed in, remember your cart, and &mdash;
-                  with your permission &mdash; help us understand how the site
-                  is used so we can improve it. You can change your mind any
-                  time.{" "}
+                  {t("body")}{" "}
                   <Link
                     href="/policies/cookies"
                     className="underline text-foreground"
                   >
-                    Read our Cookie Policy
+                    {t("readPolicy")}
                   </Link>
                   .
                 </p>
@@ -108,7 +107,7 @@ export function CookieConsentBanner() {
                 onClick={handleOpenPrefs}
                 className="w-full sm:w-auto"
               >
-                Customize
+                {t("customize")}
               </Button>
               <Button
                 variant="outline"
@@ -119,12 +118,12 @@ export function CookieConsentBanner() {
                 // (necessary cookies stay on regardless). Same action
                 // under the hood: rejectAll() keeps Necessary on and
                 // turns Functional / Analytics / Marketing off.
-                title="Use only essential cookies needed to run the site"
+                title={t("onlyNecessaryTitle")}
               >
-                Only necessary
+                {t("onlyNecessary")}
               </Button>
               <Button onClick={acceptAll} className="w-full sm:w-auto">
-                Accept all
+                {t("acceptAll")}
               </Button>
             </div>
           </div>
@@ -142,37 +141,33 @@ export function CookieConsentBanner() {
           className="max-w-lg max-h-[90dvh] overflow-y-auto"
         >
           <DialogHeader>
-            <DialogTitle>Cookie preferences</DialogTitle>
-            <DialogDescription>
-              Choose which categories of cookies you&apos;re comfortable with.
-              Necessary cookies are always on because the site can&apos;t work
-              without them.
-            </DialogDescription>
+            <DialogTitle>{t("prefsTitle")}</DialogTitle>
+            <DialogDescription>{t("prefsDescription")}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5 py-2">
             <PrefRow
-              title="Necessary"
-              description="Authentication, cart contents, security, and site preferences. Required for the site to function. Always on."
+              title={t("rowNecessary")}
+              description={t("rowNecessaryDesc")}
               checked
               disabled
               onChange={() => {}}
             />
             <PrefRow
-              title="Functional"
-              description="Remember your delivery pincode, theme preference, and recently viewed products. Helps the site feel personal across visits."
+              title={t("rowFunctional")}
+              description={t("rowFunctionalDesc")}
               checked={draft.functional}
               onChange={(v) => setDraft((d) => ({ ...d, functional: v }))}
             />
             <PrefRow
-              title="Analytics"
-              description="Anonymous usage statistics — page views, bounce rate, traffic sources — through Google Analytics and our own first-party event tracking. Helps us improve the site."
+              title={t("rowAnalytics")}
+              description={t("rowAnalyticsDesc")}
               checked={draft.analytics}
               onChange={(v) => setDraft((d) => ({ ...d, analytics: v }))}
             />
             <PrefRow
-              title="Marketing"
-              description="Used by Meta, Instagram, and other ad platforms to measure how marketing campaigns are performing and to show you more relevant ads on those platforms."
+              title={t("rowMarketing")}
+              description={t("rowMarketingDesc")}
               checked={draft.marketing}
               onChange={(v) => setDraft((d) => ({ ...d, marketing: v }))}
             />
@@ -188,26 +183,26 @@ export function CookieConsentBanner() {
               variant="outline"
               onClick={rejectAll}
               className="w-full sm:w-auto"
-              title="Use only essential cookies needed to run the site"
+              title={t("onlyNecessaryTitle")}
             >
-              Only necessary
+              {t("onlyNecessary")}
             </Button>
             <Button
               variant="outline"
               onClick={acceptAll}
               className="w-full sm:w-auto"
             >
-              Accept all
+              {t("acceptAll")}
             </Button>
             <Button onClick={handleSave} className="w-full sm:w-auto">
-              Save my choices
+              {t("save")}
             </Button>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Full list of cookies, durations, and third parties:{" "}
+            {t("fullListPrefix")}{" "}
             <Link href="/policies/cookies" className="underline">
-              Cookie Policy
+              {t("cookiePolicyLink")}
             </Link>
             .
           </p>

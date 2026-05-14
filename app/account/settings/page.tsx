@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { CustomerLayout } from "@/components/CustomerLayout";
@@ -46,6 +47,7 @@ type Address = {
 
 export default function AccountSettingsPage() {
   const router = useRouter();
+  const t = useTranslations("account");
   const { user, isAuthenticated } = useAuth();
 
   const [profile, setProfile] = useState<Profile>({
@@ -122,31 +124,31 @@ export default function AccountSettingsPage() {
       .eq("id", user?.id);
     setSavingProfile(false);
     if (error) {
-      toast.error("Could not update profile");
+      toast.error(t("profileErrUpdate"));
       return;
     }
-    toast.success("Profile updated");
+    toast.success(t("profileUpdatedToast"));
   };
 
   const changePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pw.current) {
-      toast.error("Please enter your current password");
+      toast.error(t("pwErrCurrent"));
       return;
     }
     if (pw.next.length < 8) {
-      toast.error("Password must be at least 8 characters");
+      toast.error(t("pwErrMin"));
       return;
     }
     if (pw.next !== pw.confirm) {
-      toast.error("Passwords do not match");
+      toast.error(t("pwErrMismatch"));
       return;
     }
     setSavingPassword(true);
     const email = user?.email || profile.email || "";
     if (!email) {
       setSavingPassword(false);
-      toast.error("Could not verify your account email");
+      toast.error(t("pwErrVerify"));
       return;
     }
     const { error: reauthError } = await supabase.auth.signInWithPassword({
@@ -155,7 +157,7 @@ export default function AccountSettingsPage() {
     });
     if (reauthError) {
       setSavingPassword(false);
-      toast.error("Current password is incorrect");
+      toast.error(t("pwErrIncorrect"));
       return;
     }
     const { error } = await supabase.auth.updateUser({ password: pw.next });
@@ -164,7 +166,7 @@ export default function AccountSettingsPage() {
       toast.error(error.message || "Could not change password");
       return;
     }
-    toast.success("Password changed");
+    toast.success(t("pwChangedToast"));
     setPw({ current: "", next: "", confirm: "" });
   };
 
@@ -202,7 +204,7 @@ export default function AccountSettingsPage() {
       !addrForm.state ||
       !addrForm.pincode
     ) {
-      toast.error("Please fill required fields");
+      toast.error(t("addrErrRequired"));
       return;
     }
     setSavingAddress(true);
@@ -223,7 +225,7 @@ export default function AccountSettingsPage() {
     }
     if (err) {
       setSavingAddress(false);
-      toast.error("Could not save address");
+      toast.error(t("addrErrSave"));
       return;
     }
 
@@ -236,20 +238,20 @@ export default function AccountSettingsPage() {
     setAddresses(addrs ?? []);
     setAddrDialog(false);
     setSavingAddress(false);
-    toast.success("Address saved");
+    toast.success(t("addrSavedToast"));
   };
 
   const deleteAddress = async (id: string) => {
-    if (!window.confirm("Delete this address?")) return;
+    if (!window.confirm(t("addrConfirmDelete"))) return;
     setDeletingAddressId(id);
     const { error } = await supabase.from("addresses").delete().eq("id", id);
     setDeletingAddressId(null);
     if (error) {
-      toast.error("Could not delete address");
+      toast.error(t("addrErrDelete"));
       return;
     }
     setAddresses((prev) => prev.filter((a) => a.id !== id));
-    toast.success("Address deleted");
+    toast.success(t("addrDeletedToast"));
   };
 
   const makeDefault = async (id: string) => {
@@ -275,14 +277,14 @@ export default function AccountSettingsPage() {
       .order("created_at", { ascending: false });
     setDefaultingAddressId(null);
     setAddresses(addrs ?? []);
-    toast.success("Default address updated");
+    toast.success(t("addrDefaultUpdatedToast"));
   };
 
   return (
     <CustomerLayout>
       <div className="container mx-auto py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Account Settings</h1>
+          <h1 className="text-3xl font-bold mb-2">{t("settingsTitle")}</h1>
           <p className="text-muted-foreground">
             Manage your profile, password, and addresses
           </p>
@@ -290,22 +292,22 @@ export default function AccountSettingsPage() {
 
         <Tabs defaultValue="profile" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-            <TabsTrigger value="password">Password</TabsTrigger>
-            <TabsTrigger value="addresses">Addresses</TabsTrigger>
+            <TabsTrigger value="profile">{t("tabProfile")}</TabsTrigger>
+            <TabsTrigger value="password">{t("tabPassword")}</TabsTrigger>
+            <TabsTrigger value="addresses">{t("tabAddresses")}</TabsTrigger>
           </TabsList>
 
           {/* PROFILE */}
           <TabsContent value="profile">
             <Card>
               <CardHeader>
-                <CardTitle>Profile Information</CardTitle>
-                <CardDescription>Update your personal details</CardDescription>
+                <CardTitle>{t("profileInfoTitle")}</CardTitle>
+                <CardDescription>{t("profileInfoDesc")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={saveProfile} className="space-y-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="name">Full Name</Label>
+                    <Label htmlFor="name">{t("settingsFullName")}</Label>
                     <Input
                       id="name"
                       value={profile.full_name || ""}
@@ -317,7 +319,7 @@ export default function AccountSettingsPage() {
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email">{t("settingsEmail")}</Label>
                     <Input
                       id="email"
                       type="email"
@@ -327,20 +329,20 @@ export default function AccountSettingsPage() {
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="phone">Phone Number</Label>
+                    <Label htmlFor="phone">{t("settingsPhone")}</Label>
                     <Input
                       id="phone"
                       value={profile.phone || ""}
                       onChange={(e) =>
                         setProfile((p) => ({ ...p, phone: e.target.value }))
                       }
-                      placeholder="Enter phone number"
+                      placeholder={t("settingsPhonePlaceholder")}
                     />
                   </div>
 
                   <Separator />
                   <Button type="submit" disabled={savingProfile || loadingProfile}>
-                    {savingProfile ? "Saving..." : "Save Changes"}
+                    {savingProfile ? t("savingChanges") : t("saveChanges")}
                   </Button>
                 </form>
               </CardContent>
@@ -351,13 +353,13 @@ export default function AccountSettingsPage() {
           <TabsContent value="password">
             <Card>
               <CardHeader>
-                <CardTitle>Change Password</CardTitle>
-                <CardDescription>Update your account password</CardDescription>
+                <CardTitle>{t("changePasswordTitle")}</CardTitle>
+                <CardDescription>{t("changePasswordDesc")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={changePassword} className="space-y-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="currentPassword">Current Password</Label>
+                    <Label htmlFor="currentPassword">{t("currentPasswordLabel")}</Label>
                     <div className="flex gap-2">
                       <Input
                         id="currentPassword"
@@ -385,7 +387,7 @@ export default function AccountSettingsPage() {
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="newPassword">New Password</Label>
+                    <Label htmlFor="newPassword">{t("newPasswordLabel")}</Label>
                     <div className="flex gap-2">
                       <Input
                         id="newPassword"
@@ -454,15 +456,15 @@ export default function AccountSettingsPage() {
                         }`}
                       >
                         {pw.next === pw.confirm
-                          ? "Passwords match"
-                          : "Passwords do not match"}
+                          ? t("passwordsMatch")
+                          : t("passwordsDoNotMatch")}
                       </p>
                     )}
                   </div>
 
                   <Separator />
                   <Button type="submit" disabled={savingPassword}>
-                    {savingPassword ? "Changing..." : "Change Password"}
+                    {savingPassword ? t("changingPassword") : t("changePasswordBtn")}
                   </Button>
                 </form>
               </CardContent>
@@ -475,12 +477,12 @@ export default function AccountSettingsPage() {
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <div>
-                    <CardTitle>Saved Addresses</CardTitle>
+                    <CardTitle>{t("savedAddressesTitle")}</CardTitle>
                     <CardDescription>
                       Manage your shipping addresses
                     </CardDescription>
                   </div>
-                  <Button onClick={() => openAdd()}>Add New Address</Button>
+                  <Button onClick={() => openAdd()}>{t("addNewAddressBtn")}</Button>
                 </div>
               </CardHeader>
               <CardContent>
@@ -488,7 +490,7 @@ export default function AccountSettingsPage() {
                   <div className="text-center py-8 text-muted-foreground">
                     No saved addresses yet
                     <div className="mt-4">
-                      <Button onClick={() => openAdd()}>Add Address</Button>
+                      <Button onClick={() => openAdd()}>{t("addAddressBtn")}</Button>
                     </div>
                   </div>
                 ) : (
@@ -517,7 +519,7 @@ export default function AccountSettingsPage() {
                                 onClick={() => makeDefault(a.id)}
                                 disabled={defaultingAddressId === a.id}
                               >
-                                {defaultingAddressId === a.id ? "Setting..." : "Set Default"}
+                                {defaultingAddressId === a.id ? t("addrSetting") : t("addrSetDefaultBtn")}
                               </Button>
                             )}
                             <Button
@@ -533,7 +535,7 @@ export default function AccountSettingsPage() {
                               onClick={() => deleteAddress(a.id)}
                               disabled={deletingAddressId === a.id}
                             >
-                              {deletingAddressId === a.id ? "Deleting..." : "Delete"}
+                              {deletingAddressId === a.id ? t("addrDeleting") : t("addrDelete")}
                             </Button>
                           </div>
                         </CardContent>
@@ -552,12 +554,12 @@ export default function AccountSettingsPage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {editing ? "Edit Address" : "Add Address"}
+              {editing ? t("addrEditTitle") : t("addrAddTitle")}
             </DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
             <div className="grid gap-1">
-              <Label>Address line 1 *</Label>
+              <Label>{t("addrLine1")}</Label>
               <Input
                 value={addrForm.line1}
                 onChange={(e) =>
@@ -566,7 +568,7 @@ export default function AccountSettingsPage() {
               />
             </div>
             <div className="grid gap-1">
-              <Label>Address line 2</Label>
+              <Label>{t("addrLine2")}</Label>
               <Input
                 value={addrForm.line2}
                 onChange={(e) =>
@@ -576,7 +578,7 @@ export default function AccountSettingsPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="grid gap-1">
-                <Label>City *</Label>
+                <Label>{t("addrCity")}</Label>
                 <Input
                   value={addrForm.city}
                   onChange={(e) =>
@@ -585,7 +587,7 @@ export default function AccountSettingsPage() {
                 />
               </div>
               <div className="grid gap-1">
-                <Label>State *</Label>
+                <Label>{t("addrState")}</Label>
                 <Input
                   value={addrForm.state}
                   onChange={(e) =>
@@ -596,7 +598,7 @@ export default function AccountSettingsPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="grid gap-1">
-                <Label>Pincode *</Label>
+                <Label>{t("addrPincode")}</Label>
                 <Input
                   inputMode="numeric"
                   maxLength={6}
@@ -610,7 +612,7 @@ export default function AccountSettingsPage() {
                 />
               </div>
               <div className="grid gap-1">
-                <Label>Country</Label>
+                <Label>{t("addrCountry")}</Label>
                 <Input
                   value={addrForm.country}
                   onChange={(e) =>
@@ -628,7 +630,7 @@ export default function AccountSettingsPage() {
                   setAddrForm((f) => ({ ...f, is_default: e.target.checked }))
                 }
               />
-              <Label htmlFor="default">Set as default</Label>
+              <Label htmlFor="default">{t("addrSetDefault")}</Label>
             </div>
           </div>
           <DialogFooter>
@@ -636,7 +638,7 @@ export default function AccountSettingsPage() {
               Cancel
             </Button>
             <Button onClick={saveAddress} disabled={savingAddress}>
-              {savingAddress ? "Saving..." : editing ? "Update" : "Save"}
+              {savingAddress ? t("savingChanges") : editing ? t("addrUpdate") : t("addrSave")}
             </Button>
           </DialogFooter>
         </DialogContent>

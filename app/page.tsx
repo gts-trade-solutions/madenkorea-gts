@@ -1,4 +1,5 @@
 // app/page.tsx
+import { cookies } from "next/headers";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { HeroBanner } from "@/components/home/HeroBanner";
 import { getBanners } from "./_data/getBanners";
@@ -10,6 +11,12 @@ import { getInfluencerVideos } from "./_data/getInfluencerVideos";
 import { createClient } from "@supabase/supabase-js";
 import HomeVideoCarouselSection from "@/components/home/HomeVideoCarouselSection";
 import CertificationSwiper from "@/components/Cetifications";
+import { getTranslations, getLocale } from "next-intl/server";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+import {
+  mergeTranslations,
+  PRODUCT_TRANSLATABLE_FIELDS,
+} from "@/lib/contentTranslations";
 import type { Metadata } from "next";
 
 const SITE_URL = "https://madenkorea.com";
@@ -124,6 +131,7 @@ type CardProduct = {
 
 async function fetchEditorial(
   kind: "featured" | "trending",
+  locale: string,
   limit = 8
 ): Promise<CardProduct[]> {
   const supabase = supabaseServer();
@@ -138,7 +146,8 @@ async function fetchEditorial(
       is_featured, is_trending, is_bundle, new_until,
       short_description, volume_ml, net_weight_g, country_of_origin,
       hero_image_path, stock_qty,
-      brands ( name )
+      brands ( name ),
+      product_translations!left ( locale, short_description, description )
     `
     )
     .eq("is_published", true);
@@ -161,20 +170,37 @@ async function fetchEditorial(
     return [];
   }
 
-  return (data ?? []).map((p) => ({
+  // Merge translated short_description for the active locale, then
+  // attach the public image URL. Product names stay canonical English.
+  const translated = mergeTranslations(
+    data ?? [],
+    locale,
+    PRODUCT_TRANSLATABLE_FIELDS,
+    "product_translations"
+  );
+  return translated.map((p) => ({
     ...p,
     hero_image_url: storagePublicUrl(p.hero_image_path) ?? undefined,
-  }));
+  })) as CardProduct[];
 }
 
 export default async function Home() {
+  const t = await getTranslations("home");
+  const locale = await getLocale();
+
+  // Active country is whatever the country switcher / geo seeded into
+  // `mik_country` (middleware writes it on first visit). Banners are
+  // scoped per country with a strict India fallback inside getBanners.
+  const cookieCountry = cookies().get("mik_country")?.value;
+  const country = isSupportedCountry(cookieCountry) ? cookieCountry : DEFAULT_COUNTRY;
+
   const [banners, brands, influencerVideos, trendingProducts, featuredProducts] =
     await Promise.all([
-      getBanners("home"),
+      getBanners("home", country),
       getBrandsForCarousel("site-assets"),
       getInfluencerVideos("home", 12),
-      fetchEditorial("trending", 8),
-      fetchEditorial("featured", 8),
+      fetchEditorial("trending", locale, 8),
+      fetchEditorial("featured", locale, 8),
     ]);
 
   // --- JSON-LD (Google schema) for home + featured products ---
@@ -274,8 +300,8 @@ export default async function Home() {
           {/* Trending from Supabase */}
           {trendingProducts.length > 0 && (
             <EditorialSection
-              title="Trending Now"
-              description="The hottest Korean beauty and consumer innovations everyone’s talking about."
+              title={t("trendingTitle")}
+              description={t("trendingDescription")}
               products={trendingProducts}
             />
           )}
@@ -304,8 +330,8 @@ export default async function Home() {
           {/* Featured from Supabase */}
           {featuredProducts.length > 0 && (
             <EditorialSection
-              title="Featured Products"
-              description="Handpicked Korean skincare and lifestyle bestsellers, curated by MadenKorea."
+              title={t("featuredTitle")}
+              description={t("featuredDescription")}
               products={featuredProducts}
             />
           )}

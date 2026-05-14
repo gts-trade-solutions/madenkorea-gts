@@ -1,6 +1,7 @@
 "use client";
 
 import { Heart, ShoppingCart, Check } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,7 @@ export function MobileBuyBar({
   onAddToCart,
   onBuyNow,
 }: Props) {
+  const t = useTranslations("pdp");
   return (
     <div
       className={cn(
@@ -51,7 +53,7 @@ export function MobileBuyBar({
         "px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       )}
       role="region"
-      aria-label="Product actions"
+      aria-label={t("productActionsAria")}
     >
       {isOutOfStock ? (
         // Single muted pill replaces the action row when stock is 0.
@@ -62,7 +64,7 @@ export function MobileBuyBar({
             variant="outline"
             size="icon"
             onClick={onWishlistToggle}
-            aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"}
+            aria-label={inWishlist ? t("removeFromWishlist") : t("addToWishlist")}
             className="shrink-0 h-11 w-11 rounded-full"
           >
             <Heart
@@ -76,7 +78,7 @@ export function MobileBuyBar({
             className="flex-1 inline-flex items-center justify-center h-11 rounded-full border bg-muted text-sm font-medium text-muted-foreground"
             aria-disabled
           >
-            Out of stock
+            {t("outOfStock")}
           </div>
         </div>
       ) : (
@@ -86,7 +88,7 @@ export function MobileBuyBar({
             variant="outline"
             size="icon"
             onClick={onWishlistToggle}
-            aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"}
+            aria-label={inWishlist ? t("removeFromWishlist") : t("addToWishlist")}
             className="shrink-0 h-11 w-11 rounded-full"
           >
             <Heart
@@ -103,7 +105,7 @@ export function MobileBuyBar({
             size="icon"
             onClick={onAddToCart}
             disabled={isAddingToCart}
-            aria-label={inCart ? "Added to cart" : "Add to cart"}
+            aria-label={inCart ? t("addedToCart") : t("addToCart")}
             className="shrink-0 h-11 w-11 rounded-full"
           >
             {inCart ? (
@@ -119,7 +121,7 @@ export function MobileBuyBar({
             disabled={isBuyingNow}
             className="flex-1 h-11 rounded-full text-sm font-semibold"
           >
-            {isBuyingNow ? "Processing..." : "Buy Now"}
+            {isBuyingNow ? t("buyNowProcessing") : t("buyNow")}
           </Button>
         </div>
       )}

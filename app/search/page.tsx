@@ -1,8 +1,13 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { getTranslations, getLocale } from 'next-intl/server';
 import { CustomerLayout } from '@/components/CustomerLayout';
 import { ProductCard } from '@/components/ProductCard';
 import { createClient } from '@supabase/supabase-js';
+import {
+  mergeTranslations,
+  PRODUCT_TRANSLATABLE_FIELDS,
+} from '@/lib/contentTranslations';
 
 // Search-results pages don't add unique value to Google's index — but
 // internal links on them (to actual product pages) are useful, so we
@@ -50,7 +55,7 @@ function storagePublicUrl(path?: string | null) {
   return data.publicUrl ?? null;
 }
 
-async function searchProducts(query: string): Promise<CardProduct[]> {
+async function searchProducts(query: string, locale: string): Promise<CardProduct[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
 
@@ -84,7 +89,8 @@ async function searchProducts(query: string): Promise<CardProduct[]> {
       is_featured, is_trending, is_bundle, new_until,
       short_description, volume_ml, net_weight_g, country_of_origin,
       hero_image_path, stock_qty,
-      brands ( name )
+      brands ( name ),
+      product_translations!left ( locale, short_description, description )
     `)
     .eq('is_published', true)
     .in('id', matchedIds);
@@ -94,7 +100,14 @@ async function searchProducts(query: string): Promise<CardProduct[]> {
     return [];
   }
 
-  const byId = new Map((data ?? []).map((p: any) => [p.id, p]));
+  // Apply translations for the active locale before card-shape mapping.
+  const translated = mergeTranslations(
+    data ?? [],
+    locale,
+    PRODUCT_TRANSLATABLE_FIELDS,
+    'product_translations'
+  );
+  const byId = new Map(translated.map((p: any) => [p.id, p]));
 
   return matchedIds
     .map((id) => byId.get(id))
@@ -119,27 +132,25 @@ export default async function SearchPage({
     redirect('/');
   }
 
-  const searchResults = await searchProducts(trimmedQuery);
+  const locale = await getLocale();
+  const searchResults = await searchProducts(trimmedQuery, locale);
   const hasNoResults = searchResults.length === 0;
+  const t = await getTranslations('searchPage');
 
   return (
     <CustomerLayout>
       <div className="container mx-auto py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Search Results</h1>
+          <h1 className="text-3xl font-bold mb-2">{t('title')}</h1>
           <p className="text-muted-foreground">
-            {hasNoResults
-              ? `0 results for "${trimmedQuery}"`
-              : `${searchResults.length} results for "${trimmedQuery}"`}
+            {t('resultsFor', { q: trimmedQuery })}
           </p>
         </div>
 
         {hasNoResults ? (
           <div className="text-center py-16">
-            <h2 className="text-2xl font-semibold mb-2">Product not found</h2>
-            <p className="text-muted-foreground">
-              No products found for "{trimmedQuery}". Try a different search term.
-            </p>
+            <h2 className="text-2xl font-semibold mb-2">{t('noResults', { q: trimmedQuery })}</h2>
+            <p className="text-muted-foreground">{t('tryAgain')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

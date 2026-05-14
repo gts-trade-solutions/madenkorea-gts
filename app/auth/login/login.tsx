@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { supabase } from "@/lib/supabaseClient";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,8 @@ export default function LoginPage() {
   const router = useRouter();
   const params = useSearchParams();
   const redirect = params.get("redirect") || "/account";
+  const t = useTranslations("auth.signIn");
+  const tc = useTranslations("common");
 const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -40,14 +43,10 @@ const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | null>(n
 
   const mapAuthError = (message?: string) => {
     const m = (message || "").toLowerCase();
-    if (m.includes("invalid login credentials")) {
-      return "We couldn't sign you in with that email and password. Check your details or reset your password.";
-    }
-    if (m.includes("email not confirmed")) {
-      return "Your email address is not confirmed yet. Please verify your email before signing in.";
-    }
-    if (m.includes("too many requests")) return "Too many attempts. Please wait a moment and try again.";
-    return "Unable to sign in right now. Please try again.";
+    if (m.includes("invalid login credentials")) return t("errInvalidCredentials");
+    if (m.includes("email not confirmed")) return t("errEmailNotConfirmed");
+    if (m.includes("too many requests")) return t("errTooManyRequests");
+    return t("errGeneric");
   };
 
   // Attach browser session to server cookies so /api routes & RSC see auth
@@ -71,7 +70,7 @@ const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | null>(n
     const password = form.password;
 
     if (!email || !password) {
-      toast.error("Please enter email and password");
+      toast.error(t("missingFields"));
       return;
     }
 
@@ -98,7 +97,7 @@ const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | null>(n
     }).catch(() => {});
 
     setSubmitting(false);
-    toast.success("Signed in");
+    toast.success(t("signedIn"));
     router.replace(redirect);
   };
 
@@ -141,8 +140,8 @@ const handleFacebookLogin = () => loginWithProvider("facebook");
       <CustomerLayout>
         <div className="container mx-auto py-16">
           <Card className="max-w-md mx-auto">
-            <CardHeader><CardTitle>Sign in</CardTitle></CardHeader>
-            <CardContent><p className="text-muted-foreground">Loading…</p></CardContent>
+            <CardHeader><CardTitle>{t("title")}</CardTitle></CardHeader>
+            <CardContent><p className="text-muted-foreground">{tc("loading")}</p></CardContent>
           </Card>
         </div>
       </CustomerLayout>
@@ -154,14 +153,14 @@ const handleFacebookLogin = () => loginWithProvider("facebook");
       <div className="container mx-auto py-16">
         <Card className="max-w-md mx-auto">
           <CardHeader>
-            <CardTitle className="text-2xl">Sign in</CardTitle>
-            <CardDescription>Use your email and password</CardDescription>
+            <CardTitle className="text-2xl">{t("title")}</CardTitle>
+            <CardDescription>{t("description")}</CardDescription>
           </CardHeader>
 
           <form onSubmit={onSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t("emailLabel")}</Label>
                 <Input
                   id="email"
                   name="email"
@@ -174,7 +173,7 @@ const handleFacebookLogin = () => loginWithProvider("facebook");
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t("passwordLabel")}</Label>
                 <div className="flex gap-2">
                   <Input
                     id="password"
@@ -190,26 +189,26 @@ const handleFacebookLogin = () => loginWithProvider("facebook");
                     variant="secondary"
                     className="shrink-0"
                     onClick={() => setShowPassword((s) => !s)}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    title={showPassword ? "Hide password" : "Show password"}
+                    aria-label={showPassword ? t("hidePassword") : t("showPassword")}
+                    title={showPassword ? t("hidePassword") : t("showPassword")}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
                 <div className="text-right">
                   <Link href="/auth/forgot" className="text-sm text-primary hover:underline">
-                    Forgot password?
+                    {t("forgotPassword")}
                   </Link>
                 </div>
               </div>
                <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? "Signing in…" : "Sign in"}
+                {submitting ? t("submitting") : t("submit")}
               </Button>
                 {/* Divider */}
   <div className="relative flex items-center py-2 mt-4">
   <div className="flex-1 border-t" />
   <span className="px-2 text-xs text-muted-foreground">
-    or continue with
+    {t("orContinueWith")}
   </span>
   <div className="flex-1 border-t" />
 </div>
@@ -223,7 +222,7 @@ const handleFacebookLogin = () => loginWithProvider("facebook");
     disabled={oauthLoading !== null}
     className="w-full bg-white text-black border border-gray-300 hover:bg-gray-100"
   >
-    {oauthLoading === "google" ? "Redirecting to Google…" : "Continue with Google"}
+    {oauthLoading === "google" ? t("redirectingToGoogle") : t("continueWithGoogle")}
   </Button>
 
   {/* Facebook Button */}
@@ -233,7 +232,7 @@ const handleFacebookLogin = () => loginWithProvider("facebook");
     disabled={oauthLoading !== null}
     className="w-full bg-[#1877F2] text-white hover:bg-[#166FE5]"
   >
-    {oauthLoading === "facebook" ? "Redirecting to Facebook…" : "Continue with Facebook"}
+    {oauthLoading === "facebook" ? t("redirectingToFacebook") : t("continueWithFacebook")}
   </Button>
 
 </div>
@@ -243,12 +242,12 @@ const handleFacebookLogin = () => loginWithProvider("facebook");
              
 
               <p className="text-sm text-center text-muted-foreground">
-                New here?{" "}
+                {t("newHerePrefix")}{" "}
                 <Link
                   href={`/auth/register?redirect=${encodeURIComponent(redirect)}`}
                   className="text-primary hover:underline"
                 >
-                  Create an account
+                  {t("createAccount")}
                 </Link>
               </p>
             </CardFooter>

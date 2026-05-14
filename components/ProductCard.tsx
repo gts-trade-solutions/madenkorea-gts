@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { createClient } from "@supabase/supabase-js";
 import { Check, Heart, ShoppingCart, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -104,6 +105,7 @@ function tinyDate(d?: string | null) {
 
 export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
   const router = useRouter();
+  const t = useTranslations("pcard");
   const { addItem } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
   const { formatPrice, isINR } = useCurrency();
@@ -198,11 +200,11 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
       setIsAddingToCart(true);
       await addItem(product.id, 1);
       setJustAdded(true);
-      toast.success("Added to cart", { description: product.name });
+      toast.success(t("addToCartToast"), { description: product.name });
       setTimeout(() => setJustAdded(false), 1500);
     } catch (error) {
       console.error("Add to cart error:", error);
-      toast.error("Could not add item to cart right now.");
+      toast.error(t("addToCartError"));
     } finally {
       setIsAddingToCart(false);
     }
@@ -226,7 +228,7 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
       router.push("/checkout");
     } catch (error) {
       console.error("Buy now error:", error);
-      toast.error("Unable to proceed to checkout right now.");
+      toast.error(t("buyNowError"));
     } finally {
       setIsBuyingNow(false);
     }
@@ -235,7 +237,7 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
   const onWishlistToggle = (e: React.MouseEvent) => {
     e.preventDefault();
     toggleWishlist(product.id);
-    toast.success(inWishlist ? "Removed from wishlist" : "Added to wishlist");
+    toast.success(inWishlist ? t("removedFromWishlistToast") : t("addedToWishlistToast"));
   };
 
   return (
@@ -271,13 +273,13 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
             // marketing flag — users browsing a grid need to know "this is a set,
             // not a single item" at a glance.
             const mobileMarketingBadge = product.is_bundle
-              ? "Bundle"
+              ? t("badgeBundle")
               : isNew
-              ? "New"
+              ? t("badgeNew")
               : product.is_trending
-                ? "Trending"
+                ? t("badgeTrending")
                 : product.is_featured
-                  ? "Featured"
+                  ? t("badgeFeatured")
                   : null;
             return (
               <div className="absolute top-2 left-2 flex flex-col items-start gap-1">
@@ -286,7 +288,7 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
                     variant="destructive"
                     className="px-1.5 py-0 text-[10px] sm:px-2.5 sm:py-0.5 sm:text-xs"
                   >
-                    {discountPct}% OFF
+                    {t("discountBadge", { pct: discountPct })}
                   </Badge>
                 )}
                 {isOut && (
@@ -294,7 +296,7 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
                     variant="secondary"
                     className="px-1.5 py-0 text-[10px] sm:px-2.5 sm:py-0.5 sm:text-xs"
                   >
-                    Out of stock
+                    {t("badgeOutOfStock")}
                   </Badge>
                 )}
                 {!isOut && isLow && (
@@ -302,7 +304,7 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
                     variant="outline"
                     className="px-1.5 py-0 text-[10px] sm:px-2.5 sm:py-0.5 sm:text-xs"
                   >
-                    Low stock
+                    {t("badgeLowStock")}
                   </Badge>
                 )}
 
@@ -315,16 +317,16 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
 
                 {/* Tablet+: full marketing badge stack */}
                 {product.is_bundle && (
-                  <Badge className="hidden sm:inline-flex">Bundle</Badge>
+                  <Badge className="hidden sm:inline-flex">{t("badgeBundle")}</Badge>
                 )}
                 {product.is_featured && (
-                  <Badge className="hidden sm:inline-flex">Featured</Badge>
+                  <Badge className="hidden sm:inline-flex">{t("badgeFeatured")}</Badge>
                 )}
                 {product.is_trending && (
-                  <Badge className="hidden sm:inline-flex">Trending</Badge>
+                  <Badge className="hidden sm:inline-flex">{t("badgeTrending")}</Badge>
                 )}
                 {isNew && (
-                  <Badge className="hidden sm:inline-flex">New</Badge>
+                  <Badge className="hidden sm:inline-flex">{t("badgeNew")}</Badge>
                 )}
               </div>
             );
@@ -334,7 +336,7 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
             <button
               type="button"
               onClick={onWishlistToggle}
-              aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"}
+              aria-label={inWishlist ? t("removeFromWishlist") : t("addToWishlist")}
               className="inline-flex items-center justify-center rounded-full h-8 w-8 sm:h-10 sm:w-10 bg-background/70 backdrop-blur-sm shadow-sm hover:bg-background sm:bg-secondary sm:hover:bg-secondary/80 transition-colors"
             >
               <Heart
@@ -350,7 +352,7 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
               size="icon"
               onClick={onAddToCart}
               disabled={!!isOut || isAddingToCart}
-              aria-label="Add to cart"
+              aria-label={t("addToCart")}
             >
               {justAdded ? (
                 <Check className="h-4 w-4" />
@@ -427,7 +429,7 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
 
             {discountPct > 0 && saveAmount > 0 && (
               <span className="text-[11px] font-medium rounded px-1.5 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
-                Save {formatPrice(saveAmount)} ({discountPct}% OFF)
+                {t("saveLabel", { amount: formatPrice(saveAmount), pct: discountPct })}
               </span>
             )}
 
@@ -449,10 +451,10 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
               disabled={!!isOut || isBuyingNow}
             >
               {isBuyingNow ? (
-                "Processing..."
+                t("processing")
               ) : (
                 <>
-                  <ShoppingCart className="mr-2 h-4 w-4" /> Buy now
+                  <ShoppingCart className="mr-2 h-4 w-4" /> {t("buyNow")}
                 </>
               )}
             </Button>

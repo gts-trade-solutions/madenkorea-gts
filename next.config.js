@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 // next.config.js
+const createNextIntlPlugin = require("next-intl/plugin");
+// Tells next-intl where to find getRequestConfig — our message loader.
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 let supabaseHost = "";
 try {
@@ -56,4 +60,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = withNextIntl(nextConfig);

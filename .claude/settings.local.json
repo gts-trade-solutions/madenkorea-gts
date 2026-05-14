@@ -29,7 +29,19 @@
       "Bash(Select-Object Name)",
       "Bash(curl -fsSL -o \"public/razorpay-logo.svg\" \"https://razorpay.com/assets/razorpay-logo.svg\")",
       "Bash(git stash *)",
-      "Bash(grep -vE \"^$\")"
+      "Bash(grep -vE \"^$\")",
+      "Bash(npm install *)",
+      "Bash(node -e \"console.log\\(require\\('./package.json'\\).dependencies['next-intl']\\)\")",
+      "Bash(awk -F= '{print $1}')",
+      "Bash(rm -f /tmp/anthropic_probe.json && echo \"cleaned\")",
+      "Bash(grep -oE '\"[A-Z][a-zA-Z][^\"]{2,50}\"' components/Header.tsx)",
+      "Bash(node scripts/translate-messages.mjs)",
+      "Bash(node -e \"for \\(const l of ['en-IN','en','pl','vi','fr','de','es','it','pt']\\) { const j = require\\('./messages/' + l + '.json'\\); console.log\\(l, 'top-level keys:', Object.keys\\(j\\).join\\(','\\)\\); }\")",
+      "Bash(node -e \"for \\(const l of ['en-IN','pl','vi','fr','de','es','it','pt']\\) { const j = require\\('./messages/' + l + '.json'\\); console.log\\(l.padEnd\\(6\\), '|', j.header.cart, '|', j.auth.signIn.submit, '|', j.footer.helpHeading\\); }\")",
+      "Bash(node scripts/translate-messages.mjs --force)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
     ]
   }
 }

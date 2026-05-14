@@ -1,10 +1,17 @@
 ﻿// app/c/[slug]/page.tsx
 import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import { getTranslations, getLocale } from "next-intl/server";
 import { CustomerLayout } from "@/components/CustomerLayout";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductFilters } from "@/components/ProductFilters";
 import { BreadcrumbJsonLd } from "@/components/BreadcrumbJsonLd";
+import {
+  mergeTranslation,
+  mergeTranslations,
+  CATEGORY_TRANSLATABLE_FIELDS,
+  PRODUCT_TRANSLATABLE_FIELDS,
+} from "@/lib/contentTranslations";
 
 export const revalidate = 300; // ISR: refresh every 5 minutes
 
@@ -105,20 +112,33 @@ export default async function CategoryPage({
     brand?: string;
   };
 }) {
+  const t = await getTranslations("categoryPage");
+  const locale = await getLocale();
   const supabase = supabaseServer();
 
-  // 1) Category lookup
-  const { data: category, error: catErr } = await supabase
+  // 1) Category lookup — joining translations for the active locale.
+  // PostgREST's !left embed gives us all rows; mergeTranslation picks
+  // the matching locale (or none) and substitutes translatable fields.
+  const { data: categoryRow, error: catErr } = await supabase
     .from("categories")
-    .select("*")
+    .select(
+      `*, category_translations!left ( locale, name, description )`
+    )
     .eq("slug", params.slug)
-    .maybeSingle<CategoryRow>();
+    .maybeSingle();
 
-  if (catErr || !category) {
+  if (catErr || !categoryRow) {
     notFound();
   }
 
-  // 2) Products in this category (published only)
+  const category = mergeTranslation(
+    categoryRow as any,
+    locale,
+    CATEGORY_TRANSLATABLE_FIELDS,
+    "category_translations"
+  ) as CategoryRow;
+
+  // 2) Products in this category (published only) + their translations
   const { data: products } = await supabase
     .from("products")
     .select(
@@ -128,18 +148,24 @@ export default async function CategoryPage({
       compare_at_price, sale_price, sale_starts_at, sale_ends_at,
       short_description, volume_ml, net_weight_g, country_of_origin,
       hero_image_path, created_at, stock_qty, is_featured, is_trending, is_bundle,
-      brands ( name, slug )
+      brands ( name, slug ),
+      product_translations!left ( locale, short_description, description )
     `
     )
     .eq("category_id", category.id)
-    .eq("is_published", true)
-    .returns<ProductRow[]>();
+    .eq("is_published", true);
 
-  // 3) Compute public URLs on the server (faster cards)
-  const items = (products ?? []).map((p) => ({
+  // 3) Merge translations + compute public URLs on the server (faster cards)
+  const translated = mergeTranslations(
+    products ?? [],
+    locale,
+    PRODUCT_TRANSLATABLE_FIELDS,
+    "product_translations"
+  );
+  const items = translated.map((p) => ({
     ...p,
     hero_image_url: storagePublicUrl(p.hero_image_path) ?? undefined,
-  }));
+  })) as ProductRow[];
 
   const selectedSort = searchParams?.sort || "newest";
   const selectedPrice = searchParams?.price || "all";
@@ -192,7 +218,7 @@ export default async function CategoryPage({
     <CustomerLayout>
       <BreadcrumbJsonLd
         items={[
-          { name: "Home", url: "/" },
+          { name: t("breadcrumbHome"), url: "/" },
           { name: category.name, url: `/c/${category.slug}` },
         ]}
       />
@@ -224,9 +250,7 @@ export default async function CategoryPage({
 
         {sortedItems.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">
-              No products found in this category.
-            </p>
+            <p className="text-muted-foreground">{t("empty")}</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">

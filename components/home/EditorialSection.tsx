@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "../ProductCard";
@@ -39,6 +40,7 @@ export function EditorialSection({
   description,
   products,
 }: EditorialSectionProps) {
+  const t = useTranslations("home");
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(false);
@@ -130,7 +132,7 @@ export function EditorialSection({
             variant="secondary"
             size="icon"
             onClick={() => scrollByPage("prev")}
-            aria-label="Scroll left"
+            aria-label={t("scrollLeft")}
             className="hidden md:inline-flex absolute left-2 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full bg-white/95 shadow hover:bg-white"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -142,7 +144,7 @@ export function EditorialSection({
             variant="secondary"
             size="icon"
             onClick={() => scrollByPage("next")}
-            aria-label="Scroll right"
+            aria-label={t("scrollRight")}
             className="hidden md:inline-flex absolute right-2 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full bg-white/95 shadow hover:bg-white"
           >
             <ChevronRight className="h-5 w-5" />

@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { AdminBackBar } from "@/components/admin/AdminBackBar";
+import {
+  SUPPORTED_COUNTRIES,
+  COUNTRY_PROFILES,
+  DEFAULT_COUNTRY,
+  isSupportedCountry,
+} from "@/lib/countries";
 
 type Row = {
   id: string;
@@ -15,6 +21,7 @@ type Row = {
   active: boolean;
   starts_at: string | null;
   ends_at: string | null;
+  country: string;
   created_at: string;
   updated_at: string;
 };
@@ -24,6 +31,10 @@ type Mode = "create" | "edit";
 export default function BannersAdminPage() {
   const [banners, setBanners] = useState<Row[]>([]);
   const [scope, setScope] = useState("home");
+  // Country filter for the list. "all" shows every country's banners for
+  // the active page scope; otherwise the list narrows to the chosen
+  // country (matches the storefront-side per-country selection).
+  const [countryFilter, setCountryFilter] = useState<string>("all");
   const [loading, setLoading] = useState(false);
 
   // modal state
@@ -39,6 +50,7 @@ export default function BannersAdminPage() {
   const [active, setActive] = useState(true);
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
+  const [country, setCountry] = useState<string>(DEFAULT_COUNTRY);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [msg, setMsg] = useState<string>("");
@@ -64,12 +76,19 @@ export default function BannersAdminPage() {
 
   async function fetchList() {
     setLoading(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("home_banners")
       .select(
-        "id, alt, image_path, video_url, link_url, page_scope, position, active, starts_at, ends_at, created_at, updated_at"
+        "id, alt, image_path, video_url, link_url, page_scope, position, active, starts_at, ends_at, country, created_at, updated_at"
       )
-      .eq("page_scope", scope)
+      .eq("page_scope", scope);
+
+    if (countryFilter !== "all") {
+      query = query.eq("country", countryFilter);
+    }
+
+    const { data, error } = await query
+      .order("country", { ascending: true })
       .order("position", { ascending: true });
 
     if (error) alert(error.message);
@@ -80,14 +99,28 @@ export default function BannersAdminPage() {
   useEffect(() => {
     fetchList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope]);
+  }, [scope, countryFilter]);
 
   function resetForm() {
     setAlt("");
     setLinkUrl("");
     setPageScope(scope);
+    // Pre-fill the country from the active list filter so creating a new
+    // banner while filtering by, say, "UK" doesn't silently default back
+    // to India. Falls back to the canonical default when filter is "all".
+    const seedCountry =
+      countryFilter !== "all" && isSupportedCountry(countryFilter)
+        ? countryFilter
+        : DEFAULT_COUNTRY;
+    setCountry(seedCountry);
+    // Position auto-increment was using the last banner across all
+    // countries; scope it to the country we're about to assign so
+    // numbering stays sane per-country.
+    const sameCountry = banners.filter((b) => b.country === seedCountry);
     setPosition(
-      banners.length ? (banners[banners.length - 1]?.position ?? 0) + 10 : 10
+      sameCountry.length
+        ? (sameCountry[sameCountry.length - 1]?.position ?? 0) + 10
+        : 10
     );
     setActive(true);
     setStartsAt("");
@@ -114,6 +147,7 @@ export default function BannersAdminPage() {
     setActive(r.active);
     setStartsAt(isoToLocal(r.starts_at));
     setEndsAt(isoToLocal(r.ends_at));
+    setCountry(isSupportedCountry(r.country) ? r.country : DEFAULT_COUNTRY);
     setImageFile(null);
     setVideoFile(null);
     setMsg("");
@@ -225,6 +259,7 @@ export default function BannersAdminPage() {
           active,
           starts_at: localToIso(startsAt),
           ends_at: localToIso(endsAt),
+          country,
           image_path: imagePath,
           video_url: videoUrl,
         });
@@ -242,6 +277,7 @@ export default function BannersAdminPage() {
           active,
           starts_at: localToIso(startsAt),
           ends_at: localToIso(endsAt),
+          country,
         };
         const { error } = await supabase
           .from("home_banners")
@@ -288,15 +324,32 @@ export default function BannersAdminPage() {
     <>
     <AdminBackBar title="Banners" to="/admin/cms" />
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <h1 className="text-2xl font-semibold">Banner Management</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="text-xs text-gray-500">Scope</label>
           <select
             value={scope}
             onChange={(e) => setScope(e.target.value)}
             className="border rounded px-2 py-1"
           >
             <option value="home">home</option>
+          </select>
+          <label className="text-xs text-gray-500 ml-2">Country</label>
+          <select
+            value={countryFilter}
+            onChange={(e) => setCountryFilter(e.target.value)}
+            className="border rounded px-2 py-1"
+          >
+            <option value="all">All countries</option>
+            {SUPPORTED_COUNTRIES.map((c) => {
+              const p = COUNTRY_PROFILES[c];
+              return (
+                <option key={c} value={c}>
+                  {p.flag} {p.name} ({c})
+                </option>
+              );
+            })}
           </select>
           <button
             onClick={openCreate}
@@ -307,6 +360,12 @@ export default function BannersAdminPage() {
         </div>
       </div>
 
+      <p className="text-xs text-gray-500 mb-3">
+        Banners are scoped per country. Visitors see banners authored for
+        their country; if none exist, the storefront falls back to India
+        ({DEFAULT_COUNTRY}) banners.
+      </p>
+
       {/* List */}
       <div className="rounded-xl border overflow-hidden">
         <table className="w-full text-sm">
@@ -314,6 +373,7 @@ export default function BannersAdminPage() {
             <tr>
               <th className="text-left px-3 py-2">Preview</th>
               <th className="text-left px-3 py-2">Alt</th>
+              <th className="text-left px-3 py-2">Country</th>
               <th className="text-left px-3 py-2">Scope</th>
               <th className="text-left px-3 py-2">Position</th>
               <th className="text-left px-3 py-2">Active</th>
@@ -323,14 +383,14 @@ export default function BannersAdminPage() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-gray-500">
+                <td colSpan={7} className="px-3 py-6 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             )}
             {!loading && list.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-gray-500">
+                <td colSpan={7} className="px-3 py-6 text-center text-gray-500">
                   No banners yet.
                 </td>
               </tr>
@@ -362,6 +422,18 @@ export default function BannersAdminPage() {
                     </div>
                   </td>
                   <td className="px-3 py-2">{r.alt}</td>
+                  <td className="px-3 py-2">
+                    {(() => {
+                      const p = COUNTRY_PROFILES[r.country];
+                      return p ? (
+                        <span title={p.name}>
+                          {p.flag} {r.country}
+                        </span>
+                      ) : (
+                        <span className="text-gray-500">{r.country || "—"}</span>
+                      );
+                    })()}
+                  </td>
                   <td className="px-3 py-2">{r.page_scope}</td>
                   <td className="px-3 py-2">{r.position}</td>
                   <td className="px-3 py-2">
@@ -459,6 +531,30 @@ export default function BannersAdminPage() {
                   </select>
                 </label>
                 <label className="text-sm">
+                  Country
+                  <select
+                    className="mt-1 w-full border rounded px-2 py-1"
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                  >
+                    {SUPPORTED_COUNTRIES.map((c) => {
+                      const p = COUNTRY_PROFILES[c];
+                      return (
+                        <option key={c} value={c}>
+                          {p.flag} {p.name} ({c})
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <span className="text-xs text-gray-500">
+                    Visitors from this country see this banner. Other
+                    countries fall back to {DEFAULT_COUNTRY}.
+                  </span>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-sm">
                   Position
                   <input
                     type="number"
@@ -466,6 +562,14 @@ export default function BannersAdminPage() {
                     value={position}
                     onChange={(e) => setPosition(Number(e.target.value) || 0)}
                   />
+                </label>
+                <label className="inline-flex items-end gap-2 text-sm pb-1.5">
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={(e) => setActive(e.target.checked)}
+                  />
+                  Active
                 </label>
               </div>
 
@@ -515,15 +619,6 @@ export default function BannersAdminPage() {
                 <span className="text-xs text-gray-500">
                   We save its <em>public</em> URL to <code>video_url</code>.
                 </span>
-              </label>
-
-              <label className="inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={active}
-                  onChange={(e) => setActive(e.target.checked)}
-                />
-                Active
               </label>
 
               {msg && <div className="text-sm text-red-600">{msg}</div>}

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "../ui/button";
 import type { Banner } from "@/types";
@@ -12,6 +13,7 @@ interface HeroBannerProps {
 }
 
 export function HeroBanner({ banners }: HeroBannerProps) {
+  const t = useTranslations("home");
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
@@ -94,7 +96,7 @@ export function HeroBanner({ banners }: HeroBannerProps) {
             loop
             autoPlay={isActive}
             controls={false}
-            aria-label={banner.alt || "Promotional video"}
+            aria-label={banner.alt || t("promoVideoAlt")}
           />
         ) : (
           <Image
@@ -151,7 +153,7 @@ export function HeroBanner({ banners }: HeroBannerProps) {
             size="icon"
             className="hidden md:inline-flex absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background/90"
             onClick={goToPrevious}
-            aria-label="Previous banner"
+            aria-label={t("prevBanner")}
           >
             <ChevronLeft className="h-6 w-6" />
           </Button>
@@ -161,7 +163,7 @@ export function HeroBanner({ banners }: HeroBannerProps) {
             size="icon"
             className="hidden md:inline-flex absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background/90"
             onClick={goToNext}
-            aria-label="Next banner"
+            aria-label={t("nextBanner")}
           >
             <ChevronRight className="h-6 w-6" />
           </Button>

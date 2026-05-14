@@ -5,7 +5,12 @@ import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useTranslations, useLocale } from "next-intl";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  mergeTranslation,
+  PRODUCT_TRANSLATABLE_FIELDS,
+} from "@/lib/contentTranslations";
 
 import {
   Heart,
@@ -283,6 +288,7 @@ async function currentUserDisplay() {
   const avatar = (user?.user_metadata as any)?.avatar_url as string | undefined;
   const email = user?.email ?? null;
   return {
+    // Snapshot stored to DB — keep stable English label (data, not UI).
     display_name: full?.trim() || maskEmail(email) || "Verified Buyer",
     avatar_url: avatar || null,
   };
@@ -326,6 +332,8 @@ type ProductPageProps = {
 export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {}) {
   const router = useRouter();
   const params = useParams();
+  const t = useTranslations("pdp");
+  const locale = useLocale();
   const slug = (params?.slug as string) || (params?.handle as string);
   const {
     addItem,
@@ -396,7 +404,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
     () => (typeof window !== "undefined" ? window.location.href : ""),
     [slug]
   );
-  const shareTitle = product?.name ?? "Check this out";
+  const shareTitle = product?.name ?? t("defaultShareTitle");
   const shareText =
     product?.short_description ??
     "Found this on K-beauty store — thought you might like it!";
@@ -433,9 +441,9 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(shareUrl);
-      toast.success("Link copied to clipboard");
+      toast.success(t("linkCopiedToast"));
     } catch {
-      toast.error("Couldn’t copy. Long-press the link to copy.");
+      toast.error(t("linkCopyFailedToast"));
     }
   }
 
@@ -456,7 +464,8 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
           made_in_korea, is_vegetarian, cruelty_free, toxin_free, paraben_free,
           ingredients_md, key_features_md, additional_details_md, box_contents_md, key_benefits,
           video_path, vendor_id,
-          brands ( name, slug )
+          brands ( name, slug ),
+          product_translations!left ( locale, short_description, description, ingredients_md, additional_details_md, key_features_md, box_contents_md, faq, key_benefits, additional_details )
         `
         )
         .eq("slug", slug)
@@ -471,6 +480,18 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
         setProduct(null);
         return;
       }
+
+      // Merge translated fields (description, ingredients, etc.) for
+      // the active locale. Product name + brand + price stay in their
+      // canonical English form by design. Falls back to source row
+      // when no translation exists yet for this locale.
+      const merged = mergeTranslation(
+        prod as any,
+        locale,
+        PRODUCT_TRANSLATABLE_FIELDS,
+        "product_translations"
+      );
+      Object.assign(prod, merged);
 
       const { data: imgs, error: iErr } = await supabase
         .from("product_images")
@@ -647,12 +668,12 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       // First add starts the count at 1. The +/- buttons let the user
       // bump it from there.
       await addItem(product.id, 1);
-      toast.success("Added to cart", {
+      toast.success(t("addToCartToast"), {
         description: `${product.name} added to your cart.`,
       });
     } catch (error) {
       console.error("Add to cart error:", error);
-      toast.error("Could not add item to cart right now.");
+      toast.error(t("addToCartError"));
     } finally {
       setIsAddingToCart(false);
     }
@@ -681,7 +702,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       router.push("/checkout");
     } catch (error) {
       console.error("Buy now error:", error);
-      toast.error("Unable to proceed to checkout right now.");
+      toast.error(t("buyNowError"));
     } finally {
       setIsBuyingNow(false);
     }
@@ -690,13 +711,13 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
   const handleWishlistToggle = () => {
     if (!product) return;
     toggleWishlist(product.id);
-    toast.success(inWishlist ? "Removed from wishlist" : "Added to wishlist");
+    toast.success(inWishlist ? t("removedFromWishlistToast") : t("addedToWishlistToast"));
   };
 
   const checkDelivery = async () => {
     const cleaned = pincode.trim().replace(/[^0-9]/g, "");
     if (cleaned.length !== 6) {
-      toast.error("Please enter a valid 6-digit pincode");
+      toast.error(t("invalidPincodeToast"));
       return;
     }
     setIsCheckingPincode(true);
@@ -795,21 +816,23 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       Icon: React.ComponentType<any>;
     }> = [];
     if (product.made_in_korea)
-      items.push({ key: "mik", label: "Made In Korea", Icon: Plane });
+      items.push({ key: "mik", label: t("featureMadeInKorea"), Icon: Plane });
     if (product.is_vegetarian)
-      items.push({ key: "veg", label: "100% Vegetarian", Icon: Leaf });
+      items.push({ key: "veg", label: t("featureVegetarian"), Icon: Leaf });
     if (product.cruelty_free)
       items.push({
         key: "cruelty",
-        label: "Cruelty Free",
+        label: t("featureCrueltyFree"),
         Icon: HeartHandshake,
       });
     if (product.toxin_free)
-      items.push({ key: "toxin", label: "Toxin Free", Icon: ShieldCheck });
+      items.push({ key: "toxin", label: t("featureToxinFree"), Icon: ShieldCheck });
     if (product.paraben_free)
-      items.push({ key: "paraben", label: "Paraben Free", Icon: CircleSlash });
+      items.push({ key: "paraben", label: t("featureParabenFree"), Icon: CircleSlash });
     return items;
-  }, [product]);
+    // Include `t` so the labels recompute if the translator bundle
+    // ever changes within the page's lifetime (e.g. HMR).
+  }, [product, t]);
 
   // Helper: render markdown safely
   // Helper: render markdown safely
@@ -918,7 +941,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
   /* ---------------- Reviews: actions ---------------- */
   const requireLogin = () => {
-    toast.info("Please log in to continue");
+    toast.info(t("loginToContinueToast"));
     router.push(`/auth/login?next=/products/${slug}`);
   };
 
@@ -954,10 +977,10 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
         })
         .eq("id", editingReview.id);
       if (error) {
-        toast.error("Could not update review");
+        toast.error(t("reviewUpdateFailToast"));
         return;
       }
-      toast.success("Review updated");
+      toast.success(t("reviewUpdatedToast"));
     } else {
       const res = await fetch("/api/reviews/create", {
         method: "POST",
@@ -975,13 +998,13 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       const payload = await res.json().catch(() => ({}));
       if (!res.ok || !payload?.ok) {
         if (payload?.error === "ALREADY_REVIEWED")
-          toast.error("You already reviewed this product");
+          toast.error(t("reviewAlreadyToast"));
         else if (payload?.error === "PURCHASE_REQUIRED")
-          toast.error("Only verified buyers can review this product");
-        else toast.error("Could not submit review");
+          toast.error(t("reviewPurchaseRequiredToast"));
+        else toast.error(t("reviewSubmitFailToast"));
         return;
       }
-      toast.success("Thanks for your review. It is pending moderation.");
+      toast.success(t("reviewSubmittedToast"));
     }
 
     setShowReviewDialog(false);
@@ -1000,16 +1023,16 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
   async function deleteReview(id: string) {
     if (!userId) return requireLogin();
-    if (!window.confirm("Delete this review?")) return;
+    if (!window.confirm(t("reviewDeleteConfirm"))) return;
     const { error } = await supabase
       .from("product_reviews")
       .delete()
       .eq("id", id);
     if (error) {
-      toast.error("Could not delete review");
+      toast.error(t("reviewDeleteFailToast"));
       return;
     }
-    toast.success("Review deleted");
+    toast.success(t("reviewDeletedToast"));
     setMyReview(null);
     setEditingReview(null);
     fetchReviews(true);
@@ -1022,10 +1045,10 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       .update({ status })
       .eq("id", id);
     if (error) {
-      toast.error("Failed to update");
+      toast.error(t("reviewModUpdateFailToast"));
       return;
     }
-    toast.success(status === "hidden" ? "Hidden" : "Published");
+    toast.success(status === "hidden" ? t("reviewHiddenToast") : t("reviewPublishedToast"));
     fetchReviews(true);
   }
 
@@ -1082,16 +1105,16 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
   const tabs = useMemo(
     () =>
       [
-        hasDescription && { key: "description", label: "Description" },
-        hasBoxContents && { key: "box-contents", label: "What's in the Box" },
-        hasIngredients && { key: "ingredients", label: "Ingredients" },
-        hasBenefits && { key: "benefits", label: "Benefits" },
+        hasDescription && { key: "description", label: t("tabDescription") },
+        hasBoxContents && { key: "box-contents", label: t("tabBoxContents") },
+        hasIngredients && { key: "ingredients", label: t("tabIngredients") },
+        hasBenefits && { key: "benefits", label: t("tabBenefits") },
         hasFaq && { key: "faq", label: "FAQ" },
-        hasAdditional && { key: "additional", label: "Informations" },
+        hasAdditional && { key: "additional", label: t("tabInformations") },
         // Reviews tab always present (let users write one even if none yet)
         {
           key: "reviews",
-          label: `Reviews${
+          label: `${t("tabReviews")}${
             reviewStats?.rating_count ? ` (${reviewStats.rating_count})` : ""
           }`,
         },
@@ -1207,7 +1230,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
         {!loading && !product && (
           <Card className="mx-auto max-w-xl">
             <CardContent className="py-12 text-center space-y-4">
-              <h2 className="text-2xl font-semibold">Product not found</h2>
+              <h2 className="text-2xl font-semibold">{t("notFound")}</h2>
               <p className="text-muted-foreground">
                 This product may be unavailable, moved, or unpublished.
               </p>
@@ -1216,10 +1239,10 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                   Go Back
                 </Button>
                 <Button asChild>
-                  <a href="/products">Continue Shopping</a>
+                  <a href="/products">{t("continueShopping")}</a>
                 </Button>
                 <Button asChild variant="outline">
-                  <a href="/">Back to Home</a>
+                  <a href="/">{t("backToHome")}</a>
                 </Button>
               </div>
             </CardContent>
@@ -1250,7 +1273,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     }
                   }}
                   aria-label={
-                    !isVideoSelected ? "Open expanded image viewer" : undefined
+                    !isVideoSelected ? t("expandImageAria") : undefined
                   }
                 >
                   {isVideoSelected && videoUrl ? (
@@ -1352,8 +1375,8 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                               ? "border-primary"
                               : "border-transparent"
                           }`}
-                          aria-label="Product video"
-                          title="Product video"
+                          aria-label={t("productVideoAria")}
+                          title={t("productVideoAria")}
                         >
                           <video
                             src={videoUrl}
@@ -1415,16 +1438,16 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     </Badge>
                   )}
                   {product.is_bundle && (
-                    <Badge variant="default">Bundle</Badge>
+                    <Badge variant="default">{t("badgeBundle")}</Badge>
                   )}
                   {product.new_until && new Date(product.new_until) >= now && (
-                    <Badge variant="default">New</Badge>
+                    <Badge variant="default">{t("badgeNew")}</Badge>
                   )}
                   {product.is_featured && (
-                    <Badge variant="default">Featured</Badge>
+                    <Badge variant="default">{t("badgeFeatured")}</Badge>
                   )}
                   {product.is_trending && (
-                    <Badge variant="default">Trending</Badge>
+                    <Badge variant="default">{t("badgeTrending")}</Badge>
                   )}
                 </div>
 
@@ -1437,7 +1460,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                       className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
                     >
                       <Sparkles className="h-4 w-4" />
-                      Product Highlights
+                      {t("productHighlights")}
                       {showHighlights ? (
                         <ChevronUp className="h-4 w-4" />
                       ) : (
@@ -1498,8 +1521,8 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                       disabled={!inCart || isOutOfStock}
                       aria-label={
                         cartQty === 1
-                          ? "Remove from cart"
-                          : "Decrease quantity"
+                          ? t("removeFromCart")
+                          : t("decreaseQty")
                       }
                     >
                       <Minus className="h-4 w-4" />
@@ -1526,7 +1549,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                         (inCart && cartQty >= maxQty)
                       }
                       aria-label={
-                        inCart ? "Increase quantity" : "Add to cart"
+                        inCart ? t("increaseQty") : t("addToCart")
                       }
                     >
                       <Plus className="h-4 w-4" />
@@ -1555,12 +1578,12 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                         <ShoppingCart className="mr-2 h-5 w-5" />
                       )}
                       {isOutOfStock
-                        ? "Out of Stock"
+                        ? t("outOfStock")
                         : isAddingToCart
-                        ? "Adding..."
+                        ? t("addingToCart")
                         : inCart
-                        ? "Added to cart"
-                        : "Add to Cart"}
+                        ? t("addedToCart")
+                        : t("addToCart")}
                     </Button>
                     <Button
                       size="lg"
@@ -1570,17 +1593,17 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                       disabled={isBuyingNow || isOutOfStock}
                     >
                       {isOutOfStock
-                        ? "Out of Stock"
+                        ? t("outOfStock")
                         : isBuyingNow
-                        ? "Processing..."
-                        : "Buy Now"}
+                        ? t("buyNowProcessing")
+                        : t("buyNow")}
                     </Button>
                   </div>
                   <Button
                     size="lg"
                     variant="outline"
                     onClick={handleWishlistToggle}
-                    aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"}
+                    aria-label={inWishlist ? t("removeFromWishlist") : t("addToWishlist")}
                     className="hidden md:inline-flex shrink-0"
                   >
                     <Heart
@@ -1599,7 +1622,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     onClick={handleShareClick}
                   >
                     <Share2 className="mr-2 h-4 w-4" />
-                    Share
+                    {t("shareBtn")}
                   </Button>
                 </div>
 
@@ -1612,11 +1635,11 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     {isINR ? (
                       <>
                         <div>
-                          <Label htmlFor="pincode">Check Delivery</Label>
+                          <Label htmlFor="pincode">{t("checkDelivery")}</Label>
                           <div className="flex gap-2 mt-2">
                             <Input
                               id="pincode"
-                              placeholder="Enter Pincode"
+                              placeholder={t("pincodePlaceholder")}
                               autoComplete="postal-code"
                               value={pincode}
                               onChange={(e) =>
@@ -1630,7 +1653,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                               onClick={checkDelivery}
                               disabled={isCheckingPincode}
                             >
-                              {isCheckingPincode ? "Checking..." : "Check"}
+                              {isCheckingPincode ? t("checking") : t("checkBtn")}
                             </Button>
                           </div>
                           {deliveryEstimate && (
@@ -1647,12 +1670,9 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                       <>
                         <div className="text-sm text-muted-foreground">
                           <p className="font-medium text-foreground mb-1">
-                            International shipping
+                            {t("intlShippingHeading")}
                           </p>
-                          <p>
-                            Submit an order request and our team will email you
-                            a shipping quote for your country within 24 hours.
-                          </p>
+                          <p>{t("intlShippingBody")}</p>
                         </div>
                         <Separator />
                       </>
@@ -1664,26 +1684,26 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                           {
                             href: "/policies/shipping-returns#free-shipping",
                             Icon: Truck,
-                            title: "Free Shipping",
-                            sub: `On orders above ₹${shippingConfig.deliveryThreshold.toLocaleString("en-IN")}`,
-                            tip: `Pan-India delivery is free once your cart crosses ₹${shippingConfig.deliveryThreshold.toLocaleString("en-IN")}. K Plus members get free shipping on every order.`,
+                            title: t("perkFreeShipping"),
+                            sub: t("perkFreeShippingSub", { amount: shippingConfig.deliveryThreshold.toLocaleString("en-IN") }),
+                            tip: t("perkFreeShippingTip", { amount: shippingConfig.deliveryThreshold.toLocaleString("en-IN") }),
                           },
                           {
                             href: "/policies/shipping-returns#easy-returns",
                             Icon: RotateCcw,
-                            title: "Easy Returns",
-                            sub: "7 days return policy",
-                            tip: "Raise a return within 7 days of delivery for a damaged, defective, or wrong item. Pickup is arranged from your address.",
+                            title: t("perkEasyReturns"),
+                            sub: t("perkEasyReturnsSub"),
+                            tip: t("perkEasyReturnsTip"),
                           },
                           {
                             href: "/policies/shipping-returns#secure-payment",
                             Icon: Shield,
-                            title: "Secure Payment",
+                            title: t("perkSecurePayment"),
                             // Word-mark rendered from the official Razorpay SVG in /public.
                             // Sized to sit on the same baseline as the other subtitles.
                             sub: (
                               <span className="inline-flex items-center gap-1">
-                                Powered by
+                                {t("perkSecurePaymentSubPrefix")}
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src="/razorpay-logo.svg"
@@ -1692,14 +1712,14 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                                 />
                               </span>
                             ),
-                            tip: "All payments are processed by Razorpay over an encrypted PCI-DSS-compliant connection. We never see or store your card details.",
+                            tip: t("perkSecurePaymentTip"),
                           },
                           {
                             href: "/policies/shipping-returns#authentic-products",
                             Icon: Package,
-                            title: "Authentic Products",
-                            sub: "100% original Korean products",
-                            tip: "Every product is sourced directly from the brand or its authorised distributor in Korea. No grey-market stock, no expired batches.",
+                            title: t("perkAuthenticProducts"),
+                            sub: t("perkAuthenticProductsSub"),
+                            tip: t("perkAuthenticProductsTip"),
                           },
                         ].map(({ href, Icon, title, sub, tip }) => (
                           <Tooltip key={title}>
@@ -1733,12 +1753,12 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     <CardContent className="p-4 text-sm space-y-2">
                       <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
                         <Package className="h-3.5 w-3.5" />
-                        Sold by
+                        {t("soldByLabel")}
                       </div>
                       <p className="font-medium">
                         {product.vendors.legal_name ||
                           product.vendors.display_name ||
-                          "Authorised seller"}
+                          t("authorisedSellerFallback")}
                       </p>
                       {(() => {
                         const a = product.vendors?.address_json;
@@ -1787,7 +1807,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
               <div className="mt-12 border-t border-neutral-200">
                 {hasDescription && (
                   <ProductInfoAccordionSection
-                    title="Description"
+                    title={t("tabDescription")}
                     isOpen={openSection === "description"}
                     onToggle={() => toggleSection("description")}
                   >
@@ -1799,7 +1819,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
                 {hasBoxContents && (
                   <ProductInfoAccordionSection
-                    title="What's in the Box"
+                    title={t("tabBoxContents")}
                     isOpen={openSection === "box-contents"}
                     onToggle={() => toggleSection("box-contents")}
                   >
@@ -1809,7 +1829,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
                 {hasIngredients && (
                   <ProductInfoAccordionSection
-                    title="Ingredients"
+                    title={t("tabIngredients")}
                     isOpen={openSection === "ingredients"}
                     onToggle={() => toggleSection("ingredients")}
                   >
@@ -1819,7 +1839,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
                 {hasBenefits && (
                   <ProductInfoAccordionSection
-                    title="How to Use"
+                    title={t("tabHowToUse")}
                     isOpen={openSection === "benefits"}
                     onToggle={() => toggleSection("benefits")}
                   >
@@ -1842,7 +1862,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
                 {hasAdditional && (
                   <ProductInfoAccordionSection
-                    title="Additional Details"
+                    title={t("tabAdditional")}
                     isOpen={openSection === "additional"}
                     onToggle={() => toggleSection("additional")}
                   >
@@ -1862,11 +1882,11 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
             {tabs.length > 0 && (
               <div className="border-t border-neutral-200">
                 <ProductInfoAccordionSection
-                  title={`Reviews${
+                  title={
                     reviewStats?.rating_count
-                      ? ` (${reviewStats.rating_count})`
-                      : ""
-                  }`}
+                      ? t("reviewsHeadingWithCount", { count: reviewStats.rating_count })
+                      : t("reviewsHeading")
+                  }
                   isOpen={openSection === "reviews"}
                   onToggle={() => toggleSection("reviews")}
                 >
@@ -1884,25 +1904,24 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                             value={Math.round(reviewStats?.rating_avg || 0)}
                           />
                           <div className="text-sm text-muted-foreground">
-                            {reviewStats?.rating_count || 0} review
-                            {(reviewStats?.rating_count || 0) === 1 ? "" : "s"}
+                            {t("reviewCountPlural", { count: reviewStats?.rating_count || 0 })}
                           </div>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
                         <label className="text-sm text-muted-foreground">
-                          Sort
+                          {t("reviewsSortLabel")}
                         </label>
                         <select
                           value={reviewSort}
                           onChange={(e) => setReviewSort(e.target.value as any)}
                           className="border rounded-md px-2 py-1 text-sm bg-background"
                         >
-                          <option value="helpful">Most helpful</option>
-                          <option value="recent">Most recent</option>
-                          <option value="high">Highest rating</option>
-                          <option value="low">Lowest rating</option>
+                          <option value="helpful">{t("reviewsSortHelpful")}</option>
+                          <option value="recent">{t("reviewsSortRecent")}</option>
+                          <option value="high">{t("reviewsSortHigh")}</option>
+                          <option value="low">{t("reviewsSortLow")}</option>
                         </select>
                         {myReview ? (
                           <Button
@@ -1912,11 +1931,11 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                               setShowReviewDialog(true);
                             }}
                           >
-                            Edit your review
+                            {t("reviewEditYours")}
                           </Button>
                         ) : (
                           <Button onClick={openWriteReview}>
-                            Write a review
+                            {t("reviewWriteBtn")}
                           </Button>
                         )}
                       </div>
@@ -1958,14 +1977,12 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     {/* Review list */}
                     <div className="space-y-4">
                       <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-                        {reviewStats?.rating_count || 0} total review
-                        {(reviewStats?.rating_count || 0) === 1 ? "" : "s"}
-                        {" • "}
-                        Average rating{" "}
-                        {reviewStats?.rating_avg
-                          ? Number(reviewStats.rating_avg).toFixed(1)
-                          : "0.0"}
-                        /5
+                        {t("reviewsTotalLine", {
+                          count: reviewStats?.rating_count || 0,
+                          avg: reviewStats?.rating_avg
+                            ? Number(reviewStats.rating_avg).toFixed(1)
+                            : "0.0",
+                        })}
                       </div>
                       {loadingReviews && reviews.length === 0 && (
                         <div className="space-y-3">
@@ -1989,7 +2006,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                                 <div className="relative h-8 w-8 rounded-full overflow-hidden border">
                                   <Image
                                     src={r.avatar_url}
-                                    alt={r.display_name ?? "Reviewer"}
+                                    alt={r.display_name ?? t("reviewerFallback")}
                                     fill
                                     className="object-cover"
                                   />
@@ -2001,8 +2018,8 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                                 <div className="text-sm text-foreground/90">
                                   {r.display_name ||
                                     (r.is_verified_purchase
-                                      ? "Verified Buyer"
-                                      : "Anonymous")}
+                                      ? t("verifiedBuyer")
+                                      : t("anonymousReviewer"))}
                                 </div>
                               </div>
                             </div>
@@ -2031,7 +2048,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                                   >
                                     <Image
                                       src={url}
-                                      alt={`review photo ${i + 1}`}
+                                      alt={t("reviewPhotoAlt", { index: i + 1 })}
                                       fill
                                       className="object-cover"
                                     />
@@ -2052,14 +2069,14 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                                     setShowReviewDialog(true);
                                   }}
                                 >
-                                  <Edit3 className="h-4 w-4 mr-2" /> Edit
+                                  <Edit3 className="h-4 w-4 mr-2" /> {t("reviewEditBtn")}
                                 </Button>
                                 <Button
                                   variant="destructive"
                                   size="sm"
                                   onClick={() => deleteReview(r.id)}
                                 >
-                                  <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                  <Trash2 className="h-4 w-4 mr-2" /> {t("reviewDeleteBtn")}
                                 </Button>
                               </>
                             )}
@@ -2074,7 +2091,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                                       adminSetStatus(r.id, "hidden")
                                     }
                                   >
-                                    <EyeOff className="h-4 w-4 mr-2" /> Hide
+                                    <EyeOff className="h-4 w-4 mr-2" /> {t("reviewHideBtn")}
                                   </Button>
                                 ) : (
                                   <Button
@@ -2084,7 +2101,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                                       adminSetStatus(r.id, "published")
                                     }
                                   >
-                                    <Eye className="h-4 w-4 mr-2" /> Publish
+                                    <Eye className="h-4 w-4 mr-2" /> {t("reviewPublishBtn")}
                                   </Button>
                                 )}
                               </>
@@ -2103,11 +2120,11 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                               }
                             >
                               <ThumbsUp className="h-4 w-4 mr-2" />
-                              Helpful · {r.helpful_count}
+                              {t("reviewHelpfulBtn", { count: r.helpful_count })}
                             </Button>
                             {r.is_verified_purchase && (
                               <Badge variant="secondary" className="text-xs">
-                                Verified purchase
+                                {t("reviewVerifiedPurchase")}
                               </Badge>
                             )}
                           </div>
@@ -2115,7 +2132,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                       ))}
                       {reviews.length === 0 && (
                         <p className="text-sm text-muted-foreground">
-                          No reviews yet. Be the first to write one!
+                          {t("reviewsEmpty")}
                         </p>
                       )}
                     </div>
@@ -2130,7 +2147,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                             }}
                             disabled={loadingReviews}
                           >
-                            {loadingReviews ? "Loading..." : "Load more"}
+                            {loadingReviews ? t("loading") : t("loadMore")}
                           </Button>
                         </div>
                       )}
@@ -2142,7 +2159,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
             {/* RELATED (unchanged) */}
             {related.length > 0 && (
               <div className="mt-12">
-                <h2 className="text-2xl font-bold mb-6">Related Products</h2>
+                <h2 className="text-2xl font-bold mb-6">{t("relatedProductsHeading")}</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   {related.map((p) => (
                     <ProductCard
@@ -2203,7 +2220,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
         >
           <DialogHeader className="p-4 pr-12 pb-2 shrink-0 flex flex-row items-center justify-between gap-3 min-w-0 overflow-hidden">
             <DialogTitle className="truncate min-w-0 flex-1">
-              {product?.name || "Product Image"}
+              {product?.name || t("productImageFallback")}
             </DialogTitle>
             {imageUrls.length > 1 && (
               <span className="text-xs text-muted-foreground tabular-nums shrink-0">
@@ -2225,7 +2242,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
             {imageUrls[selectedImage] ? (
               <Image
                 src={imageUrls[selectedImage]}
-                alt={product?.name || "Product image"}
+                alt={product?.name || t("productImageAlt")}
                 fill
                 className="object-contain select-none"
                 sizes="(max-width: 640px) 100vw, 720px"
@@ -2239,7 +2256,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
               <>
                 <button
                   type="button"
-                  aria-label="Previous image"
+                  aria-label={t("prevImage")}
                   onClick={() =>
                     setSelectedImage((i) =>
                       i <= 0 ? imageUrls.length - 1 : i - 1
@@ -2251,7 +2268,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                 </button>
                 <button
                   type="button"
-                  aria-label="Next image"
+                  aria-label={t("nextImage")}
                   onClick={() =>
                     setSelectedImage((i) =>
                       i >= imageUrls.length - 1 ? 0 : i + 1
@@ -2282,7 +2299,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                 >
                   <Image
                     src={src}
-                    alt={`Thumb ${idx + 1}`}
+                    alt={t("thumbAlt", { index: idx + 1 })}
                     fill
                     className="object-cover"
                   />
@@ -2296,7 +2313,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       <Dialog open={showShare} onOpenChange={setShowShare}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Share this product</DialogTitle>
+            <DialogTitle>{t("shareThisProduct")}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -2307,7 +2324,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp
+                  <MessageCircle className="h-4 w-4 mr-2" /> {t("shareLabelWhatsApp")}
                 </a>
               </Button>
               <Button asChild variant="outline">
@@ -2316,7 +2333,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Send className="h-4 w-4 mr-2" /> Telegram
+                  <Send className="h-4 w-4 mr-2" /> {t("shareLabelTelegram")}
                 </a>
               </Button>
               <Button asChild variant="outline">
@@ -2325,7 +2342,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Send className="h-4 w-4 mr-2" /> X / Twitter
+                  <Send className="h-4 w-4 mr-2" /> {t("shareLabelTwitter")}
                 </a>
               </Button>
               <Button asChild variant="outline">
@@ -2334,7 +2351,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Send className="h-4 w-4 mr-2" /> Facebook
+                  <Send className="h-4 w-4 mr-2" /> {t("shareLabelFacebook")}
                 </a>
               </Button>
               <Button asChild variant="outline">
@@ -2343,12 +2360,12 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Send className="h-4 w-4 mr-2" /> LinkedIn
+                  <Send className="h-4 w-4 mr-2" /> {t("shareLabelLinkedIn")}
                 </a>
               </Button>
               <Button asChild variant="outline">
                 <a href={shareLinks.email}>
-                  <Mail className="h-4 w-4 mr-2" /> Email
+                  <Mail className="h-4 w-4 mr-2" /> {t("shareLabelEmail")}
                 </a>
               </Button>
             </div>
@@ -2358,13 +2375,13 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
             <div className="flex gap-2 items-center">
               <Input readOnly value={shareUrl} className="text-xs" />
               <Button variant="secondary" onClick={copyLink}>
-                <Copy className="h-4 w-4 mr-2" /> Copy
+                <Copy className="h-4 w-4 mr-2" /> {t("shareCopyBtn")}
               </Button>
             </div>
 
             <div className="flex items-center text-xs text-muted-foreground">
               <LinkIcon className="h-3 w-3 mr-1" />
-              Sharing the current page URL
+              {t("shareCurrentUrlNote")}
             </div>
           </div>
         </DialogContent>
@@ -2374,7 +2391,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       <Dialog open={showReviewDialog} onOpenChange={setShowReviewDialog}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Write a Review</DialogTitle>
+            <DialogTitle>{t("writeReviewTitle")}</DialogTitle>
           </DialogHeader>
           <ReviewForm
             onCancel={() => setShowReviewDialog(false)}
@@ -2437,6 +2454,7 @@ function ReviewForm(props: {
   }) => Promise<void> | void;
   onCancel: () => void;
 }) {
+  const t = useTranslations("pdp");
   const [rating, setRating] = useState(5);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -2453,7 +2471,7 @@ function ReviewForm(props: {
     for (const f of Array.from(files).slice(0, 6 - photos.length)) {
       if (!f.type.startsWith("image/")) continue;
       if (f.size > 4 * 1024 * 1024) {
-        toast.error("Each image must be ≤ 4 MB");
+        toast.error(t("reviewPhotoTooLarge"));
         continue;
       }
       const ext = f.name.split(".").pop() || "jpg";
@@ -2466,7 +2484,7 @@ function ReviewForm(props: {
         const url = reviewMediaUrl(key);
         if (url) urls.push(url);
       } else {
-        toast.error("Failed to upload image");
+        toast.error(t("reviewPhotoUploadFail"));
       }
     }
     setPhotos((p) => [...p, ...paths]);
@@ -2490,7 +2508,7 @@ function ReviewForm(props: {
       }}
     >
       <div>
-        <Label className="mb-1 block">Your rating</Label>
+        <Label className="mb-1 block">{t("yourRatingLabel")}</Label>
         <div className="flex items-center gap-1">
           {[1, 2, 3, 4, 5].map((i) => (
             <button
@@ -2498,8 +2516,8 @@ function ReviewForm(props: {
               type="button"
               onClick={() => setRating(i)}
               className="p-1"
-              aria-label={`${i} star`}
-              title={`${i} star`}
+              aria-label={t("starLabel", { rating: i })}
+              title={t("starLabel", { rating: i })}
             >
               <Star
                 className={`h-6 w-6 ${
@@ -2515,32 +2533,32 @@ function ReviewForm(props: {
 
       <div>
         <Label htmlFor="review-title" className="mb-1 block">
-          Title (optional)
+          {t("reviewTitleLabel")}
         </Label>
         <Input
           id="review-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Add a short summary"
+          placeholder={t("reviewTitlePlaceholder")}
         />
       </div>
 
       <div>
         <Label htmlFor="review-body" className="mb-1 block">
-          Your review
+          {t("reviewBodyLabel")}
         </Label>
         <textarea
           id="review-body"
           value={body}
           onChange={(e) => setBody(e.target.value)}
           className="w-full border rounded-md p-2 text-sm min-h-[120px] bg-background"
-          placeholder="Describe your experience with the product"
+          placeholder={t("reviewBodyPlaceholder")}
           required
         />
       </div>
 
       <div>
-        <Label className="mb-1 block">Photos (optional, up to 6)</Label>
+        <Label className="mb-1 block">{t("reviewPhotosLabel")}</Label>
         <input
           type="file"
           accept="image/*"
@@ -2567,7 +2585,7 @@ function ReviewForm(props: {
                     setPreviews((p) => p.filter((_, idx) => idx !== i));
                   }}
                   className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1"
-                  title="Remove"
+                  title={t("removeTitle")}
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -2576,16 +2594,16 @@ function ReviewForm(props: {
           </div>
         )}
         {uploading && (
-          <p className="text-xs text-muted-foreground mt-1">Uploading…</p>
+          <p className="text-xs text-muted-foreground mt-1">{t("reviewUploading")}</p>
         )}
       </div>
 
       <div className="flex items-center justify-end gap-2 pt-2">
         <Button variant="outline" type="button" onClick={props.onCancel} disabled={uploading || submitting}>
-          Cancel
+          {t("cancel")}
         </Button>
         <Button type="submit" disabled={uploading || submitting}>
-          {submitting ? "Submitting..." : "Submit"}
+          {submitting ? t("submitting") : t("submit")}
         </Button>
       </div>
     </form>

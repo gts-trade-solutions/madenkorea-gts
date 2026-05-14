@@ -28,6 +28,7 @@ import {
   MessageCircle,
   Receipt,
   Inbox,
+  Languages,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -434,6 +435,29 @@ export default function AdminDashboard() {
                 onClick={() => router.push("/admin/settings")}
               >
                 Store Settings
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Translations */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <Languages className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>Translations</CardTitle>
+              <CardDescription>AI + human content translations</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Review and override AI-translated product descriptions,
+                category names, brand bios, and banner copy across all
+                supported locales.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/translations")}
+              >
+                Manage Translations
               </Button>
             </CardContent>
           </Card>

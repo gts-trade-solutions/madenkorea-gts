@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { CustomerLayout } from '@/components/CustomerLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 export default function ForgotPasswordPage() {
+  const t = useTranslations('auth.forgot');
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
@@ -20,7 +22,7 @@ export default function ForgotPasswordPage() {
 
   const sendReset = async () => {
     if (!email.trim()) {
-      toast.error('Please enter your email');
+      toast.error(t('missingEmailToast'));
       return;
     }
 
@@ -34,27 +36,20 @@ export default function ForgotPasswordPage() {
     setSubmitting(false);
 
     if (!res.ok) {
-      toast.error('Could not process request right now. Please try again.');
-      setStatus({
-        type: 'error',
-        message: "We couldn't send the reset email right now. Please try again later or contact support.",
-      });
+      toast.error(t('couldNotProcess'));
+      setStatus({ type: 'error', message: t('couldNotSend') });
       return;
     }
 
     if (data?.deliveryStatus === 'failed' || data?.success === false) {
-      const msg =
-        data?.message ||
-        "We couldn't send the reset email right now. Please try again later or contact support.";
+      const msg = data?.message || t('couldNotSend');
       toast.error(msg);
       setStatus({ type: 'error', message: msg });
       setSent(false);
       return;
     }
 
-    const msg =
-      data?.message ||
-      'If an account exists for this email, a reset link has been sent.';
+    const msg = data?.message || t('successGeneric');
     toast.success(msg);
     setStatus({ type: 'success', message: msg });
     setSent(true);
@@ -70,8 +65,8 @@ export default function ForgotPasswordPage() {
       <div className="container mx-auto py-16">
         <Card className="max-w-md mx-auto">
           <CardHeader>
-            <CardTitle className="text-2xl">Forgot password</CardTitle>
-            <CardDescription>We'll email you a link to reset your password.</CardDescription>
+            <CardTitle className="text-2xl">{t('title')}</CardTitle>
+            <CardDescription>{t('description')}</CardDescription>
           </CardHeader>
 
           <form onSubmit={onSubmit}>
@@ -90,25 +85,25 @@ export default function ForgotPasswordPage() {
                     </div>
                   )}
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email">{t('emailLabel')}</Label>
                     <Input
                       id="email"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@example.com"
+                      placeholder={t('emailPlaceholder')}
                       required
                     />
                   </div>
                 </CardContent>
                 <CardFooter className="flex flex-col gap-4">
                   <Button type="submit" className="w-full" disabled={submitting}>
-                    {submitting ? 'Sending...' : 'Send reset link'}
+                    {submitting ? t('submitting') : t('submit')}
                   </Button>
                   <p className="text-sm text-center text-muted-foreground">
-                    Remembered it?{' '}
+                    {t('rememberedItPrefix')}{' '}
                     <Link href="/auth/login" className="text-primary hover:underline">
-                      Sign in
+                      {t('signInLink')}
                     </Link>
                   </p>
                 </CardFooter>
@@ -117,18 +112,18 @@ export default function ForgotPasswordPage() {
               <>
                 <CardContent className="space-y-4">
                   <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-800">
-                    <p className="font-medium">{status?.message || 'If an account exists for this email, a reset link has been sent.'}</p>
-                    <p className="mt-1">Didn&apos;t receive it? You can resend the link.</p>
+                    <p className="font-medium">{status?.message || t('successGeneric')}</p>
+                    <p className="mt-1">{t('didntReceive')}</p>
                   </div>
                 </CardContent>
                 <CardFooter className="flex flex-col gap-4">
                   <Button type="button" className="w-full" disabled={submitting} onClick={sendReset}>
-                    {submitting ? 'Sending...' : 'Resend reset link'}
+                    {submitting ? t('submitting') : t('resend')}
                   </Button>
                   <p className="text-sm text-center text-muted-foreground">
-                    Back to{' '}
+                    {t('backToSignInPrefix')}{' '}
                     <Link href="/auth/login" className="text-primary hover:underline">
-                      Sign in
+                      {t('signInLink')}
                     </Link>
                   </p>
                 </CardFooter>

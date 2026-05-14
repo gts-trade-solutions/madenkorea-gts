@@ -3,6 +3,9 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { isSupportedLocale, type SupportedLocale } from "@/lib/locales";
+import { COUNTRY_PROFILES, isSupportedCountry, type CountryCode } from "@/lib/countries";
+import { isSupportedCurrency } from "@/lib/currency";
 
 type UserRole = "customer" | "admin";
 
@@ -31,6 +34,121 @@ type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType>({} as any);
+
+// ──────────────────────────────────────────────────────────────
+// Preference sync: cookies ↔ profile.preferred_locale/country.
+//
+// The cookies (`mik_locale`, `mik_country`, `mik_currency`) are the
+// per-device source of truth. We mirror locale + country to the
+// profile so a fresh browser sign-in can restore the same UI/region
+// the user picked elsewhere. Currency follows from country, so it's
+// derived (not stored).
+// ──────────────────────────────────────────────────────────────
+const COOKIE_MAX_AGE_DAYS = 365;
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.split("=")[1] ?? "") : null;
+}
+function writeCookie(name: string, value: string) {
+  if (typeof document === "undefined") return;
+  const maxAge = COOKIE_MAX_AGE_DAYS * 24 * 60 * 60;
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+}
+
+/**
+ * On sign-in: if the user's profile has preferred_locale /
+ * preferred_country saved, write them through to the cookies so the
+ * UI follows the user across devices. If the profile is empty (new
+ * user or pre-feature account), seed it from the current cookies.
+ *
+ * Triggers a full reload when cookies change, because LocaleProvider
+ * + CurrencyProvider snapshot the cookie at SSR time and won't pick
+ * up a mid-session change otherwise.
+ */
+async function syncPreferencesOnLogin(userId: string) {
+  try {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("preferred_locale, preferred_country")
+      .eq("id", userId)
+      .maybeSingle();
+
+    const cookieLocale = readCookie("mik_locale");
+    const cookieCountry = readCookie("mik_country");
+    const cookieCurrency = readCookie("mik_currency");
+
+    const savedLocale = profile?.preferred_locale;
+    const savedCountry = profile?.preferred_country;
+
+    let cookieChanged = false;
+
+    if (savedLocale && isSupportedLocale(savedLocale)) {
+      if (cookieLocale !== savedLocale) {
+        writeCookie("mik_locale", savedLocale);
+        cookieChanged = true;
+      }
+    } else if (cookieLocale && isSupportedLocale(cookieLocale)) {
+      // Profile empty → seed it from cookie (one-time backfill).
+      await supabase
+        .from("profiles")
+        .update({ preferred_locale: cookieLocale })
+        .eq("id", userId);
+    }
+
+    if (savedCountry && isSupportedCountry(savedCountry)) {
+      if (cookieCountry !== savedCountry) {
+        writeCookie("mik_country", savedCountry);
+        // Cascade currency from country profile when restoring across
+        // devices — otherwise a user signing in on a new device might
+        // see Polish UI but INR prices.
+        const newCurrency = COUNTRY_PROFILES[savedCountry as CountryCode].defaultCurrency;
+        if (cookieCurrency !== newCurrency) {
+          writeCookie("mik_currency", newCurrency);
+        }
+        cookieChanged = true;
+      }
+    } else if (cookieCountry && isSupportedCountry(cookieCountry)) {
+      await supabase
+        .from("profiles")
+        .update({ preferred_country: cookieCountry })
+        .eq("id", userId);
+    }
+
+    if (cookieChanged && typeof window !== "undefined") {
+      // Full reload so SSR re-reads the cookies and providers pick up
+      // the new values. Cheaper than threading a "rehydrate" path
+      // through every provider.
+      window.location.reload();
+    }
+  } catch {
+    // Best-effort — never block sign-in on a preferences sync failure.
+  }
+}
+
+/**
+ * On signup: take whatever cookies the visitor's session has now and
+ * write them to the new profile so subsequent sign-ins elsewhere
+ * restore the same setup. Cookies are guaranteed present because
+ * middleware seeds them on first visit.
+ */
+async function seedProfilePreferences(userId: string) {
+  try {
+    const cookieLocale = readCookie("mik_locale");
+    const cookieCountry = readCookie("mik_country");
+    const updates: Record<string, string> = {};
+    if (cookieLocale && isSupportedLocale(cookieLocale)) {
+      updates.preferred_locale = cookieLocale;
+    }
+    if (cookieCountry && isSupportedCountry(cookieCountry)) {
+      updates.preferred_country = cookieCountry;
+    }
+    if (Object.keys(updates).length === 0) return;
+    await supabase.from("profiles").update(updates).eq("id", userId);
+  } catch {}
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -96,10 +214,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (c: { email: string; password: string }) => {
-    const { error } = await supabase.auth.signInWithPassword(c);
+    const { data, error } = await supabase.auth.signInWithPassword(c);
     if (error) throw error;
     await loadFromSession();
     setReady(true);
+    // Mirror saved profile preferences into the cookies for this
+    // browser. May trigger a reload if the saved values differ from
+    // current cookies — that's intentional so SSR picks them up.
+    if (data?.user?.id) {
+      await syncPreferencesOnLogin(data.user.id);
+    }
   };
 
   const register = async (r: {
@@ -107,7 +231,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     email: string;
     password: string;
   }) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: r.email,
       password: r.password,
       options: { data: { full_name: r.full_name } },
@@ -115,6 +239,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
     await loadFromSession();
     setReady(true);
+    // Persist the visitor's already-chosen locale/country to the new
+    // profile so future sign-ins on other devices restore the setup.
+    if (data?.user?.id) {
+      await seedProfilePreferences(data.user.id);
+    }
   };
 
   const logout = async () => {
