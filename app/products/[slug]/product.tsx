@@ -144,6 +144,16 @@ type ProductImage = {
   sort_order?: number | null;
 };
 
+// Multi-video per product. Loaded from `product_videos`. Sits next to
+// the existing `images[]` state; the gallery renders images first,
+// then each video as an additional slot.
+type ProductVideo = {
+  storage_path: string;
+  thumbnail_path?: string | null;
+  alt?: string | null;
+  sort_order?: number | null;
+};
+
 /* ---------- Reviews types ---------- */
 type Review = {
   id: string;
@@ -353,6 +363,11 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState<Product | null>(null);
   const [images, setImages] = useState<ProductImage[]>([]);
+  // Multiple videos per product. Loaded alongside images from
+  // `product_videos`. The legacy single video on `products.video_path`
+  // is still rendered as a fallback when this list is empty so old
+  // products keep working through the transition.
+  const [videos, setVideos] = useState<ProductVideo[]>([]);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [pincode, setPincode] = useState("");
@@ -502,6 +517,18 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       if (iErr) console.error("Images fetch error:", iErr);
       if (cancelled) return;
 
+      // Multi-video list (mirrors product_images). Failure is
+      // non-fatal — the page renders fine without videos, and the
+      // legacy `products.video_path` is still surfaced as a fallback
+      // if this table is empty for this product.
+      const { data: vids, error: vErrV } = await supabase
+        .from("product_videos")
+        .select("storage_path, thumbnail_path, alt, sort_order")
+        .eq("product_id", prod.id)
+        .order("sort_order", { ascending: true });
+      if (vErrV) console.error("Videos fetch error:", vErrV);
+      if (cancelled) return;
+
       // Marketplace seller disclosure — gated on the admin toggle in
       // store_settings.marketplace_disclosure_enabled. Off by default;
       // admin enables once vendor records have accurate legal name /
@@ -529,6 +556,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
 
       setProduct({ ...prod, vendors: vendorInfo });
       setImages(imgs ?? []);
+      setVideos((vids ?? []) as ProductVideo[]);
       setSelectedImage(0);
       setLoading(false);
 
@@ -603,13 +631,68 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
     return gallery.filter(Boolean);
   }, [images, product?.hero_image_path]);
 
-  const videoUrl = useMemo(
-    () => storagePublicUrl(product?.video_path ?? null),
-    [product?.video_path]
-  );
+  // Build the list of video URLs the gallery surfaces. Prefer the new
+  // `product_videos` rows; fall back to the legacy single
+  // `products.video_path` only if the table has no rows for this
+  // product (so old single-video products keep working).
+  const videoUrls = useMemo(() => {
+    if (videos.length > 0) {
+      return videos
+        .map((v) => storagePublicUrl(v.storage_path))
+        .filter((u): u is string => !!u);
+    }
+    const legacy = storagePublicUrl(product?.video_path ?? null);
+    return legacy ? [legacy] : [];
+  }, [videos, product?.video_path]);
 
-  const galleryCount = imageUrls.length + (videoUrl ? 1 : 0);
-  const isVideoSelected = selectedImage === imageUrls.length && !!videoUrl;
+  // First video URL kept for any code that still reads `videoUrl`.
+  const videoUrl = videoUrls[0] ?? "";
+
+  const galleryCount = imageUrls.length + videoUrls.length;
+  const isVideoSelected =
+    selectedImage >= imageUrls.length &&
+    selectedImage < imageUrls.length + videoUrls.length;
+  // Which video is currently active (0-indexed) when the user has
+  // scrubbed into the video portion of the gallery.
+  const activeVideoIndex = isVideoSelected
+    ? selectedImage - imageUrls.length
+    : 0;
+  const activeVideoUrl = videoUrls[activeVideoIndex] ?? "";
+
+  // ── Mobile swipe between gallery images ─────────────────────────────
+  // Tracks the touchstart X/Y so the touchend handler can decide if the
+  // gesture was a horizontal swipe (image change) vs a vertical scroll
+  // (let the page do its thing) vs a tap (let the zoom click fire).
+  // Skip when the video slot is selected so video-control taps still
+  // work as expected. Threshold = 50px horizontal AND horizontal must
+  // dominate vertical motion (avoids fighting page scroll).
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const SWIPE_THRESHOLD = 50;
+
+  const handleGalleryTouchStart = (e: React.TouchEvent) => {
+    if (isVideoSelected || imageUrls.length < 2) return;
+    const t = e.touches[0];
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+  const handleGalleryTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartRef.current.x;
+    const dy = t.clientY - touchStartRef.current.y;
+    touchStartRef.current = null;
+    if (Math.abs(dx) < SWIPE_THRESHOLD) return;
+    if (Math.abs(dx) < Math.abs(dy)) return; // mostly vertical → scroll
+    // dx < 0  ⇒ swiped left  ⇒ show NEXT image
+    // dx > 0  ⇒ swiped right ⇒ show PREV image
+    setSelectedImage((curr) => {
+      const next = dx < 0 ? curr + 1 : curr - 1;
+      // Clamp to [0, imageUrls.length - 1] — never swipe into the
+      // video slot (it has its own controls + would be jarring).
+      return Math.max(0, Math.min(imageUrls.length - 1, next));
+    });
+    // Prevent the click-to-zoom from firing on this gesture.
+    e.preventDefault();
+  };
 
   const inWishlist = product ? isInWishlist(product.id) : false;
   const [isAddingToCart, setIsAddingToCart] = useState(false);
@@ -1255,12 +1338,14 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
               {/* GALLERY */}
               <div>
                 <div
-                  className={`relative aspect-square mb-4 bg-muted rounded-lg overflow-hidden group ${
+                  className={`relative aspect-square mb-4 bg-muted rounded-lg overflow-hidden group touch-pan-y select-none ${
                     !isVideoSelected ? "cursor-zoom-in" : ""
                   }`}
                   onClick={() => {
                     if (!isVideoSelected) setShowZoom(true);
                   }}
+                  onTouchStart={handleGalleryTouchStart}
+                  onTouchEnd={handleGalleryTouchEnd}
                   role={!isVideoSelected ? "button" : undefined}
                   tabIndex={!isVideoSelected ? 0 : undefined}
                   onKeyDown={(e) => {
@@ -1276,10 +1361,10 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     !isVideoSelected ? t("expandImageAria") : undefined
                   }
                 >
-                  {isVideoSelected && videoUrl ? (
+                  {isVideoSelected && activeVideoUrl ? (
                     <video
-                      key={videoUrl} /* force refresh when switching */
-                      src={videoUrl}
+                      key={activeVideoUrl} /* force refresh when switching */
+                      src={activeVideoUrl}
                       controls
                       autoPlay
                       playsInline
@@ -1366,30 +1451,35 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                         </button>
                       ))}
 
-                      {/* video thumb (last) */}
-                      {videoUrl && (
-                        <button
-                          onClick={() => setSelectedImage(imageUrls.length)}
-                          className={`relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 ${
-                            isVideoSelected
-                              ? "border-primary"
-                              : "border-transparent"
-                          }`}
-                          aria-label={t("productVideoAria")}
-                          title={t("productVideoAria")}
-                        >
-                          <video
-                            src={videoUrl}
-                            muted
-                            playsInline
-                            preload="metadata"
-                            className="absolute inset-0 w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-black/30 grid place-items-center">
-                            <PlayCircle className="h-8 w-8 text-white drop-shadow" />
-                          </div>
-                        </button>
-                      )}
+                      {/* video thumbs (one per video). Selecting slot
+                          index = imageUrls.length + i jumps the active
+                          gallery item to the i-th video. */}
+                      {videoUrls.map((src, i) => {
+                        const slotIndex = imageUrls.length + i;
+                        const active = selectedImage === slotIndex;
+                        return (
+                          <button
+                            key={`video-${src}`}
+                            onClick={() => setSelectedImage(slotIndex)}
+                            className={`relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 ${
+                              active ? "border-primary" : "border-transparent"
+                            }`}
+                            aria-label={t("productVideoAria")}
+                            title={t("productVideoAria")}
+                          >
+                            <video
+                              src={src}
+                              muted
+                              playsInline
+                              preload="metadata"
+                              className="absolute inset-0 w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/30 grid place-items-center">
+                              <PlayCircle className="h-8 w-8 text-white drop-shadow" />
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                     {galleryCount > 4 && (
                       <div

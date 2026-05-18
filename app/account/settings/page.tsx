@@ -27,6 +27,13 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
+import { Flag } from "@/components/Flag";
+import {
+  COUNTRY_PROFILES,
+  SUPPORTED_COUNTRIES,
+  isSupportedCountry,
+  type CountryCode,
+} from "@/lib/countries";
 
 type Profile = {
   full_name?: string | null;
@@ -43,7 +50,30 @@ type Address = {
   pincode: string;
   country: string;
   is_default: boolean;
+  // Fields the DB already has but the form was hiding. Surfaced now
+  // so a checkout-time address snapshot is complete (name + phone
+  // are the most important — couriers reject deliveries without them).
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  landmark?: string | null;
 };
+
+// Country values stored on legacy rows are free-form strings ("India",
+// "USA", etc). New saves use the ISO-3166 alpha-2 code from the
+// SUPPORTED_COUNTRIES set. We treat anything that doesn't match as
+// "India" for the country dropdown default — keeps existing rows
+// editable without forcing a backfill.
+const ADDRESS_COUNTRY_DEFAULT: CountryCode = "IN";
+function coerceCountryCode(raw: string | null | undefined): CountryCode {
+  if (!raw) return ADDRESS_COUNTRY_DEFAULT;
+  const upper = raw.trim().toUpperCase();
+  if (isSupportedCountry(upper)) return upper;
+  // Legacy text values
+  const lower = raw.trim().toLowerCase();
+  if (lower === "india" || lower === "in") return "IN";
+  return ADDRESS_COUNTRY_DEFAULT;
+}
 
 export default function AccountSettingsPage() {
   const router = useRouter();
@@ -66,12 +96,16 @@ export default function AccountSettingsPage() {
   const [addrDialog, setAddrDialog] = useState(false);
   const [editing, setEditing] = useState<Address | null>(null);
   const [addrForm, setAddrForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
     line1: "",
     line2: "",
+    landmark: "",
     city: "",
     state: "",
     pincode: "",
-    country: "India",
+    country: ADDRESS_COUNTRY_DEFAULT as CountryCode,
     is_default: false,
   });
 
@@ -106,7 +140,7 @@ export default function AccountSettingsPage() {
       // addresses
       const { data: addrs } = await supabase
         .from("addresses")
-        .select("id, line1, line2, city, state, pincode, country, is_default")
+        .select("id, name, phone, email, line1, line2, landmark, city, state, pincode, country, is_default")
         .order("is_default", { ascending: false })
         .order("created_at", { ascending: false });
       setAddresses(addrs ?? []);
@@ -174,23 +208,35 @@ export default function AccountSettingsPage() {
     if (a) {
       setEditing(a);
       setAddrForm({
+        name: a.name || profile.full_name || "",
+        phone: a.phone || profile.phone || "",
+        email: a.email || profile.email || "",
         line1: a.line1,
         line2: a.line2 || "",
+        landmark: a.landmark || "",
         city: a.city,
         state: a.state,
         pincode: a.pincode,
-        country: a.country || "India",
+        country: coerceCountryCode(a.country),
         is_default: !!a.is_default,
       });
     } else {
       setEditing(null);
+      // Pre-fill name/email/phone from the profile so new addresses
+      // don't lose contact info that we already know — the previous
+      // form omitted these fields entirely and couriers were getting
+      // address rows without a recipient name.
       setAddrForm({
+        name: profile.full_name || "",
+        phone: profile.phone || "",
+        email: profile.email || "",
         line1: "",
         line2: "",
+        landmark: "",
         city: "",
         state: "",
         pincode: "",
-        country: "India",
+        country: ADDRESS_COUNTRY_DEFAULT,
         is_default: false,
       });
     }
@@ -198,30 +244,73 @@ export default function AccountSettingsPage() {
   };
 
   const saveAddress = async () => {
-    if (
-      !addrForm.line1 ||
-      !addrForm.city ||
-      !addrForm.state ||
-      !addrForm.pincode
-    ) {
-      toast.error(t("addrErrRequired"));
+    // Trim once up front so empty-string-with-whitespace doesn't slip
+    // past the validation gate.
+    const name = (addrForm.name || "").trim();
+    const phone = (addrForm.phone || "").trim();
+    const email = (addrForm.email || "").trim();
+    const line1 = (addrForm.line1 || "").trim();
+    const city = (addrForm.city || "").trim();
+    const state = (addrForm.state || "").trim();
+    const pincode = (addrForm.pincode || "").trim();
+    const country = addrForm.country;
+    const isIndia = country === "IN";
+
+    // Mandatory fields: name, phone, line1, city, pincode, country.
+    // State is mandatory for India (GST destination requires it) and
+    // optional everywhere else. We surface a specific message instead
+    // of the generic "addrErrRequired" so users know exactly what's
+    // missing — generic error toasts on long forms are frustrating.
+    const missing: string[] = [];
+    if (!name) missing.push(t("addrFieldRecipientName"));
+    if (!phone) missing.push(t("addrFieldPhone"));
+    if (!line1) missing.push(t("addrFieldAddressLine1"));
+    if (!city) missing.push(t("addrFieldCity"));
+    if (isIndia && !state) missing.push(t("addrFieldState"));
+    if (!pincode)
+      missing.push(
+        isIndia ? t("addrFieldPincode") : t("addrFieldPostalCode")
+      );
+    if (!country) missing.push(t("addrFieldCountry"));
+
+    if (missing.length > 0) {
+      toast.error(t("addrErrMissingFields", { fields: missing.join(", ") }));
       return;
     }
+
+    // India still needs a 6-digit numeric PIN. Catching here means we
+    // don't write malformed data and force the user to discover it
+    // at checkout where a courier-side validation would reject it.
+    if (isIndia && !/^\d{6}$/.test(pincode)) {
+      toast.error(t("addrErrIndianPincode"));
+      return;
+    }
+
     setSavingAddress(true);
+    const payload = {
+      name,
+      phone,
+      email: email || null,
+      line1,
+      line2: addrForm.line2?.trim() || null,
+      landmark: addrForm.landmark?.trim() || null,
+      city,
+      state: state || null,
+      pincode,
+      country,
+      is_default: addrForm.is_default,
+    };
+
     let err;
     if (editing) {
       ({ error: err } = await supabase
         .from("addresses")
-        .update({ ...addrForm, line2: addrForm.line2 || null })
+        .update(payload)
         .eq("id", editing.id));
     } else {
       ({ error: err } = await supabase
         .from("addresses")
-        .insert({
-          ...addrForm,
-          line2: addrForm.line2 || null,
-          user_id: user?.id,
-        }));
+        .insert({ ...payload, user_id: user?.id }));
     }
     if (err) {
       setSavingAddress(false);
@@ -232,7 +321,7 @@ export default function AccountSettingsPage() {
     // reload
     const { data: addrs } = await supabase
       .from("addresses")
-      .select("id, line1, line2, city, state, pincode, country, is_default")
+      .select("id, name, phone, email, line1, line2, landmark, city, state, pincode, country, is_default")
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: false });
     setAddresses(addrs ?? []);
@@ -272,7 +361,7 @@ export default function AccountSettingsPage() {
       });
     const { data: addrs } = await supabase
       .from("addresses")
-      .select("id, line1, line2, city, state, pincode, country, is_default")
+      .select("id, name, phone, email, line1, line2, landmark, city, state, pincode, country, is_default")
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: false });
     setDefaultingAddressId(null);
@@ -495,20 +584,49 @@ export default function AccountSettingsPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {addresses.map((a) => (
+                    {addresses.map((a) => {
+                      const code = coerceCountryCode(a.country);
+                      const profile = COUNTRY_PROFILES[code];
+                      return (
                       <Card key={a.id}>
                         <CardContent className="p-4 flex justify-between items-start gap-4">
-                          <div>
-                            <p className="font-medium">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <Flag
+                                code={code}
+                                width={20}
+                                className="rounded-[2px] shrink-0"
+                                alt=""
+                              />
+                              <span className="font-medium">
+                                {a.name || t("addrNoNameFallback")}
+                              </span>
+                              {a.is_default && (
+                                <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  {t("addrDefaultBadge")}
+                                </span>
+                              )}
+                            </div>
+                            {a.phone && (
+                              <p className="text-sm text-muted-foreground">
+                                {a.phone}
+                              </p>
+                            )}
+                            <p className="text-sm mt-1">
                               {a.line1}
                               {a.line2 ? `, ${a.line2}` : ""}
                             </p>
+                            {a.landmark && (
+                              <p className="text-xs text-muted-foreground">
+                                Landmark: {a.landmark}
+                              </p>
+                            )}
                             <p className="text-sm text-muted-foreground">
-                              {a.city}, {a.state} - {a.pincode}
+                              {a.city}
+                              {a.state ? `, ${a.state}` : ""} - {a.pincode}
                             </p>
-                            <p className="text-sm text-muted-foreground">
-                              {a.country}
-                              {a.is_default ? " • Default" : ""}
+                            <p className="text-xs text-muted-foreground">
+                              {profile.name}
                             </p>
                           </div>
                           <div className="flex gap-2">
@@ -540,7 +658,8 @@ export default function AccountSettingsPage() {
                           </div>
                         </CardContent>
                       </Card>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -557,14 +676,96 @@ export default function AccountSettingsPage() {
               {editing ? t("addrEditTitle") : t("addrAddTitle")}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-3">
+          <div className="grid gap-3 max-h-[70vh] overflow-y-auto pr-1">
+            {/* Contact details — couriers reject deliveries without a
+                recipient name + phone, so these are mandatory and
+                pre-filled from the user's profile when possible. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid gap-1">
+                <Label>
+                  {t("addrRecipientName")} <span className="text-red-600">*</span>
+                </Label>
+                <Input
+                  value={addrForm.name}
+                  onChange={(e) =>
+                    setAddrForm((f) => ({ ...f, name: e.target.value }))
+                  }
+                  placeholder={t("addrFullNamePlaceholder")}
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label>
+                  {t("addrPhone")} <span className="text-red-600">*</span>
+                </Label>
+                <Input
+                  type="tel"
+                  inputMode={addrForm.country === "IN" ? "numeric" : "tel"}
+                  pattern={
+                    addrForm.country === "IN" ? "[6-9][0-9]{9}" : undefined
+                  }
+                  maxLength={addrForm.country === "IN" ? 10 : undefined}
+                  value={addrForm.phone}
+                  onChange={(e) =>
+                    setAddrForm((f) => ({ ...f, phone: e.target.value }))
+                  }
+                  placeholder={
+                    addrForm.country === "IN"
+                      ? t("addrPhonePlaceholderIndia")
+                      : t("addrPhonePlaceholderIntl")
+                  }
+                />
+              </div>
+            </div>
+
             <div className="grid gap-1">
-              <Label>{t("addrLine1")}</Label>
+              <Label>{t("addrEmailOptional")}</Label>
+              <Input
+                type="email"
+                value={addrForm.email}
+                onChange={(e) =>
+                  setAddrForm((f) => ({ ...f, email: e.target.value }))
+                }
+                placeholder={t("addrEmailPlaceholder")}
+              />
+            </div>
+
+            {/* Address — country first so all downstream field labels
+                + validation can swap before the user types anything. */}
+            <div className="grid gap-1">
+              <Label>
+                {t("addrCountry")} <span className="text-red-600">*</span>
+              </Label>
+              <select
+                value={addrForm.country}
+                onChange={(e) =>
+                  setAddrForm((f) => ({
+                    ...f,
+                    country: e.target.value as CountryCode,
+                  }))
+                }
+                className="border rounded px-2 py-2 h-10 bg-background"
+              >
+                {SUPPORTED_COUNTRIES.map((c) => {
+                  const p = COUNTRY_PROFILES[c];
+                  return (
+                    <option key={c} value={c}>
+                      {p.flag} {p.name} ({c})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div className="grid gap-1">
+              <Label>
+                {t("addrLine1")} <span className="text-red-600">*</span>
+              </Label>
               <Input
                 value={addrForm.line1}
                 onChange={(e) =>
                   setAddrForm((f) => ({ ...f, line1: e.target.value }))
                 }
+                placeholder={t("addrLine1Placeholder")}
               />
             </div>
             <div className="grid gap-1">
@@ -574,11 +775,25 @@ export default function AccountSettingsPage() {
                 onChange={(e) =>
                   setAddrForm((f) => ({ ...f, line2: e.target.value }))
                 }
+                placeholder={t("addrLine2Placeholder")}
               />
             </div>
+            <div className="grid gap-1">
+              <Label>{t("addrLandmarkOptional")}</Label>
+              <Input
+                value={addrForm.landmark}
+                onChange={(e) =>
+                  setAddrForm((f) => ({ ...f, landmark: e.target.value }))
+                }
+                placeholder={t("addrLandmarkPlaceholder")}
+              />
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="grid gap-1">
-                <Label>{t("addrCity")}</Label>
+                <Label>
+                  {t("addrCity")} <span className="text-red-600">*</span>
+                </Label>
                 <Input
                   value={addrForm.city}
                   onChange={(e) =>
@@ -587,7 +802,14 @@ export default function AccountSettingsPage() {
                 />
               </div>
               <div className="grid gap-1">
-                <Label>{t("addrState")}</Label>
+                <Label>
+                  {addrForm.country === "IN"
+                    ? `${t("addrState")} `
+                    : t("addrStateRegion")}
+                  {addrForm.country === "IN" && (
+                    <span className="text-red-600">*</span>
+                  )}
+                </Label>
                 <Input
                   value={addrForm.state}
                   onChange={(e) =>
@@ -596,32 +818,35 @@ export default function AccountSettingsPage() {
                 />
               </div>
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="grid gap-1">
-                <Label>{t("addrPincode")}</Label>
+                <Label>
+                  {addrForm.country === "IN"
+                    ? `${t("addrPincode")} `
+                    : `${t("addrPostalCode")} `}
+                  <span className="text-red-600">*</span>
+                </Label>
                 <Input
-                  inputMode="numeric"
-                  maxLength={6}
+                  inputMode={addrForm.country === "IN" ? "numeric" : "text"}
+                  // India: 6 digits, numeric only. International: freeform
+                  // alphanumeric (UK W1A, Canadian K1A 0B1, etc.).
+                  maxLength={addrForm.country === "IN" ? 6 : 16}
                   value={addrForm.pincode}
                   onChange={(e) =>
                     setAddrForm((f) => ({
                       ...f,
-                      pincode: e.target.value.replace(/\D/g, "").slice(0, 6),
+                      pincode:
+                        addrForm.country === "IN"
+                          ? e.target.value.replace(/\D/g, "").slice(0, 6)
+                          : e.target.value.slice(0, 16),
                     }))
                   }
                 />
               </div>
-              <div className="grid gap-1">
-                <Label>{t("addrCountry")}</Label>
-                <Input
-                  value={addrForm.country}
-                  onChange={(e) =>
-                    setAddrForm((f) => ({ ...f, country: e.target.value }))
-                  }
-                />
-              </div>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-2 pt-1">
               <input
                 id="default"
                 type="checkbox"

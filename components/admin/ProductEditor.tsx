@@ -73,6 +73,18 @@ type ImageRow = {
   remove?: boolean;     // delete this image row from DB
 };
 
+// Mirrors ImageRow but for the new product_videos table. Lets the
+// admin attach as many videos as they want to a product instead of
+// the previous single `products.video_path` slot.
+type VideoRow = {
+  id?: string;            // product_videos.id (existing rows)
+  file?: File;            // new upload (admin just picked the file)
+  storage_path?: string;  // existing bucket-relative path
+  alt: string;
+  sort_order: number;
+  remove?: boolean;
+};
+
 type ProductModel = {
   id?: string;
   vendor_id?: string;
@@ -113,9 +125,14 @@ type ProductModel = {
   country_of_origin: string;
   // media (derived or selected)
   images: ImageRow[]; // up to 5
+  // Multiple videos per product. Backed by the `product_videos` table.
+  // `video_file` / `video_path` / `remove_video` below are kept for
+  // one release as a fallback for the legacy single-video column on
+  // `products`; everything new flows through `videos[]`.
+  videos: VideoRow[];
   video_file?: File | null;
-  video_path?: string | null; // existing video
-  remove_video?: boolean;
+  video_path?: string | null; // existing video (legacy)
+  remove_video?: boolean;     // legacy
 };
 
 export function ProductEditor({
@@ -171,6 +188,7 @@ export function ProductEditor({
     country_of_origin: "",
 
     images: [],
+    videos: [],
     video_file: null,
     video_path: null,
     remove_video: false,
@@ -224,6 +242,16 @@ export function ProductEditor({
           .eq("product_id", productId)
           .order("sort_order", { ascending: true });
 
+        // Load gallery videos (new multi-video table). Legacy single
+        // video on `products.video_path` is still surfaced as the
+        // `video_path` field below for backward compatibility, but
+        // new uploads go through this list.
+        const { data: vids } = await supabase
+          .from("product_videos")
+          .select("id, storage_path, alt, sort_order")
+          .eq("product_id", productId)
+          .order("sort_order", { ascending: true });
+
         setModel((m) => ({
           ...m,
           id: prod.id,
@@ -264,6 +292,12 @@ export function ProductEditor({
           images: (imgs ?? []).map((r) => ({
             id: r.id, storage_path: r.storage_path, alt: r.alt ?? "", sort_order: r.sort_order ?? 0,
           })),
+          videos: (vids ?? []).map((r) => ({
+            id: r.id,
+            storage_path: r.storage_path,
+            alt: r.alt ?? "",
+            sort_order: r.sort_order ?? 0,
+          })),
         }));
       }
     })();
@@ -289,6 +323,35 @@ export function ProductEditor({
         copy.splice(idx, 1);
       }
       return { ...m, images: copy };
+    });
+  };
+
+  // Video slot management — mirrors the image versions but with no
+  // upper cap (admins can attach as many videos as they want now).
+  const addVideoSlot = () => {
+    setModel((m) => {
+      const nextSort = (m.videos[m.videos.length - 1]?.sort_order ?? -1) + 1;
+      return {
+        ...m,
+        videos: [
+          ...m.videos,
+          { alt: "", sort_order: Math.max(0, nextSort) },
+        ],
+      };
+    });
+  };
+
+  const removeVideoSlot = (idx: number) => {
+    setModel((m) => {
+      const copy = [...m.videos];
+      const row = copy[idx];
+      if (row?.id) {
+        // existing row → mark remove (delete from DB on save)
+        copy[idx] = { ...row, remove: true };
+      } else {
+        copy.splice(idx, 1);
+      }
+      return { ...m, videos: copy };
     });
   };
 
@@ -492,6 +555,73 @@ export function ProductEditor({
           .eq("id", prodId)
           .eq("vendor_id", vendor.id);
         if (setVidErr) throw new Error(setVidErr.message);
+      }
+
+      // 4d-multi) `product_videos` table — N videos per product.
+      // Mirrors the image save block above: build the upsert payload
+      // from new files + existing rows, collect remove ids separately,
+      // then issue the delete + upsert in one shot each.
+      const vidRows: {
+        product_id: string;
+        storage_path: string;
+        alt: string | null;
+        sort_order: number;
+      }[] = [];
+      const toDeleteVidIds: string[] = [];
+      for (const row of model.videos) {
+        if (row.remove && row.id) {
+          toDeleteVidIds.push(row.id);
+          continue;
+        }
+        let storage_path = row.storage_path;
+        if (row.file) {
+          const cleanName = safeKeyPart(row.file.name);
+          const key = `${safeSku}/videos/${cleanName}`;
+          const { error: upErr } = await supabase.storage
+            .from(bucket)
+            .upload(key, row.file, {
+              upsert: overwriteStorage,
+              cacheControl: "31536000",
+              contentType: row.file.type || undefined,
+            });
+          if (upErr && upErr.message?.includes("already exists") && !overwriteStorage) {
+            throw new Error(`Video already exists in storage: ${key}`);
+          }
+          storage_path = key;
+        }
+        if (storage_path) {
+          vidRows.push({
+            product_id: prodId!,
+            storage_path,
+            alt: row.alt?.trim() || null,
+            sort_order: row.sort_order ?? 0,
+          });
+        }
+      }
+
+      if (toDeleteVidIds.length) {
+        // Best-effort: also drop the storage blobs if the admin asked
+        // for media cleanup.
+        if (deleteMediaFromStorage) {
+          const { data: goneVid } = await supabase
+            .from("product_videos")
+            .select("storage_path")
+            .in("id", toDeleteVidIds);
+          const paths = (goneVid ?? []).map((g: any) => g.storage_path);
+          if (paths.length) await supabase.storage.from(bucket).remove(paths);
+        }
+        const { error: delVidErr } = await supabase
+          .from("product_videos")
+          .delete()
+          .in("id", toDeleteVidIds);
+        if (delVidErr) throw new Error(delVidErr.message);
+      }
+
+      if (vidRows.length) {
+        const { error: vidErr } = await supabase
+          .from("product_videos")
+          .upsert(vidRows, { onConflict: "product_id,storage_path" });
+        if (vidErr) throw new Error(vidErr.message);
       }
 
       // 4e) Derive hero/og from first two images if we *submitted* any images this run
@@ -831,8 +961,133 @@ export function ProductEditor({
               </Button>
             )}
 
-            <div className="pt-2">
-              <h3 className="text-lg font-medium mb-2">Video (optional)</h3>
+            {/* Multi-video — N slots per product. Mirrors the image
+                layout above; each row gets its own file picker + alt
+                + remove button. Reorder by editing the sort_order
+                input. */}
+            <div className="pt-4 border-t">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-medium">
+                  Videos
+                  <span className="text-xs text-muted-foreground ml-2">
+                    ({model.videos.filter((v) => !v.remove).length} added)
+                  </span>
+                </h3>
+                <Button variant="outline" size="sm" onClick={addVideoSlot}>
+                  <Plus className="h-4 w-4 mr-2" /> Add Video
+                </Button>
+              </div>
+
+              <div className="grid gap-3">
+                {model.videos.map((row, idx) => (
+                  <div
+                    key={idx}
+                    className={`rounded-lg border p-3 ${row.remove ? "opacity-60" : ""}`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm font-medium">
+                        Video #{idx + 1}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeVideoSlot(idx)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+
+                    <div className="mb-2 text-xs text-muted-foreground">
+                      {row.file
+                        ? `New: ${row.file.name}`
+                        : row.storage_path
+                        ? `Existing: ${row.storage_path}`
+                        : "No file selected"}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2">
+                      <div>
+                        <Label>Choose video</Label>
+                        <Input
+                          type="file"
+                          accept="video/mp4,video/webm,video/quicktime"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            setModel((m) => {
+                              const copy = [...m.videos];
+                              copy[idx] = {
+                                ...copy[idx],
+                                file: f,
+                                storage_path: undefined,
+                              };
+                              return { ...m, videos: copy };
+                            });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label>Alt text (optional)</Label>
+                        <Input
+                          value={row.alt}
+                          onChange={(e) =>
+                            setModel((m) => {
+                              const copy = [...m.videos];
+                              copy[idx] = { ...copy[idx], alt: e.target.value };
+                              return { ...m, videos: copy };
+                            })
+                          }
+                          placeholder="Short description"
+                        />
+                      </div>
+                      <div>
+                        <Label>Order</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={row.sort_order}
+                          onChange={(e) =>
+                            setModel((m) => {
+                              const copy = [...m.videos];
+                              copy[idx] = {
+                                ...copy[idx],
+                                sort_order: Math.max(
+                                  0,
+                                  Number(e.target.value) || 0
+                                ),
+                              };
+                              return { ...m, videos: copy };
+                            })
+                          }
+                          className="w-20"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {model.videos.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No videos attached. Click <strong>Add Video</strong> to
+                    upload one (or more).
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Legacy single video slot — kept for one release so the
+                old `products.video_path` column stays editable while
+                we transition. New uploads should go through the
+                multi-video list above. */}
+            <div className="pt-4 border-t">
+              <h3 className="text-base font-medium mb-1 text-muted-foreground">
+                Legacy single video
+              </h3>
+              <p className="text-xs text-muted-foreground mb-2">
+                Older field, kept for compatibility. Prefer the
+                multi-video list above for new uploads.
+              </p>
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <Label>Choose video</Label>

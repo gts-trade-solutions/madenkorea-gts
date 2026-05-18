@@ -58,13 +58,16 @@ export async function GET() {
   const sb = admin();
   const { data, error: dbErr } = await sb
     .from("country_shipping_rates")
-    .select("country, rate_per_gram_inr, active, notes, updated_at")
+    .select(
+      "country, rate_per_gram_inr, active, notes, eta_days_min, eta_days_max, updated_at"
+    )
     .order("country", { ascending: true });
   if (dbErr) return json({ ok: false, error: dbErr.message }, 500);
   return json({ ok: true, rates: data ?? [] });
 }
 
-// Upsert one country row. Body: { country, rate_per_gram_inr, active, notes }
+// Upsert one country row.
+// Body: { country, rate_per_gram_inr, active, notes, eta_days_min, eta_days_max }
 export async function POST(req: Request) {
   const { error } = await getAdminOr401();
   if (error) return error;
@@ -74,6 +77,36 @@ export async function POST(req: Request) {
   const rate = Number(body.rate_per_gram_inr);
   const active = body.active === undefined ? true : !!body.active;
   const notes = body.notes ? String(body.notes).slice(0, 500) : null;
+
+  // ETA: optional. Both columns are nullable in DB — if admin leaves
+  // them blank, the storefront just won't show an estimate for that
+  // country. When provided, enforce sanity: integers, 0 <= min <= max,
+  // upper bound 180 days (no shipping carrier we'd integrate with
+  // takes that long).
+  const etaMinRaw = body.eta_days_min;
+  const etaMaxRaw = body.eta_days_max;
+  const hasEta =
+    etaMinRaw !== null &&
+    etaMinRaw !== undefined &&
+    etaMinRaw !== "" &&
+    etaMaxRaw !== null &&
+    etaMaxRaw !== undefined &&
+    etaMaxRaw !== "";
+  let etaMin: number | null = null;
+  let etaMax: number | null = null;
+  if (hasEta) {
+    etaMin = Math.floor(Number(etaMinRaw));
+    etaMax = Math.floor(Number(etaMaxRaw));
+    if (
+      !Number.isFinite(etaMin) ||
+      !Number.isFinite(etaMax) ||
+      etaMin < 0 ||
+      etaMax < etaMin ||
+      etaMax > 180
+    ) {
+      return json({ ok: false, error: "INVALID_ETA" }, 400);
+    }
+  }
 
   if (!isSupportedCountry(country) || country === "IN") {
     return json({ ok: false, error: "INVALID_COUNTRY" }, 400);
@@ -86,7 +119,14 @@ export async function POST(req: Request) {
   const { error: upErr } = await sb
     .from("country_shipping_rates")
     .upsert(
-      { country, rate_per_gram_inr: rate, active, notes },
+      {
+        country,
+        rate_per_gram_inr: rate,
+        active,
+        notes,
+        eta_days_min: etaMin,
+        eta_days_max: etaMax,
+      },
       { onConflict: "country" }
     );
 

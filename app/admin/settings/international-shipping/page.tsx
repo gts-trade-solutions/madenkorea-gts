@@ -28,12 +28,16 @@ type RateRow = {
   rate_per_gram_inr: number;
   active: boolean;
   notes: string | null;
+  eta_days_min: number | null;
+  eta_days_max: number | null;
   updated_at: string | null;
 };
 
 type DraftRow = {
   country: CountryCode;
   rate: string;        // string while editing; parsed on save
+  etaMin: string;      // ditto — empty string means "not set"
+  etaMax: string;
   active: boolean;
   notes: string;
   isPersisted: boolean;
@@ -93,6 +97,8 @@ export default function InternationalShippingPage() {
           return {
             country: c,
             rate: r ? String(r.rate_per_gram_inr) : "",
+            etaMin: r?.eta_days_min != null ? String(r.eta_days_min) : "",
+            etaMax: r?.eta_days_max != null ? String(r.eta_days_max) : "",
             active: r ? r.active : true,
             notes: r?.notes ?? "",
             isPersisted: !!r,
@@ -149,6 +155,33 @@ export default function InternationalShippingPage() {
       return;
     }
 
+    // ETA: both fields must be set together or neither. If one is set
+    // and the other isn't, refuse — otherwise the storefront falls
+    // back to "no estimate" silently and the admin won't know why.
+    const minStr = row.etaMin.trim();
+    const maxStr = row.etaMax.trim();
+    const hasEta = minStr !== "" || maxStr !== "";
+    let etaMin: number | null = null;
+    let etaMax: number | null = null;
+    if (hasEta) {
+      if (minStr === "" || maxStr === "") {
+        toast.error("Both ETA min and max must be set (or both blank)");
+        return;
+      }
+      etaMin = Math.floor(Number(minStr));
+      etaMax = Math.floor(Number(maxStr));
+      if (
+        !Number.isFinite(etaMin) ||
+        !Number.isFinite(etaMax) ||
+        etaMin < 0 ||
+        etaMax < etaMin ||
+        etaMax > 180
+      ) {
+        toast.error("ETA must be 0 ≤ min ≤ max ≤ 180");
+        return;
+      }
+    }
+
     setDrafts((rs) =>
       rs.map((r) => (r.country === country ? { ...r, saving: true } : r))
     );
@@ -168,6 +201,8 @@ export default function InternationalShippingPage() {
           rate_per_gram_inr: rateNum,
           active: row.active,
           notes: row.notes || null,
+          eta_days_min: etaMin,
+          eta_days_max: etaMax,
         }),
       });
       const body = await res.json();
@@ -203,6 +238,12 @@ export default function InternationalShippingPage() {
           without a rate or marked inactive cannot complete an international
           payment.
         </p>
+        <p className="text-sm text-muted-foreground">
+          <strong>Delivery (days)</strong> sets the estimated delivery window
+          shown on the cart and checkout pages for that country
+          (e.g. min=5, max=10 renders as &quot;Delivers in 5–10 days&quot;).
+          Leave both blank to hide the estimate for that country.
+        </p>
 
         <div className="text-xs text-muted-foreground">
           {loading
@@ -230,6 +271,9 @@ export default function InternationalShippingPage() {
                   <th className="text-left px-4 py-3 font-medium">
                     Rate (₹/gram)
                   </th>
+                  <th className="text-left px-4 py-3 font-medium">
+                    Delivery (days)
+                  </th>
                   <th className="text-left px-4 py-3 font-medium">Notes</th>
                   <th className="text-left px-4 py-3 font-medium">Active</th>
                   <th className="text-right px-4 py-3 font-medium">Save</th>
@@ -239,7 +283,7 @@ export default function InternationalShippingPage() {
                 {loading && (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="px-4 py-8 text-center text-muted-foreground"
                     >
                       Loading…
@@ -285,6 +329,41 @@ export default function InternationalShippingPage() {
                             placeholder="0.00"
                             className="h-8"
                           />
+                        </td>
+                        <td className="px-4 py-3 w-40">
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              min="0"
+                              max="180"
+                              step="1"
+                              value={d.etaMin}
+                              onChange={(e) =>
+                                updateDraft(d.country, {
+                                  etaMin: e.target.value,
+                                })
+                              }
+                              placeholder="min"
+                              className="h-8 w-16"
+                            />
+                            <span className="text-muted-foreground text-xs">
+                              –
+                            </span>
+                            <Input
+                              type="number"
+                              min="0"
+                              max="180"
+                              step="1"
+                              value={d.etaMax}
+                              onChange={(e) =>
+                                updateDraft(d.country, {
+                                  etaMax: e.target.value,
+                                })
+                              }
+                              placeholder="max"
+                              className="h-8 w-16"
+                            />
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <Input

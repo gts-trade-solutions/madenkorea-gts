@@ -138,11 +138,52 @@ export default function CheckoutPage() {
     email: "",
     phone: "",
     address: "",
+    line2: "",
+    landmark: "",
     city: "",
     state: "",
     pincode: "",
   });
   const [addressLoaded, setAddressLoaded] = useState(false);
+
+  // Delivery ETA — refreshes when the destination country or (for
+  // India) the entered pincode changes. India uses the pincode to
+  // resolve a zone-specific window; international uses the country's
+  // configured range. The fetch is debounced via the dependency list,
+  // not a timer, because country/pincode changes are infrequent.
+  const [eta, setEta] = useState<{ min: number; max: number } | null>(null);
+
+  // Saved-address picker state. `savedAddresses` is the full list for
+  // the radio cards; `selectedAddressId` tracks which (if any) is
+  // currently filling the form. Picking a saved address clears the
+  // "save this address" toggle by default — we don't want to insert
+  // a duplicate row.
+  type SavedAddressRow = {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    line1: string;
+    line2: string | null;
+    landmark: string | null;
+    city: string;
+    state: string | null;
+    pincode: string;
+    country: string;
+    is_default: boolean;
+  };
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddressRow[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(
+    null
+  );
+
+  // Explicit "Save this address" toggle. Replaces the previous
+  // silent-overwrite-default behaviour (which destroyed the user's
+  // saved address every checkout). Defaults to ON if the user has no
+  // saved addresses yet — so first-time customers don't lose their
+  // address — and OFF when they already have at least one.
+  const [saveThisAddress, setSaveThisAddress] = useState(false);
+  const [makeDefaultOnSave, setMakeDefaultOnSave] = useState(false);
 
   useEffect(() => {
     if (!ready) return;
@@ -350,6 +391,37 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, shippingCost]);
 
+  // Delivery ETA fetcher. Re-runs whenever the destination country
+  // changes, or — for Indian addresses only — when the customer
+  // finishes typing a 6-digit pincode (so we can narrow to a zone).
+  useEffect(() => {
+    let cancelled = false;
+    const validIndianPincode = /^\d{6}$/.test(formData.pincode);
+    const qs = new URLSearchParams({ country });
+    if (country === "IN" && validIndianPincode) {
+      qs.set("pincode", formData.pincode);
+    }
+    (async () => {
+      try {
+        const res = await fetch(`/api/shipping/eta?${qs.toString()}`, {
+          cache: "no-store",
+        });
+        const body = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (res.ok && body?.ok && body.eta) {
+          setEta({ min: body.eta.min, max: body.eta.max });
+        } else {
+          setEta(null);
+        }
+      } catch {
+        if (!cancelled) setEta(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [country, formData.pincode]);
+
   const recalcNow = () => askTotals("manual-debug-recalc");
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -373,14 +445,23 @@ export default function CheckoutPage() {
       const user = authData?.user;
       if (!user) return;
 
-      const { data: addr } = await supabase
+      // Fetch the full saved list so the picker can render all options,
+      // not just the default one. The default (if any) is auto-picked
+      // to fill the form; otherwise the form stays empty and the user
+      // types fresh data.
+      const { data: addrList } = await supabase
         .from("addresses")
-        .select("line1, line2, city, state, pincode, country")
+        .select(
+          "id, name, phone, email, line1, line2, landmark, city, state, pincode, country, is_default"
+        )
         .eq("user_id", user.id)
-        .eq("is_default", true)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order("is_default", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      const rows = (addrList ?? []) as SavedAddressRow[];
+      setSavedAddresses(rows);
+
+      const defaultAddr = rows.find((a) => a.is_default) ?? rows[0] ?? null;
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -390,17 +471,67 @@ export default function CheckoutPage() {
 
       setFormData((prev) => ({
         ...prev,
-        name: prev.name || profile?.full_name || "",
-        email: prev.email || user.email || "",
-        phone: prev.phone || profile?.phone || "",
-        address: prev.address || addr?.line1 || "",
-        city: prev.city || addr?.city || "",
-        state: prev.state || addr?.state || "",
-        pincode: prev.pincode || addr?.pincode || "",
+        name: prev.name || defaultAddr?.name || profile?.full_name || "",
+        email: prev.email || defaultAddr?.email || user.email || "",
+        phone: prev.phone || defaultAddr?.phone || profile?.phone || "",
+        address: prev.address || defaultAddr?.line1 || "",
+        line2: prev.line2 || defaultAddr?.line2 || "",
+        landmark: prev.landmark || defaultAddr?.landmark || "",
+        city: prev.city || defaultAddr?.city || "",
+        state: prev.state || defaultAddr?.state || "",
+        pincode: prev.pincode || defaultAddr?.pincode || "",
       }));
+      if (defaultAddr) setSelectedAddressId(defaultAddr.id);
+
+      // First-time customers (no saved addresses) get the "save this
+      // address" checkbox pre-ticked so the convenience is opt-out, not
+      // opt-in. Returning customers default to OFF — they already have
+      // saved addresses and probably don't want a duplicate row.
+      setSaveThisAddress(rows.length === 0);
+
       setAddressLoaded(true);
     })();
   }, [ready, isAuthenticated, addressLoaded]);
+
+  // Handler for picking a saved address — populates the form and
+  // remembers which row was picked so we don't insert a duplicate
+  // on Pay.
+  const pickSavedAddress = (a: SavedAddressRow) => {
+    setSelectedAddressId(a.id);
+    setFormData({
+      name: a.name || "",
+      email: a.email || formData.email,
+      phone: a.phone || "",
+      address: a.line1 || "",
+      line2: a.line2 || "",
+      landmark: a.landmark || "",
+      city: a.city || "",
+      state: a.state || "",
+      pincode: a.pincode || "",
+    });
+    // Picked a saved address ⇒ no need to save a duplicate; turn the
+    // toggle off.  User can still tick it back on if they edit fields
+    // and want to keep the modified version.
+    setSaveThisAddress(false);
+    setMakeDefaultOnSave(false);
+  };
+
+  // "Use a new address" — clears the form + selection so the user can
+  // type freshly. Auto-flips the save toggle on so the new entry is
+  // captured by default.
+  const clearAddressSelection = () => {
+    setSelectedAddressId(null);
+    setFormData((prev) => ({
+      ...prev,
+      address: "",
+      line2: "",
+      landmark: "",
+      city: "",
+      state: "",
+      pincode: "",
+    }));
+    setSaveThisAddress(true);
+  };
 
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -494,39 +625,60 @@ export default function CheckoutPage() {
     try {
       const { data: authData } = await supabase.auth.getUser();
       const user = authData?.user;
-      // Only sync the user's `addresses` row for Indian orders. That
-      // table's schema (PIN, state, country='India') is India-shaped;
-      // the order's `address_snapshot` already carries the full
-      // international address for shipping / fulfilment.
-      if (user && isINR) {
+
+      // Explicit "Save this address" toggle. Replaces the previous
+      // silent-overwrite-default behaviour. Three branches:
+      //   1. Save toggle ON + no saved address selected → insert new row.
+      //   2. Save toggle ON + saved address selected → update that row
+      //      (user picked it and then edited some fields).
+      //   3. Save toggle OFF → don't touch the addresses table.
+      // The order's `address_snapshot` carries the full address either
+      // way, so fulfilment doesn't depend on the addresses table.
+      if (user && saveThisAddress) {
         const payload = {
+          name: formData.name?.trim() || null,
+          phone: formData.phone?.trim() || null,
+          email: formData.email?.trim() || null,
           line1: formData.address,
-          line2: null,
+          line2: formData.line2?.trim() || null,
+          landmark: formData.landmark?.trim() || null,
           city: formData.city,
-          state: formData.state,
+          state: formData.state || null,
           pincode,
-          country: "India",
+          // Use the full country name to match account-settings legacy
+          // values (we coerce both back when reading). ISO code is on
+          // the order's address_snapshot.country_code for downstream.
+          country: isINR ? "India" : countryProfile.name,
+          is_default: makeDefaultOnSave,
         };
 
-        const { data: existingDefault } = await supabase
-          .from("addresses")
-          .select("id")
-          .eq("user_id", user.id)
-          .eq("is_default", true)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        try {
+          if (makeDefaultOnSave) {
+            // Clear any existing default first so we don't end up with
+            // two `is_default = true` rows (the table doesn't have a
+            // partial unique index on default).
+            await supabase
+              .from("addresses")
+              .update({ is_default: false })
+              .eq("user_id", user.id)
+              .eq("is_default", true);
+          }
 
-        if (existingDefault?.id) {
-          await supabase
-            .from("addresses")
-            .update(payload)
-            .eq("id", existingDefault.id)
-            .eq("user_id", user.id);
-        } else {
-          await supabase
-            .from("addresses")
-            .insert({ user_id: user.id, is_default: true, ...payload });
+          if (selectedAddressId) {
+            await supabase
+              .from("addresses")
+              .update(payload)
+              .eq("id", selectedAddressId)
+              .eq("user_id", user.id);
+          } else {
+            await supabase
+              .from("addresses")
+              .insert({ user_id: user.id, ...payload });
+          }
+        } catch (saveErr) {
+          // Don't block payment on address-save failure — the order
+          // snapshot has everything fulfilment needs.
+          console.warn("[CHECKOUT] address save failed:", saveErr);
         }
       }
 
@@ -602,6 +754,78 @@ export default function CheckoutPage() {
         <form onSubmit={handlePay}>
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             <div className="space-y-6 lg:col-span-2">
+              {/* Saved-address picker. Shown only when the customer
+                  actually has saved addresses (returning buyers). Click
+                  to autofill the form; "Use a new address" clears the
+                  selection and switches save-on by default. */}
+              {savedAddresses.length > 0 && (
+                <Card>
+                  <CardHeader className="flex flex-row items-start justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-base">
+                        {t("useSavedAddressTitle")}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {t("useSavedAddressBody")}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearAddressSelection}
+                    >
+                      {t("useNewAddressBtn")}
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {savedAddresses.map((a) => {
+                        const selected = selectedAddressId === a.id;
+                        return (
+                          <button
+                            key={a.id}
+                            type="button"
+                            onClick={() => pickSavedAddress(a)}
+                            className={`text-left rounded-lg border p-3 hover:bg-accent transition-colors ${
+                              selected
+                                ? "border-primary bg-primary/5 ring-1 ring-primary"
+                                : "border-border"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="font-medium text-sm truncate">
+                                {a.name || t("savedNoNameFallback")}
+                              </span>
+                              {a.is_default && (
+                                <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  {t("savedDefaultBadge")}
+                                </span>
+                              )}
+                            </div>
+                            {a.phone && (
+                              <p className="text-xs text-muted-foreground">
+                                {a.phone}
+                              </p>
+                            )}
+                            <p className="text-xs mt-1 text-muted-foreground line-clamp-2">
+                              {a.line1}
+                              {a.line2 ? `, ${a.line2}` : ""}
+                              {", "}
+                              {a.city}
+                              {a.state ? `, ${a.state}` : ""} - {a.pincode}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              {a.country}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
                 <CardHeader>
                   <CardTitle>{t("contactHeading")}</CardTitle>
@@ -714,6 +938,44 @@ export default function CheckoutPage() {
                         maxLength={isINR ? 6 : 16}
                       />
                     </div>
+                  </div>
+
+                  {/* Explicit save-this-address toggle. Replaces the
+                      old silent overwrite of the user's default
+                      address. Pre-ticked when the buyer has no saved
+                      addresses yet; opt-in otherwise. */}
+                  <div className="border-t pt-3 mt-3 space-y-2">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={saveThisAddress}
+                        onChange={(e) => {
+                          setSaveThisAddress(e.target.checked);
+                          if (!e.target.checked) setMakeDefaultOnSave(false);
+                        }}
+                        className="h-4 w-4"
+                      />
+                      <span>
+                        {selectedAddressId
+                          ? t("saveAddressUpdateLabel")
+                          : t("saveAddressNewLabel")}
+                      </span>
+                    </label>
+                    {saveThisAddress && (
+                      <label className="flex items-center gap-2 text-sm cursor-pointer select-none pl-6">
+                        <input
+                          type="checkbox"
+                          checked={makeDefaultOnSave}
+                          onChange={(e) =>
+                            setMakeDefaultOnSave(e.target.checked)
+                          }
+                          className="h-4 w-4"
+                        />
+                        <span className="text-muted-foreground">
+                          {t("makeDefaultLabel")}
+                        </span>
+                      </label>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -865,6 +1127,19 @@ export default function CheckoutPage() {
                           </div>
                         );
                       })()}
+
+                      {/* Delivery ETA. India narrows to the pincode's
+                          zone once the pincode is valid; international
+                          shows the country's configured range. Hidden
+                          when no estimate is configured. */}
+                      {eta && (
+                        <p className="text-xs text-muted-foreground">
+                          {t("deliveryEstimate", {
+                            min: eta.min,
+                            max: eta.max,
+                          })}
+                        </p>
+                      )}
 
                       {/* International orders ship DDU — duties and taxes
                           are payable by the customer at customs in their

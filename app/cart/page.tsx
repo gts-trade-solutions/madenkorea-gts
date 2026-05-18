@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/lib/contexts/CartContext";
 import { useCurrency } from "@/lib/contexts/CurrencyContext";
+import { useCountry } from "@/lib/contexts/CountryContext";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import {
   computeShippingFee,
@@ -118,6 +119,35 @@ export default function CartPage() {
   const { isAuthenticated } = useAuth();
   const shippingConfig = useShippingConfig();
   const { formatPrice, isINR } = useCurrency();
+  const { country } = useCountry();
+
+  // Delivery ETA for the current destination. Cart has no pincode yet
+  // (that's collected on checkout), so India shows the broad range.
+  // Result is `{min, max}` or null when not configured.
+  const [eta, setEta] = useState<{ min: number; max: number } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/shipping/eta?country=${encodeURIComponent(country)}`,
+          { cache: "no-store" }
+        );
+        const body = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (res.ok && body?.ok && body.eta) {
+          setEta({ min: body.eta.min, max: body.eta.max });
+        } else {
+          setEta(null);
+        }
+      } catch {
+        if (!cancelled) setEta(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [country]);
 
   const [membership, setMembership] = useState<MembershipRow | null>(null);
   // International order request modal — opened by the Checkout button
@@ -677,6 +707,17 @@ async function clearPromo() {
                       : formatPrice(displayShipping)}
                   </span>
                 </div>
+
+                {/* Delivery estimate. India shows the broad range here
+                    (a precise zone needs the pincode, which is only
+                    collected at checkout). International shows the
+                    country's configured range. Renders nothing if the
+                    admin hasn't configured an ETA for the destination. */}
+                {eta && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("deliveryEstimate", { min: eta.min, max: eta.max })}
+                  </p>
+                )}
 
                 {/* India: existing threshold + K-Plus copy. International:
                     a single-line note that customs/duties are on the
