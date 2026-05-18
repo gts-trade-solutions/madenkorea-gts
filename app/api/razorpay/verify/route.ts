@@ -12,6 +12,7 @@ import {
 import { getBusinessInfo, DEFAULT_BUSINESS_INFO } from "@/lib/businessInfo";
 import { getEmailTranslator } from "@/lib/i18n/email";
 import { getAdminRecipientEmails } from "@/lib/notificationRecipients";
+import { clearPromoCookie } from "@/lib/promo-cookie";
 
 // Verify is the heaviest critical path: signature check, Razorpay API
 // fetch, multiple DB writes, optional DTDC create, and two SES emails.
@@ -147,6 +148,10 @@ export async function POST(req: NextRequest) {
         shipping_fee,
         discount_total,
         total,
+        subtotal_inr,
+        shipping_fee_inr,
+        discount_total_inr,
+        total_inr,
         currency,
         fx_rate_snapshot,
         recipient_locale,
@@ -306,12 +311,63 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 5) Compute commission from SUBTOTAL
+    // 5) Subtotals in two currencies.
+    //
+    // `base` is the order's buyer-currency subtotal (INR for Indian
+    // orders, USD/EUR/etc after Phase 2 international cutover) — used
+    // by emails + customer-facing math downstream.
+    //
+    // `baseInr` is the INR-canonical subtotal — used ONLY for the
+    // K-Partnership commission calc. Influencer payouts come out of
+    // the India settlement account in INR, so the commission ledger
+    // is INR regardless of what the buyer paid in. Falls back to
+    // `order.subtotal` for legacy pre-Phase-2 rows where
+    // `subtotal_inr` is null AND the order currency was already INR
+    // — same value either way.
     const base = money(order.subtotal);
-    const commissionAmount = money(base * (commissionPct / 100));
-    dbg.push({ step: "commission", base, commissionPct, commissionAmount });
+    const baseInr = money(
+      Number(
+        (order as any).subtotal_inr ??
+          (orderCurrency === "INR" ? order.subtotal : 0)
+      ) || 0
+    );
+    const commissionAmount = money(baseInr * (commissionPct / 100));
+    dbg.push({
+      step: "commission",
+      baseInr,
+      orderCurrency,
+      commissionPct,
+      commissionAmount,
+    });
 
-    // 5b) Write attribution robustly (insert then update)
+    // 5a) Auto-approval rule. `store_settings.commission_auto_approve_days`
+    // controls when a commission row becomes withdrawable:
+    //   0 → approve immediately on payment verification.
+    //   N → leave 'pending'; the daily cron at
+    //       /api/cron/commission-approve flips pending → approved
+    //       once `now > paid_at + N days`.
+    // Phase 1 ships with default 0 so commissions are spendable
+    // straight away — admin opts into a delay later if they want
+    // a return-window buffer.
+    let autoApproveDays = 0;
+    try {
+      const { data: settings } = await admin
+        .from("store_settings")
+        .select("commission_auto_approve_days")
+        .eq("id", 1)
+        .maybeSingle();
+      const raw = Number((settings as any)?.commission_auto_approve_days);
+      autoApproveDays =
+        Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 0;
+    } catch (e: any) {
+      dbg.push({ step: "settings.auto_approve.error", error: e?.message });
+    }
+    const initialAttribStatus: "pending" | "approved" =
+      autoApproveDays === 0 ? "approved" : "pending";
+
+    // 5b) Write attribution robustly (insert then update).
+    // Currency always 'INR' so dashboard sums + payout availability
+    // math never mix currencies regardless of the buyer's currency.
     if (influencerId) {
       const ins = await admin.from("order_attributions").insert({
         order_id: order.id,
@@ -321,8 +377,8 @@ export async function POST(req: NextRequest) {
         discount_percent: discountPct,
         commission_percent: commissionPct,
         commission_amount: commissionAmount,
-        currency: orderCurrency,
-        status: "pending",
+        currency: "INR",
+        status: initialAttribStatus,
       });
       dbg.push({ step: "attrib.insert", error: ins.error?.message });
 
@@ -336,8 +392,8 @@ export async function POST(req: NextRequest) {
             discount_percent: discountPct,
             commission_percent: commissionPct,
             commission_amount: commissionAmount,
-            currency: orderCurrency,
-            status: "pending",
+            currency: "INR",
+            status: initialAttribStatus,
           })
           .eq("order_id", order.id);
         dbg.push({ step: "attrib.update", error: upd.error?.message });
@@ -516,6 +572,17 @@ export async function POST(req: NextRequest) {
         p_user_id: order.user_id,
       });
       dbg.push({ step: "cart.clear", error: cleared.error?.message });
+    }
+
+    // 8a) Clear the applied promo cookie. Otherwise the same code
+    // auto-re-applies on the user's next cart visit, with no UI to
+    // remove it without manual intervention. Best-effort — cookie
+    // ops can throw in non-route-handler contexts.
+    try {
+      clearPromoCookie();
+      dbg.push({ step: "promo.cookie.cleared" });
+    } catch (err: any) {
+      dbg.push({ step: "promo.cookie.clear.error", error: err?.message });
     }
 
     // 9) Send confirmation emails (best-effort; failures won't affect

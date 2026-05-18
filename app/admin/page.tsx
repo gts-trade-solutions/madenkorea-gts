@@ -241,6 +241,31 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
+          {/* K-Partnership Commissions */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <Coins className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>K-Partnership Commissions</CardTitle>
+              <CardDescription>
+                Approve, void, or set the auto-approve window
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Review commission attributions from completed orders. Set the
+                auto-approve days (0 = immediate) to control when commissions
+                become withdrawable.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/commissions")}
+              >
+                Manage Commissions
+              </Button>
+            </CardContent>
+          </Card>
+
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
               <Instagram className="h-8 w-8 mb-2 text-primary" />

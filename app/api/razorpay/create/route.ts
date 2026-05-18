@@ -262,7 +262,12 @@ export async function POST(req: NextRequest) {
                 discount_percent: discountPercent,
                 commission_percent: commissionPercent,
                 commission_amount: 0,
-                currency: orderCurrency,
+                // K-Partnership commissions are INR-canonical (we pay
+                // influencers from the India settlement account, in
+                // INR). The buyer's currency lives on the order row
+                // itself; the attribution stays INR so dashboard sums
+                // never mix currencies.
+                currency: "INR",
                 status: "pending",
               },
               { onConflict: "order_id" }

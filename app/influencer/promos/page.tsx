@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Check } from "lucide-react";
 
@@ -20,6 +21,7 @@ type Promo = {
 
 export default function PromosPage() {
   const supabase = createClientComponentClient();
+  const t = useTranslations("influencer");
   const [accessToken, setAccessToken] = useState<string | null>(null);
 
   const [items, setItems] = useState<Promo[]>([]);
@@ -79,17 +81,17 @@ export default function PromosPage() {
   async function createPromo() {
     setMsg(null);
     if (!accessToken) {
-      setMsg("Please sign in again.");
+      setMsg(t("errSignInAgain"));
       return;
     }
 
     // Friendly validations
     if (!code.trim()) {
-      setMsg("Enter your code.");
+      setMsg(t("codeErrorEnterCode"));
       return;
     }
     if (userPct < 0 || userPct > 100 || commPct < 0 || commPct > 100) {
-      setMsg("Percents must be between 0 and 100.");
+      setMsg(t("errPercentRange"));
       return;
     }
 
@@ -111,26 +113,24 @@ export default function PromosPage() {
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok || !j?.ok) {
-      setMsg(j?.error || "Could not create promo.");
+      setMsg(j?.error || t("codeErrorCreateFailed"));
       return;
     }
 
-    setMsg("Promo created 🎉");
+    setMsg(t("promoCreatedCelebrationToast"));
     resetForm();
     await loadPromos();
   }
 
-  const capHint =
-    "Global code: applies to entire cart; each product’s cap is enforced during checkout.";
+  const capHint = t("promoCapHint");
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 px-3 py-4">
       {/* Title */}
       <div className="rounded-2xl border bg-white p-4 shadow-sm">
-        <h1 className="text-lg font-semibold">Promo codes</h1>
+        <h1 className="text-lg font-semibold">{t("promosPageTitle")}</h1>
         <p className="mt-1 text-xs text-neutral-600">
-          Create a simple code your audience can remember. Only global codes are
-          allowed.
+          {t("promosPageDesc")}
         </p>
       </div>
 
@@ -145,24 +145,24 @@ export default function PromosPage() {
         {/* Static "Global" pill */}
         <div className="mb-3">
           <div className="inline-flex rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
-            Global (cart-wide)
+            {t("globalCartWide")}
           </div>
         </div>
 
         {/* Code + percents */}
         <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <div className="sm:col-span-1">
-            <label className="mb-1 block text-xs font-medium">Code</label>
+            <label className="mb-1 block text-xs font-medium">{t("codeLabel")}</label>
             <input
               className="w-full rounded-lg border px-3 py-2 text-sm uppercase"
-              placeholder="MYCODE"
+              placeholder={t("codePlaceholder")}
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
             />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium">
-              Customer discount (%)
+              {t("customerDiscountLabel")}
             </label>
             <input
               className="w-full rounded-lg border px-3 py-2 text-sm"
@@ -176,7 +176,7 @@ export default function PromosPage() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium">
-              Your commission (%)
+              {t("yourCommissionLabel")}
             </label>
             <input
               className="w-full rounded-lg border px-3 py-2 text-sm"
@@ -200,7 +200,7 @@ export default function PromosPage() {
               setCommPct(10);
             }}
           >
-            <Check className="h-4 w-4" /> Recommended 10% + 10%
+            <Check className="h-4 w-4" /> {t("promoRecommended1010")}
           </button>
           <p className="text-[11px] text-neutral-600">{capHint}</p>
         </div>
@@ -212,18 +212,18 @@ export default function PromosPage() {
             onClick={createPromo}
             disabled={!code.trim()}
           >
-            Create promo
+            {t("createPromoBtn")}
           </button>
         </div>
       </div>
 
       {/* List */}
       <div className="rounded-2xl border bg-white p-3 shadow-sm">
-        <h2 className="px-1 text-base font-semibold">Your promo codes</h2>
+        <h2 className="px-1 text-base font-semibold">{t("yourPromosTitle")}</h2>
         {loading ? (
-          <p className="px-1 py-3 text-sm text-neutral-600">Loading…</p>
+          <p className="px-1 py-3 text-sm text-neutral-600">{t("promoListLoading")}</p>
         ) : items.length === 0 ? (
-          <p className="px-1 py-3 text-sm text-neutral-600">No promos yet.</p>
+          <p className="px-1 py-3 text-sm text-neutral-600">{t("promosEmpty")}</p>
         ) : (
           <ul className="mt-2 divide-y">
             {items.map((p) => (
@@ -237,25 +237,24 @@ export default function PromosPage() {
                       {p.code}
                     </span>
                     <span className="inline-flex rounded-full px-2 py-0.5 text-[11px] bg-emerald-50 text-emerald-700">
-                      Global
+                      {t("promoListGlobalBadge")}
                     </span>
                     {p.active ? (
                       <span className="text-[11px] text-emerald-700">
-                        Active
+                        {t("promoListActive")}
                       </span>
                     ) : (
                       <span className="text-[11px] text-neutral-500">
-                        Inactive
+                        {t("promoListInactive")}
                       </span>
                     )}
                   </div>
                   <div className="mt-1 text-xs text-neutral-600">
-                    Applies to entire cart • Customer {p.discount_percent}% +
-                    You {p.commission_percent}%
+                    {t("promoAppliesToEntireCart")} • {t("promoListSplit", { user: p.discount_percent, comm: p.commission_percent })}
                     {typeof p.uses === "number"
-                      ? ` • Uses ${p.uses}${
-                          p.max_uses ? ` / ${p.max_uses}` : ""
-                        }`
+                      ? " • " + (p.max_uses
+                          ? t("promoListUsesCap", { used: p.uses, cap: p.max_uses })
+                          : t("promoListUses", { used: p.uses }))
                       : ""}
                   </div>
                 </div>

@@ -171,12 +171,13 @@ function buildPrompt(targetLocale, namespaceKey, namespaceValue) {
 }
 
 async function translateNamespace(target, namespaceKey, namespaceValue) {
-  // Per-namespace requests keep each round trip small. 4096 output
-  // tokens covers German/Polish — both expand ~30% over English and
-  // 2048 truncated mid-response on the longer namespaces.
+  // Per-namespace requests keep each round trip small. The influencer
+  // namespace is ~200 keys / 10kB and Vietnamese expansion truncates
+  // at 4096; 8192 leaves headroom for further growth without paying
+  // for it on the small namespaces (they stop generating much sooner).
   const body = {
     model: MODEL,
-    max_tokens: 4096,
+    max_tokens: 8192,
     temperature: 0,
     messages: [
       { role: "user", content: buildPrompt(target, namespaceKey, namespaceValue) },

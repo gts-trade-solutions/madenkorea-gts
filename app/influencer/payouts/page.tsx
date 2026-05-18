@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import {
   ArrowLeft,
@@ -26,6 +27,7 @@ type PayoutRow = {
 
 export default function PayoutsPage() {
   const supabase = createClientComponentClient();
+  const t = useTranslations("influencer");
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<PayoutRow[]>([]);
@@ -85,28 +87,28 @@ export default function PayoutsPage() {
         <a href="/influencer" className="rounded-lg border bg-white p-2">
           <ArrowLeft className="h-4 w-4" />
         </a>
-        <h1 className="text-lg font-semibold">Payout history</h1>
+        <h1 className="text-lg font-semibold">{t("payoutHistoryTitle")}</h1>
       </div>
 
       {/* Filters */}
       <div className="mb-3 grid grid-cols-4 gap-2">
         <Chip active={filter === "all"} onClick={() => setFilter("all")}>
-          All
+          {t("filterAll")}
         </Chip>
         <Chip
           active={filter === "pending"}
           onClick={() => setFilter("pending")}
         >
-          Pending
+          {t("filterPending")}
         </Chip>
         <Chip
           active={filter === "settled"}
           onClick={() => setFilter("settled")}
         >
-          Settled
+          {t("filterSettled")}
         </Chip>
         <Chip active={filter === "failed"} onClick={() => setFilter("failed")}>
-          Failed
+          {t("filterFailed")}
         </Chip>
       </div>
 
@@ -114,7 +116,7 @@ export default function PayoutsPage() {
       <div className="rounded-2xl border bg-white p-2 sm:p-3">
         {loading ? (
           <div className="flex items-center gap-2 p-4 text-sm text-neutral-600">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            <Loader2 className="h-4 w-4 animate-spin" /> {t("walletStatusLoading")}
           </div>
         ) : filtered.length === 0 ? (
           <EmptyState />
@@ -139,20 +141,20 @@ export default function PayoutsPage() {
                   </div>
 
                   <div className="mt-1 text-xs text-neutral-600">
-                    Requested: {formatDateTime(p.created_at)}
+                    {t("requestedAt", { datetime: formatDateTime(p.created_at) })}
                     {p.paid_at && p.status === "paid"
-                      ? ` • Settled: ${formatDateTime(p.paid_at)}`
+                      ? t("settledAtSeparator", { datetime: formatDateTime(p.paid_at) })
                       : ""}
                     {p.request_note ? (
                       <>
                         <br />
-                        Note: {p.request_note}
+                        {t("noteLine", { note: p.request_note })}
                       </>
                     ) : null}
                     {p.contact_email ? (
                       <>
                         <br />
-                        Email: {p.contact_email}
+                        {t("emailLine", { email: p.contact_email })}
                       </>
                     ) : null}
                   </div>
@@ -174,13 +176,13 @@ export default function PayoutsPage() {
           href="/influencer"
           className="rounded-xl border bg-white px-4 py-2.5 text-center text-sm font-semibold"
         >
-          Back to dashboard
+          {t("backToDashboard")}
         </a>
         <a
           href="/influencer"
           className="rounded-xl bg-black px-4 py-2.5 text-center text-sm font-semibold text-white"
         >
-          Request payout
+          {t("payoutRequest")}
         </a>
       </div>
     </div>
@@ -211,35 +213,37 @@ function Chip({
 }
 
 function StatusBadge({ status }: { status: PayoutRow["status"] }) {
+  const t = useTranslations("influencer");
   if (status === "paid") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-        <CheckCircle2 className="h-3.5 w-3.5" /> Settled
+        <CheckCircle2 className="h-3.5 w-3.5" /> {t("statusSettled")}
       </span>
     );
   }
   if (status === "failed") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-        <XCircle className="h-3.5 w-3.5" /> Failed
+        <XCircle className="h-3.5 w-3.5" /> {t("statusFailedLabel")}
       </span>
     );
   }
   if (status === "processing") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Processing
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("statusProcessing")}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-      <Clock className="h-3.5 w-3.5" /> Pending
+      <Clock className="h-3.5 w-3.5" /> {t("statusPending")}
     </span>
   );
 }
 
 function MethodBadge({ method }: { method: PayoutRow["method"] }) {
+  const t = useTranslations("influencer");
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ${
@@ -248,21 +252,21 @@ function MethodBadge({ method }: { method: PayoutRow["method"] }) {
           : "bg-neutral-100 text-neutral-700"
       }`}
     >
-      {method === "store_credit" ? "Store credit" : "Manual"}
+      {method === "store_credit" ? t("methodStoreCredit") : t("methodManual")}
     </span>
   );
 }
 
 function EmptyState() {
+  const t = useTranslations("influencer");
   return (
     <div className="grid place-items-center gap-2 p-8 text-center">
       <div className="rounded-full bg-neutral-100 p-3">
         <Clock className="h-5 w-5 text-neutral-600" />
       </div>
-      <div className="text-sm font-semibold">No requests yet</div>
+      <div className="text-sm font-semibold">{t("payoutsEmptyTitle")}</div>
       <p className="max-w-xs text-xs text-neutral-600">
-        When you request a payout, it will show here as <b>Pending</b>. After we
-        complete it, status changes to <b>Settled</b>.
+        {t("payoutsEmptyDesc")}
       </p>
     </div>
   );

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -17,6 +18,7 @@ export const metadata: Metadata = {
 };
 
 export default async function InfluencerLayout({ children }: { children: ReactNode }) {
+  const t = await getTranslations("influencer");
   // Use the auth-helpers server client (handles sb-* cookies correctly)
   const supabase = createServerComponentClient({ cookies });
 
@@ -61,19 +63,19 @@ export default async function InfluencerLayout({ children }: { children: ReactNo
       <header className="border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-semibold">Influencer Portal</h1>
+            <h1 className="text-xl font-semibold">{t("portalTitle")}</h1>
             {inflHandle && (
               <span className="text-xs text-muted-foreground">@{inflHandle}</span>
             )}
             {isAdmin && (
               <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">
-                Admin mode
+                {t("adminMode")}
               </span>
             )}
           </div>
           <nav className="flex gap-4 text-sm">
-            <Link className="hover:underline" href="/influencer">Dashboard</Link>
-            <Link className="hover:underline" href="/influencer/promos">Promos</Link>
+            <Link className="hover:underline" href="/influencer">{t("navDashboard")}</Link>
+            <Link className="hover:underline" href="/influencer/promos">{t("navPromos")}</Link>
             {/* <Link className="hover:underline" href="/influencer/payouts">Payouts</Link> */}
           </nav>
         </div>

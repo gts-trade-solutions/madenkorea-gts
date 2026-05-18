@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 type Product = { id: string; name: string; slug: string };
 
 export default function LinksPage() {
+  const t = useTranslations("influencer");
   const [origin, setOrigin] = useState("");
   const [handle, setHandle] = useState<string>("");
   const [share, setShare] = useState<string>("");
@@ -54,16 +56,16 @@ export default function LinksPage() {
 
   return (
     <div className="max-w-2xl space-y-6">
-      <h2 className="text-2xl font-semibold">Create product share link</h2>
+      <h2 className="text-2xl font-semibold">{t("linksPageTitle")}</h2>
       {!handle ? (
-        <p className="text-sm text-destructive">Handle not found — ensure your influencer profile is approved and has a handle.</p>
+        <p className="text-sm text-destructive">{t("linksHandleMissing")}</p>
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <div className="md:col-span-2 relative">
               <input
                 className="w-full border rounded px-3 py-2"
-                placeholder={selected ? selected.name : "Search product…"}
+                placeholder={selected ? selected.name : t("searchPlaceholder")}
                 value={search}
                 onFocus={() => setShowDrop(true)}
                 onChange={(e)=>onSearchChange(e.target.value)}
@@ -71,7 +73,7 @@ export default function LinksPage() {
               {showDrop && (
                 <div className="absolute z-10 mt-1 w-full max-h-64 overflow-auto rounded border bg-white shadow">
                   {options.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground">No results</div>
+                    <div className="p-2 text-sm text-muted-foreground">{t("noResults")}</div>
                   ) : options.map(p => (
                     <button
                       key={p.id}
@@ -89,20 +91,20 @@ export default function LinksPage() {
             <button
               className="rounded bg-black text-white px-3 py-2"
               onClick={() => {
-                if (!selected) { setMsg("Please select a product."); return; }
+                if (!selected) { setMsg(t("linksSelectFirst")); return; }
                 const url = buildLink(selected, handle);
                 setShare(url);
                 navigator.clipboard.writeText(url);
-                setMsg("Copied link to clipboard.");
+                setMsg(t("linksCopiedToClipboard"));
               }}
             >
-              Generate & Copy
+              {t("generateAndCopyBtn")}
             </button>
           </div>
 
           <div className="rounded border bg-background p-3">
-            <div className="text-sm text-muted-foreground mb-1">Your link</div>
-            <div className="text-sm break-all">{share || "—"}</div>
+            <div className="text-sm text-muted-foreground mb-1">{t("yourLinkLabel")}</div>
+            <div className="text-sm break-all">{share || t("emDash")}</div>
           </div>
           {msg && <p className="text-sm">{msg}</p>}
         </>

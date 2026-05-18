@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { supabase } from "@/lib/supabaseClient";
 import {
   ArrowRight,
@@ -27,6 +28,7 @@ type Status = "none" | "pending" | "rejected" | "influencer" | "admin";
 // ✅ Same pattern as your /auth/login and /account pages (persist session in localStorage)
 export default function PartnerProgramPage() {
   const router = useRouter();
+  const t = useTranslations("influencerRequest");
   const { isAuthenticated } = useAuth();
 
   // status
@@ -105,13 +107,13 @@ export default function PartnerProgramPage() {
         if (cancelled) return;
 
         if (!res.ok) {
-          setErr(j?.error || "Failed to load status");
+          setErr(j?.error || t("errLoadStatus"));
         } else {
           setStatus((j?.status as Status) ?? "none");
           setRequestedAt(j?.requested_at ?? null);
         }
       } catch (e: any) {
-        if (!cancelled) setErr(e?.message || "Network error. Please try again.");
+        if (!cancelled) setErr(e?.message || t("errNetwork"));
       } finally {
         if (!cancelled) setStatusLoading(false);
       }
@@ -149,9 +151,9 @@ export default function PartnerProgramPage() {
       const j = await res.json().catch(() => ({}));
 
       if (!res.ok || j?.ok === false) {
-        setErr(j?.error || "Failed to submit. Please try again.");
+        setErr(j?.error || t("errSubmit"));
       } else {
-        setMsg(j?.message || "Request submitted.");
+        setMsg(j?.message || t("toastSubmitted"));
         setHandle("");
         setNote("");
         setStatus("pending");
@@ -159,7 +161,7 @@ export default function PartnerProgramPage() {
         setOpen(false);
       }
     } catch (e: any) {
-      setErr(e?.message || "Network error. Please try again.");
+      setErr(e?.message || t("errNetwork"));
     } finally {
       setSubmitting(false);
     }
@@ -191,17 +193,13 @@ export default function PartnerProgramPage() {
               <div className="flex items-start gap-4">
                 <div className="flex-1">
                   <p className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
-                    MadenKorea • Global codes • Consumer innovations
+                    {t("heroPill")}
                   </p>
                   <h1 className="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">
-                    Partner with us. Share consumer innovations from Korea. Earn
-                    more.
+                    {t("heroTitle")}
                   </h1>
                   <p className="mt-2 text-sm text-neutral-700">
-                    Join our creator circle for Korean skincare and wellness.
-                    Your audience gets a discount and you earn commission —
-                    together capped at <strong>20% per product</strong> by
-                    default for fairness.
+                    {t("heroBody")}
                   </p>
 
                   <div className="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -210,18 +208,18 @@ export default function PartnerProgramPage() {
                         onClick={() => router.push("/influencer")}
                         className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-400"
                       >
-                        Visit partner portal <ArrowRight className="h-4 w-4" />
+                        {t("ctaVisitPortal")} <ArrowRight className="h-4 w-4" />
                       </button>
                     ) : status === "pending" ? (
                       <span className="inline-flex items-center justify-center rounded-xl bg-amber-300/90 px-4 py-3 text-sm font-semibold text-amber-900">
-                        Pending review
+                        {t("ctaPendingReview")}
                       </span>
                     ) : (
                       <button
                         onClick={() => setOpen(true)}
                         className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-black/90"
                       >
-                        Become a partner <ArrowRight className="h-4 w-4" />
+                        {t("ctaBecomePartner")} <ArrowRight className="h-4 w-4" />
                       </button>
                     )}
 
@@ -230,7 +228,7 @@ export default function PartnerProgramPage() {
                         onClick={() => router.push("/")}
                         className="rounded-xl border border-neutral-300 px-5 py-3 text-sm font-semibold hover:bg-white"
                       >
-                        Explore catalog
+                        {t("ctaExploreCatalog")}
                       </button>
                     )}
                   </div>
@@ -241,23 +239,23 @@ export default function PartnerProgramPage() {
               <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-4">
                 <Chip
                   icon={<Percent className="h-4 w-4" />}
-                  title="Fair & simple"
-                  desc="Your % + buyer % ≤ 20% cap."
+                  title={t("chipFairTitle")}
+                  desc={t("chipFairDesc")}
                 />
                 <Chip
                   icon={<Gift className="h-4 w-4" />}
-                  title="Global code"
-                  desc="One code across the cart."
+                  title={t("chipGlobalTitle")}
+                  desc={t("chipGlobalDesc")}
                 />
                 <Chip
                   icon={<LineChart className="h-4 w-4" />}
-                  title="Live tracking"
-                  desc="Clicks, orders & payouts."
+                  title={t("chipLiveTitle")}
+                  desc={t("chipLiveDesc")}
                 />
                 <Chip
                   icon={<ShieldCheck className="h-4 w-4" />}
-                  title="Auto-enforced"
-                  desc="Caps handled at checkout."
+                  title={t("chipAutoTitle")}
+                  desc={t("chipAutoDesc")}
                 />
               </div>
             </div>
@@ -271,30 +269,30 @@ export default function PartnerProgramPage() {
 
         {/* A. Steps */}
         <section className="mx-auto max-w-6xl px-4">
-          <h2 className="mb-3 text-lg font-semibold">How it works</h2>
+          <h2 className="mb-3 text-lg font-semibold">{t("howItWorks")}</h2>
           <ol className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             <Step
               n={1}
-              title="Apply"
-              desc="Tell us your handle & niche."
+              title={t("stepApplyTitle")}
+              desc={t("stepApplyDesc")}
               color="bg-rose-100 text-rose-700"
             />
             <Step
               n={2}
-              title="Approval"
-              desc="We activate your portal."
+              title={t("stepApprovalTitle")}
+              desc={t("stepApprovalDesc")}
               color="bg-amber-100 text-amber-700"
             />
             <Step
               n={3}
-              title="Share"
-              desc="Links + global promo code."
+              title={t("stepShareTitle")}
+              desc={t("stepShareDesc")}
               color="bg-sky-100 text-sky-700"
             />
             <Step
               n={4}
-              title="Earn"
-              desc="Commission on eligible sales."
+              title={t("stepEarnTitle")}
+              desc={t("stepEarnDesc")}
               color="bg-emerald-100 text-emerald-700"
             />
           </ol>
@@ -306,22 +304,24 @@ export default function PartnerProgramPage() {
             <div className="rounded-2xl border bg-amber-50 p-4 text-amber-900">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Clock className="h-4 w-4" />
-                Application received
+                {t("pendingReceived")}
               </div>
               <p className="mt-1 text-xs">
-                Submitted on{" "}
-                {requestedAt ? new Date(requestedAt).toLocaleString() : "—"}. We
-                usually review within 1–2 business days.
+                {t("pendingSubmittedOn", {
+                  when: requestedAt
+                    ? new Date(requestedAt).toLocaleString()
+                    : t("pendingMissingDate"),
+                })}
               </p>
               <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px]">
                 <span className="rounded-lg bg-white/70 px-2 py-1">
-                  Submitted ✓
+                  {t("pendingPillSubmitted")}
                 </span>
                 <span className="rounded-lg bg-white/70 px-2 py-1">
-                  Reviewing …
+                  {t("pendingPillReviewing")}
                 </span>
                 <span className="rounded-lg bg-white/70 px-2 py-1">
-                  Decision → Email
+                  {t("pendingPillDecision")}
                 </span>
               </div>
             </div>
@@ -334,18 +334,18 @@ export default function PartnerProgramPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Stat
                 icon={<Users2 className="h-5 w-5" />}
-                label="Creators active"
-                value="2,400+"
+                label={t("statCreatorsLabel")}
+                value={t("statCreatorsValue")}
               />
               <Stat
                 icon={<Star className="h-5 w-5" />}
-                label="Avg. payout rating"
-                value="4.9/5"
+                label={t("statRatingLabel")}
+                value={t("statRatingValue")}
               />
               <Stat
                 icon={<BadgeCheck className="h-5 w-5" />}
-                label="Approval time"
-                value="~24–48h"
+                label={t("statApprovalLabel")}
+                value={t("statApprovalValue")}
               />
             </div>
           </div>
@@ -353,24 +353,24 @@ export default function PartnerProgramPage() {
 
         {/* D. Benefits grid */}
         <section className="mx-auto mt-6 max-w-6xl px-4">
-          <h2 className="mb-3 text-lg font-semibold">Why creators love it</h2>
+          <h2 className="mb-3 text-lg font-semibold">{t("benefitsHeading")}</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Card
               icon={<BadgeCheck className="h-5 w-5" />}
-              title="Consumer innovations"
-              desc="Thoughtfully curated formulas and routines your audience trusts."
+              title={t("benefitInnovationsTitle")}
+              desc={t("benefitInnovationsDesc")}
               gradient="from-rose-100 to-fuchsia-50"
             />
             <Card
               icon={<LineChart className="h-5 w-5" />}
-              title="Real-time insights"
-              desc="Transparent performance, attribution, and payout history."
+              title={t("benefitInsightsTitle")}
+              desc={t("benefitInsightsDesc")}
               gradient="from-sky-100 to-indigo-50"
             />
             <Card
               icon={<ShieldCheck className="h-5 w-5" />}
-              title="Hassle-free"
-              desc="Per-product caps auto-enforced. You focus on creating."
+              title={t("benefitHasslefreeTitle")}
+              desc={t("benefitHasslefreeDesc")}
               gradient="from-emerald-100 to-teal-50"
             />
           </div>
@@ -378,19 +378,19 @@ export default function PartnerProgramPage() {
 
         {/* E. FAQ */}
         <section className="mx-auto mt-6 max-w-6xl px-4 pb-16">
-          <h2 className="mb-3 text-lg font-semibold">FAQ</h2>
+          <h2 className="mb-3 text-lg font-semibold">{t("faqHeading")}</h2>
           <div className="rounded-2xl border">
             <FaqItem
-              q="What does the “20% cap” mean?"
-              a="Customer discount + your commission together won’t exceed 20% per product by default. If a product has a lower cap, checkout clamps the split automatically."
+              q={t("faqCapQuestion")}
+              a={t("faqCapAnswer")}
             />
             <FaqItem
-              q="Is my promo code global?"
-              a="Yes. Your code is cart-wide, while caps are enforced per item at checkout to keep things fair."
+              q={t("faqGlobalQuestion")}
+              a={t("faqGlobalAnswer")}
             />
             <FaqItem
-              q="When are payouts processed?"
-              a="We batch commissions regularly; you’ll see pending/paid status and payout history in your portal."
+              q={t("faqPayoutsQuestion")}
+              a={t("faqPayoutsAnswer")}
             />
           </div>
         </section>
@@ -412,32 +412,31 @@ export default function PartnerProgramPage() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Become a partner</h3>
+                <h3 className="text-lg font-semibold">{t("modalTitle")}</h3>
                 <button
                   className="rounded p-1 hover:bg-neutral-100"
                   onClick={() => setOpen(false)}
-                  aria-label="Close"
+                  aria-label={t("modalClose")}
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
               <p className="mb-3 text-sm text-neutral-600">
-                Tell us your public handle and a short note about your content.
-                We’ll review and email you.
+                {t("modalIntro")}
               </p>
 
-              <label className="mb-1 block text-xs font-medium">Name</label>
+              <label className="mb-1 block text-xs font-medium">{t("modalNameLabel")}</label>
               <input
                 className="mb-3 w-full rounded-lg border px-3 py-2 text-sm"
-                placeholder="e.g. glowwithjin"
+                placeholder={t("modalNamePlaceholder")}
                 value={handle}
                 onChange={(e) => setHandle(e.target.value)}
               />
-              <label className="mb-1 block text-xs font-medium">Note</label>
+              <label className="mb-1 block text-xs font-medium">{t("modalNoteLabel")}</label>
               <textarea
                 rows={4}
                 className="w-full rounded-lg border px-3 py-2 text-sm"
-                placeholder="What do you create? Who’s your audience?"
+                placeholder={t("modalNotePlaceholder")}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
@@ -448,19 +447,18 @@ export default function PartnerProgramPage() {
                   disabled={submitting}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
                 >
-                  {submitting ? "Submitting…" : "Submit request"}
+                  {submitting ? t("modalSubmitting") : t("modalSubmit")}
                 </button>
                 <button
                   onClick={() => setOpen(false)}
                   className="rounded-xl border px-4 py-2.5 text-sm font-semibold"
                 >
-                  Cancel
+                  {t("modalCancel")}
                 </button>
               </div>
 
               <p className="mt-3 text-[11px] text-neutral-500">
-                Global codes apply cart-wide; per-product caps (default 20%)
-                auto-enforced at checkout.
+                {t("modalLegal")}
               </p>
             </div>
           </div>
@@ -474,36 +472,36 @@ export default function PartnerProgramPage() {
             <section className="mx-auto mt-2 max-w-6xl px-4 pb-16">
               <div className="rounded-2xl border p-5">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-base font-semibold">Apply now</h2>
+                  <h2 className="text-base font-semibold">{t("inlineApplyHeading")}</h2>
                   <button
                     onClick={() => setOpen(true)}
                     className="text-sm font-medium underline"
                   >
-                    Open as modal
+                    {t("inlineOpenAsModal")}
                   </button>
                 </div>
                 <form onSubmit={submit} className="mt-4 grid gap-4">
                   <div>
                     <label className="mb-1 block text-xs font-medium">
-                      Name
+                      {t("modalNameLabel")}
                     </label>
                     <input
                       className="w-full rounded-lg border px-3 py-2 text-sm"
                       value={handle}
                       onChange={(e) => setHandle(e.target.value)}
-                      placeholder="e.g. glowwithjin"
+                      placeholder={t("modalNamePlaceholder")}
                     />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-medium">
-                      Note
+                      {t("modalNoteLabel")}
                     </label>
                     <textarea
                       rows={4}
                       className="w-full rounded-lg border px-3 py-2 text-sm"
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
-                      placeholder="Tell us briefly about your content and audience"
+                      placeholder={t("inlineNotePlaceholder")}
                     />
                   </div>
                   <button
@@ -511,7 +509,7 @@ export default function PartnerProgramPage() {
                     disabled={submitting}
                     className="w-full rounded-xl bg-black px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
                   >
-                    {submitting ? "Submitting…" : "Submit request"}
+                    {submitting ? t("modalSubmitting") : t("modalSubmit")}
                   </button>
                 </form>
               </div>

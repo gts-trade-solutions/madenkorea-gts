@@ -55,6 +55,9 @@ type PayoutRow = {
   covering_orders?: string[] | null;
   created_at: string;
   paid_at?: string | null;
+  // Bank/PayPal/Wise reference admin pastes when marking a payout
+  // as paid — gives the influencer proof of payment on their dashboard.
+  settled_reference?: string | null;
 };
 
 export default function AdminInfluencersPage() {
@@ -248,7 +251,7 @@ export default function AdminInfluencersPage() {
       const { data, error } = await supabase
         .from('influencer_payouts')
         .select(
-          'id, influencer_id, amount, currency, status, notes, created_at, paid_at, covering_orders'
+          'id, influencer_id, amount, currency, status, notes, created_at, paid_at, covering_orders, settled_reference'
         )
         .order('created_at', { ascending: false });
       if (error) {
@@ -327,11 +330,29 @@ export default function AdminInfluencersPage() {
   };
 
   // --- actions: payout status ---
+  // When admin marks a payout 'paid', prompt for the settlement
+  // reference (bank txn ID, SWIFT reference, PayPal transaction id,
+  // Wise transfer id, etc.). Stored on the row so the influencer
+  // sees proof of payment on their dashboard. Optional — admin can
+  // skip if not yet known and add it later via the note editor.
   async function setPayoutStatus(row: PayoutRow, status: PayoutRow['status']) {
     try {
       setUpdatingId(row.id);
       const patch: any = { status };
-      if (status === 'paid') patch.paid_at = new Date().toISOString();
+      if (status === 'paid') {
+        patch.paid_at = new Date().toISOString();
+        const ref = window.prompt(
+          'Settlement reference (UTR / SWIFT / PayPal txn id) — optional:',
+          row.settled_reference || ''
+        );
+        // null = cancel button → abort the whole update.
+        if (ref === null) {
+          setUpdatingId(null);
+          return;
+        }
+        const trimmed = ref.trim();
+        if (trimmed) patch.settled_reference = trimmed;
+      }
       if (status !== 'paid') patch.paid_at = null;
 
       const { error } = await supabase
