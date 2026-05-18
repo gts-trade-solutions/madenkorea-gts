@@ -232,6 +232,23 @@ export default function InternationalOrdersAdminPage() {
       </header>
 
       <div className="container mx-auto py-8 max-w-6xl space-y-6">
+      {/* Cutover notice: as of the international-payments rollout
+          (INTERNATIONAL_PAYMENTS.md), non-Indian visitors complete
+          their orders directly via Razorpay and land in the regular
+          Orders list. This screen is a historical/edge-case archive:
+          rows here are either pre-cutover requests, or visitors who
+          submitted the legacy manual form by direct URL. */}
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <strong>Legacy view.</strong> International orders that complete via Razorpay now appear in the normal{" "}
+        <a href="/admin/orders" className="underline font-medium">
+          Orders
+        </a>{" "}
+        list (their <code>currency</code> column shows USD/EUR/etc).
+        This page only lists leftover manual-quote requests from before
+        the international-payments cutover, and any new submissions for
+        countries that haven&apos;t had a shipping rate configured yet.
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>International order requests</CardTitle>

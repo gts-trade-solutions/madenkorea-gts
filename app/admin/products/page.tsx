@@ -236,9 +236,19 @@ export default function AdminProductsPage() {
             <Button variant="ghost" onClick={() => router.push('/admin')}>← Back</Button>
             <h1 className="text-2xl font-bold">Products Management</h1>
           </div>
-          <Button variant="outline" size="sm" onClick={onLogout}>
-            <LogOut className="mr-2 h-4 w-4" /> Logout
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push('/admin/products/missing-weight')}
+              title="Published products without net_weight_g — required for international shipping"
+            >
+              Missing weight audit
+            </Button>
+            <Button variant="outline" size="sm" onClick={onLogout}>
+              <LogOut className="mr-2 h-4 w-4" /> Logout
+            </Button>
+          </div>
         </div>
       </header>
 

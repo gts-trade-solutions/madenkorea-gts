@@ -17,6 +17,7 @@ import {
   mergeTranslations,
   PRODUCT_TRANSLATABLE_FIELDS,
 } from "@/lib/contentTranslations";
+import { getHomeVideoLimit } from "@/lib/storeSettings";
 import type { Metadata } from "next";
 
 const SITE_URL = "https://madenkorea.com";
@@ -194,14 +195,25 @@ export default async function Home() {
   const cookieCountry = cookies().get("mik_country")?.value;
   const country = isSupportedCountry(cookieCountry) ? cookieCountry : DEFAULT_COUNTRY;
 
-  const [banners, brands, influencerVideos, trendingProducts, featuredProducts] =
-    await Promise.all([
-      getBanners("home", country),
-      getBrandsForCarousel("site-assets"),
-      getInfluencerVideos("home", 12),
-      fetchEditorial("trending", locale, 8),
-      fetchEditorial("featured", locale, 8),
-    ]);
+  const [
+    banners,
+    brands,
+    influencerVideos,
+    trendingProducts,
+    featuredProducts,
+    homeVideoLimit,
+  ] = await Promise.all([
+    getBanners("home", country),
+    getBrandsForCarousel("site-assets"),
+    getInfluencerVideos("home", 12),
+    fetchEditorial("trending", locale, 8),
+    fetchEditorial("featured", locale, 8),
+    // Admin-configurable cap for the product-video carousel. Stored in
+    // `store_settings.home_video_limit`, editable from
+    // /admin/cms/product-video. Read in parallel with the rest of the
+    // home data so it adds no critical-path latency.
+    getHomeVideoLimit(),
+  ]);
 
   // --- JSON-LD (Google schema) for home + featured products ---
 
@@ -315,7 +327,11 @@ export default async function Home() {
             />
           )} */}
 {/* <KPlusPromoBanner /> */}
-          <HomeVideoCarouselSection pageScope="home" limit={8} />
+          {/* Cap comes from `store_settings.home_video_limit`, editable
+              at /admin/cms/product-video. Carousel is horizontally
+              paginated so larger limits just add pages — admins control
+              order via the `position` column. */}
+          <HomeVideoCarouselSection pageScope="home" limit={homeVideoLimit} />
 
           <BrandCarousel brands={brands} />
 

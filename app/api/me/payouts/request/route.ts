@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import { getAdminRecipientEmails } from "@/lib/notificationRecipients";
 
 const ses = new SESClient({
   region: process.env.SES_REGION || "ap-south-1",
@@ -178,10 +179,14 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- 3) Send AWS SES email to admin with payout details ----
-  const adminEmail = "operations@madenkorea.com";
+  // Recipients are admin-managed at /admin/settings/notification-emails.
+  // First entry becomes the primary "to"; the rest go on CC. If the
+  // table is empty we skip the email — the payout row was already
+  // inserted, so admin can pick it up from the dashboard.
   const fromEmail = "info@madenkorea.com";
+  const recipients = await getAdminRecipientEmails();
 
-  if (adminEmail && fromEmail) {
+  if (recipients.length > 0 && fromEmail) {
     try {
       const textLines = [
         "New payout request",
@@ -196,13 +201,13 @@ export async function POST(req: NextRequest) {
         request_note || "(none)",
       ];
 
+      const [primaryTo, ...cc] = recipients;
+
       const cmd = new SendEmailCommand({
         Source: fromEmail,
         Destination: {
-          ToAddresses: [adminEmail],
-          // Operations is CC'd on all team-facing notifications so
-          // payout requests land in both inboxes.
-          CcAddresses: ["operations@madenkorea.com"],
+          ToAddresses: [primaryTo],
+          ...(cc.length > 0 ? { CcAddresses: cc } : {}),
         },
         Message: {
           Subject: {

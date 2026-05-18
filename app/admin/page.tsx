@@ -29,6 +29,7 @@ import {
   Receipt,
   Inbox,
   Languages,
+  Mail,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -485,25 +486,71 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          {/* International Orders */}
+          {/* International Shipping Rates */}
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
               <Globe2 className="h-8 w-8 mb-2 text-primary" />
-              <CardTitle>International Orders</CardTitle>
-              <CardDescription>Manual fulfilment requests</CardDescription>
+              <CardTitle>International Shipping</CardTitle>
+              <CardDescription>Per-country shipping rates</CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-4">
-                Requests submitted by visitors outside India. Reply with a
-                shipping quote and payment instructions, then walk each
-                through new → contacted → quoted → completed.
+                Set the ₹/gram rate for each destination country. Required
+                before Razorpay checkout can quote shipping to that country.
+                India uses its own threshold flow in Settings → Shipping.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/settings/international-shipping")}
+              >
+                Manage Rates
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Notification Emails */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <Mail className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>Notification Emails</CardTitle>
+              <CardDescription>Who gets admin alerts</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Email addresses CC&apos;d on order confirmations, payout
+                requests, contact submissions, and international order
+                requests. Add or remove anyone here.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/settings/notification-emails")}
+              >
+                Manage Recipients
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* International Orders (legacy) */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <Inbox className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>International Orders (legacy)</CardTitle>
+              <CardDescription>Pre-cutover manual requests</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Manual-quote requests from before international Razorpay
+                checkout was enabled. New international orders complete via
+                Razorpay and appear in the regular Orders list.
               </p>
               <Button
                 variant="outline"
                 className="w-full"
                 onClick={() => router.push("/admin/international-orders")}
               >
-                View Requests
+                View Legacy Requests
               </Button>
             </CardContent>
           </Card>

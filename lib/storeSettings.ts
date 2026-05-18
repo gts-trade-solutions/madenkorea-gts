@@ -47,3 +47,63 @@ export async function getShippingConfig(): Promise<ShippingConfig> {
 export function bustShippingConfigCache() {
   cached = null;
 }
+
+// ─── Home video carousel cap ───────────────────────────────────────
+//
+// Admin-editable upper bound on the number of product videos rendered
+// on the home page. Lives in `store_settings.home_video_limit` and is
+// edited from /admin/cms/product-video. Same 60s in-process cache as
+// the shipping config; admin write endpoint busts it on save.
+
+const DEFAULT_HOME_VIDEO_LIMIT = 16;
+const HARD_MAX_HOME_VIDEO_LIMIT = 50;
+let cachedHomeVideoLimit: { value: number; expiresAt: number } | null = null;
+
+export async function getHomeVideoLimit(): Promise<number> {
+  const now = Date.now();
+  if (cachedHomeVideoLimit && cachedHomeVideoLimit.expiresAt > now)
+    return cachedHomeVideoLimit.value;
+
+  try {
+    const sb = createAdminClient();
+    const { data, error } = await sb
+      .from("store_settings")
+      .select("home_video_limit")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error || !data) {
+      cachedHomeVideoLimit = {
+        value: DEFAULT_HOME_VIDEO_LIMIT,
+        expiresAt: now + CACHE_TTL_MS,
+      };
+      return DEFAULT_HOME_VIDEO_LIMIT;
+    }
+
+    // Clamp at read time too — defensive against a manual SQL edit that
+    // bypasses the API. Carousel rendering 200 videos would melt the
+    // home page; bounding here keeps that contained.
+    const raw = Number(data.home_video_limit ?? DEFAULT_HOME_VIDEO_LIMIT);
+    const value = Number.isFinite(raw)
+      ? Math.max(1, Math.min(HARD_MAX_HOME_VIDEO_LIMIT, Math.floor(raw)))
+      : DEFAULT_HOME_VIDEO_LIMIT;
+    cachedHomeVideoLimit = { value, expiresAt: now + CACHE_TTL_MS };
+    return value;
+  } catch {
+    cachedHomeVideoLimit = {
+      value: DEFAULT_HOME_VIDEO_LIMIT,
+      expiresAt: now + CACHE_TTL_MS,
+    };
+    return DEFAULT_HOME_VIDEO_LIMIT;
+  }
+}
+
+export function bustHomeVideoLimitCache() {
+  cachedHomeVideoLimit = null;
+}
+
+export const HOME_VIDEO_LIMIT_BOUNDS = {
+  default: DEFAULT_HOME_VIDEO_LIMIT,
+  min: 1,
+  max: HARD_MAX_HOME_VIDEO_LIMIT,
+} as const;

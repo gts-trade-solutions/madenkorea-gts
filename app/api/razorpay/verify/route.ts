@@ -3,6 +3,15 @@ import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { getVisitorIdentity } from "@/lib/analytics/identity";
+import {
+  fromRazorpayMinorUnits,
+  formatMoney,
+  isSupportedCurrency,
+  type CurrencyCode,
+} from "@/lib/currency";
+import { getBusinessInfo, DEFAULT_BUSINESS_INFO } from "@/lib/businessInfo";
+import { getEmailTranslator } from "@/lib/i18n/email";
+import { getAdminRecipientEmails } from "@/lib/notificationRecipients";
 
 // Verify is the heaviest critical path: signature check, Razorpay API
 // fetch, multiple DB writes, optional DTDC create, and two SES emails.
@@ -21,13 +30,21 @@ const ses = new SESClient({
 });
 
 const FROM_EMAIL = "info@madenkorea.com";
-const ADMIN_EMAILS = [
-  "kh@raceinnovations.in",
-  "operations@madenkorea.com",
-  "arunpandian972000@gmail.com",
-];
 
 const money = (n: any) => +Number(n || 0).toFixed(2);
+
+// Minimal HTML escaper for user-supplied strings interpolated into the
+// confirmation email body (name fields, address lines, product names).
+// Email clients aren't an XSS vector the way browsers are, but we don't
+// want a stray `<` from a customer address mangling the table layout.
+function escapeHtml(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 function resolveSiteUrl(req: NextRequest) {
   const raw =
@@ -131,7 +148,10 @@ export async function POST(req: NextRequest) {
         discount_total,
         total,
         currency,
+        fx_rate_snapshot,
+        recipient_locale,
         order_number,
+        address_snapshot,
         promo_code_id,
         promo_snapshot
       `
@@ -165,6 +185,14 @@ export async function POST(req: NextRequest) {
       };
       return NextResponse.json(res, { status: 400 });
     }
+
+    // Order currency in a type-narrowed form. Used in every downstream
+    // write that records `currency` and in the email formatter. Falls
+    // back to INR for legacy rows that pre-date international support.
+    const orderCurrencyRaw = order.currency || "INR";
+    const orderCurrency: CurrencyCode = isSupportedCurrency(orderCurrencyRaw)
+      ? orderCurrencyRaw
+      : "INR";
 
     // 3) Existing attribution?
     const { data: attrib, error: aErr } = await admin
@@ -293,7 +321,7 @@ export async function POST(req: NextRequest) {
         discount_percent: discountPct,
         commission_percent: commissionPct,
         commission_amount: commissionAmount,
-        currency: order.currency || "INR",
+        currency: orderCurrency,
         status: "pending",
       });
       dbg.push({ step: "attrib.insert", error: ins.error?.message });
@@ -308,7 +336,7 @@ export async function POST(req: NextRequest) {
             discount_percent: discountPct,
             commission_percent: commissionPct,
             commission_amount: commissionAmount,
-            currency: order.currency || "INR",
+            currency: orderCurrency,
             status: "pending",
           })
           .eq("order_id", order.id);
@@ -323,9 +351,13 @@ export async function POST(req: NextRequest) {
     const discountAmount = money(base * (discountPct / 100));
     const computedFinal = money(base - discountAmount + shippingFee);
 
+    // Razorpay returns `amount_paid` in the smallest unit of the
+    // order's currency. For INR/USD/EUR/etc that's × 100; for VND
+    // (zero-decimal) it's × 1. The exponent helper picks the right
+    // divisor so non-INR orders read back the correct major-unit total.
     const paidAmount =
       ro && typeof ro.amount_paid === "number"
-        ? money(ro.amount_paid / 100)
+        ? money(fromRazorpayMinorUnits(ro.amount_paid, orderCurrency))
         : computedFinal;
 
     const updOrder = await admin
@@ -353,7 +385,7 @@ export async function POST(req: NextRequest) {
         method: raw?.method ?? null,
         status: "captured",
         amount: paidAmount,
-        currency: order.currency || "INR",
+        currency: orderCurrency,
         signature: razorpay_signature,
         raw: raw ?? null,
       });
@@ -419,7 +451,13 @@ export async function POST(req: NextRequest) {
     // C-13/C-14 prep — Track D: auto-create DTDC shipment on payment
     // verify. Gated by env flag so it stays off until the merchant is
     // comfortable. Failure here must not roll back the payment.
-    if (process.env.DTDC_AUTO_CREATE_ON_PAYMENT === "true") {
+    // DTDC is India-only, so we additionally skip for any non-INR
+    // (international) order — the courier would reject it anyway and
+    // the failed call just adds noise to logs.
+    if (
+      process.env.DTDC_AUTO_CREATE_ON_PAYMENT === "true" &&
+      orderCurrency === "INR"
+    ) {
       try {
         // Idempotency: skip if an active shipment already exists for
         // this order (e.g. admin already created it manually).
@@ -488,13 +526,85 @@ export async function POST(req: NextRequest) {
     const emailPromises: Promise<unknown>[] = [];
     try {
       const orderNumber = order.order_number ?? order.id;
-      const currency = order.currency || "INR";
-      const totalFormatted = `${currency} ${paidAmount.toFixed(2)}`;
+      const currency = orderCurrency;
+      // Use Intl.NumberFormat-backed `formatMoney` so non-INR orders
+      // render correctly ("$36.00" instead of "USD 36.00") and
+      // zero-decimal currencies (VND, etc.) don't show phantom paise.
+      const fmt = (v: number) => formatMoney(v, currency);
+      const totalFormatted = fmt(paidAmount);
       const siteUrl = resolveSiteUrl(req);
       const accountOrdersUrl = `${siteUrl}/account/orders`;
-      const supportPhoneDisplay = "9384857587";
-      const supportPhoneHref = "tel:+919384857587";
-      const supportEmail = "info@madenkorea.com";
+
+      // Pull live business contact details from `store_settings` so
+      // changes the admin makes in /admin/settings → Business propagate
+      // to the order confirmation email immediately. Falls back to the
+      // module-level defaults if the row is unreachable; we never want
+      // a transient DB error to block the confirmation email.
+      const biz = await getBusinessInfo().catch(() => DEFAULT_BUSINESS_INFO);
+      const supportEmail = biz.supportEmail || DEFAULT_BUSINESS_INFO.supportEmail;
+
+      // The admin enters the phone in whatever display form they prefer
+      // (e.g. "+91 93848 57587" or "9384857587"). For the human-readable
+      // line we keep that string as-is. For the `tel:` href we strip
+      // everything except digits and `+` so the dial action works on
+      // any device.
+      const supportPhoneDisplay = biz.publicPhone || "";
+      const phoneDigits = supportPhoneDisplay.replace(/[^\d+]/g, "");
+      const supportPhoneHref = phoneDigits ? `tel:${phoneDigits}` : "";
+
+      // Localize the buyer-facing email to the locale the order was
+      // placed in. Admin notification stays English regardless (it
+      // goes to internal team).
+      const { t: tEmail } = await getEmailTranslator(
+        (order as any).recipient_locale ?? null
+      );
+
+      // Order items for the line-item table. Unit prices live in INR
+      // on the row (cart_items copies in INR), so for non-INR orders
+      // we multiply by the FX rate captured on the order at create time
+      // so each row reads in the buyer's currency consistently with
+      // the total at the bottom.
+      const fxRate = Number(order.fx_rate_snapshot) || 1;
+      const { data: orderItemsRaw } = await admin
+        .from("order_items")
+        .select("name, sku, quantity, unit_price, line_total")
+        .eq("order_id", order.id);
+      type OrderItem = {
+        name: string | null;
+        sku: string | null;
+        quantity: number;
+        unit_price: number;
+        line_total: number;
+      };
+      const orderItems: OrderItem[] = (orderItemsRaw ?? []).map((r: any) => ({
+        name: r.name ?? null,
+        sku: r.sku ?? null,
+        quantity: Number(r.quantity) || 0,
+        unit_price: money(Number(r.unit_price) * fxRate || 0),
+        line_total: money(Number(r.line_total) * fxRate || 0),
+      }));
+
+      // Address snapshot from `orders.address_snapshot`. Shape is a
+      // free-form jsonb populated by the checkout form, so we read
+      // defensively. Legacy rows may have a different shape (older
+      // checkouts didn't write `country_code`).
+      const addr = (order.address_snapshot ?? {}) as Record<string, any>;
+      const addrLines: string[] = [];
+      if (addr.name) addrLines.push(String(addr.name));
+      if (addr.address || addr.line1) {
+        addrLines.push(String(addr.address ?? addr.line1));
+      }
+      if (addr.line2) addrLines.push(String(addr.line2));
+      const cityStateZip = [addr.city, addr.state, addr.pincode]
+        .filter(Boolean)
+        .join(", ");
+      if (cityStateZip) addrLines.push(cityStateZip);
+      if (addr.country) addrLines.push(String(addr.country));
+      if (addr.phone) addrLines.push(String(addr.phone));
+      const addressHtml = addrLines
+        .map((l) => escapeHtml(l))
+        .join("<br />");
+      const addressText = addrLines.join("\n");
 
       let userEmail: string | null = null;
       let userName: string | null = null;
@@ -527,7 +637,7 @@ export async function POST(req: NextRequest) {
       // === User confirmation email ===
       if (userEmail) {
         const friendlyName = userName || "there";
-        const subject = `Your MadenKorea order ${orderNumber} is confirmed`;
+        const subject = tEmail("orderConfirm.subject", { orderNumber });
 
         console.log("SES: sending user email", { to: userEmail, subject });
 
@@ -566,7 +676,7 @@ export async function POST(req: NextRequest) {
                     letter-spacing: 0.08em;
                   "
                 >
-                  Order Confirmed
+                  ${tEmail("orderConfirm.pill")}
                 </div>
                 <h2
                   style="
@@ -576,14 +686,65 @@ export async function POST(req: NextRequest) {
                     margin-bottom: 4px;
                   "
                 >
-                  Hi ${friendlyName}, your order is on its way!
+                  ${tEmail("orderConfirm.heading", { name: friendlyName })}
                 </h2>
                 <p style="margin: 0; color: #4b5563; font-size: 13px">
-                  Thank you for shopping with
-                  <strong>MadenKorea</strong>. We’ve received your payment and your
-                  order is now being processed.
+                  ${tEmail("orderConfirm.intro")}
                 </p>
               </div>
+
+              ${
+                orderItems.length > 0
+                  ? `
+              <div style="margin-bottom: 20px">
+                <h3 style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #111827">
+                  ${tEmail("orderConfirm.itemsHeading")}
+                </h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden">
+                  <thead style="background: #f9fafb">
+                    <tr>
+                      <th style="text-align: left; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">${tEmail("orderConfirm.colItem")}</th>
+                      <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb; width: 50px">${tEmail("orderConfirm.colQty")}</th>
+                      <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">${tEmail("orderConfirm.colUnitPrice")}</th>
+                      <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">${tEmail("orderConfirm.colLineTotal")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${orderItems
+                      .map(
+                        (it) => `
+                    <tr>
+                      <td style="padding: 8px 10px; border-bottom: 1px solid #f3f4f6">
+                        <div style="font-weight: 500; color: #111827">${escapeHtml(it.name ?? "—")}</div>
+                        ${it.sku ? `<div style="font-size: 11px; color: #9ca3af; font-family: monospace">${escapeHtml(it.sku)}</div>` : ""}
+                      </td>
+                      <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6">${it.quantity}</td>
+                      <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6">${fmt(it.unit_price)}</td>
+                      <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6; font-weight: 500">${fmt(it.line_total)}</td>
+                    </tr>`
+                      )
+                      .join("")}
+                  </tbody>
+                </table>
+              </div>
+                `
+                  : ""
+              }
+
+              ${
+                addrLines.length > 0
+                  ? `
+              <div style="margin-bottom: 20px; padding: 14px 16px; border-radius: 10px; background: #f9fafb; border: 1px solid #e5e7eb">
+                <h3 style="margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #111827">
+                  ${tEmail("orderConfirm.shippingAddressHeading")}
+                </h3>
+                <p style="margin: 0; color: #4b5563; font-size: 13px; line-height: 1.5">
+                  ${addressHtml}
+                </p>
+              </div>
+                `
+                  : ""
+              }
 
               <div
                 style="
@@ -601,38 +762,36 @@ export async function POST(req: NextRequest) {
                     color: #111827;
                   "
                 >
-                  Order summary
+                  ${tEmail("orderConfirm.summaryHeading")}
                 </h3>
                 <table style="width: 100%; border-collapse: collapse; font-size: 13px">
                   <tbody>
                     <tr>
-                      <td style="padding: 4px 0; color: #6b7280">Order number</td>
+                      <td style="padding: 4px 0; color: #6b7280">${tEmail("orderConfirm.rowOrderNumber")}</td>
                       <td style="padding: 4px 0; text-align: right; font-weight: 500">
                         ${orderNumber}
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding: 4px 0; color: #6b7280">Subtotal</td>
+                      <td style="padding: 4px 0; color: #6b7280">${tEmail("orderConfirm.rowSubtotal")}</td>
                       <td style="padding: 4px 0; text-align: right;">
-                        ${currency} ${base.toFixed(2)}
+                        ${fmt(base)}
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding: 4px 0; color: #6b7280">Discount</td>
+                      <td style="padding: 4px 0; color: #6b7280">${tEmail("orderConfirm.rowDiscount")}</td>
                       <td style="padding: 4px 0; text-align: right;">
-                        - ${currency} ${discountAmount.toFixed(
-          2
-        )} (${discountPct.toFixed(2)}%)
+                        - ${fmt(discountAmount)} (${discountPct.toFixed(2)}%)
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding: 4px 0; color: #6b7280">Shipping</td>
+                      <td style="padding: 4px 0; color: #6b7280">${tEmail("orderConfirm.rowShipping")}</td>
                       <td style="padding: 4px 0; text-align: right;">
-                        ${currency} ${shippingFee.toFixed(2)}
+                        ${fmt(shippingFee)}
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding: 4px 0; color: #6b7280">Total paid</td>
+                      <td style="padding: 4px 0; color: #6b7280">${tEmail("orderConfirm.rowTotal")}</td>
                       <td
                         style="
                           padding: 4px 0;
@@ -645,7 +804,7 @@ export async function POST(req: NextRequest) {
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding: 4px 0; color: #6b7280">Payment method</td>
+                      <td style="padding: 4px 0; color: #6b7280">${tEmail("orderConfirm.rowPaymentMethod")}</td>
                       <td style="padding: 4px 0; text-align: right">Razorpay</td>
                     </tr>
                   </tbody>
@@ -661,11 +820,10 @@ export async function POST(req: NextRequest) {
                     color: #111827;
                   "
                 >
-                  Track your order & download invoice
+                  ${tEmail("orderConfirm.trackHeading")}
                 </h3>
                 <p style="margin: 0 0 10px; color: #4b5563; font-size: 13px">
-                  You can view your complete order details, download invoice copies,
-                  and check your transaction history anytime from your account.
+                  ${tEmail("orderConfirm.trackBody")}
                 </p>
                 <a
                   href="${accountOrdersUrl}"
@@ -680,7 +838,7 @@ export async function POST(req: NextRequest) {
                     text-decoration: none;
                   "
                 >
-                  View my orders & invoices
+                  ${tEmail("orderConfirm.trackCta")}
                 </a>
               </div>
 
@@ -701,18 +859,16 @@ export async function POST(req: NextRequest) {
                     color: #92400e;
                   "
                 >
-                  Need help with your order?
+                  ${tEmail("orderConfirm.needHelpHeading")}
                 </h3>
                 <p style="margin: 0 0 4px; color: #92400e; font-size: 13px">
-                  For any support, product queries, or shipment updates, you can reach
-                  us at:
+                  ${tEmail("orderConfirm.needHelpBody")}
                 </p>
                 <p style="margin: 0; color: #92400e; font-size: 13px">
-                  <strong>Phone:</strong>
-                  <a href="${supportPhoneHref}" style="color: inherit; text-decoration: none"
-                    >${supportPhoneDisplay}</a
-                  ><br />
-                  <strong>Email:</strong>
+                  ${supportPhoneDisplay
+                    ? `<strong>${tEmail("orderConfirm.needHelpPhone")}</strong> <a href="${supportPhoneHref}" style="color: inherit; text-decoration: none">${supportPhoneDisplay}</a><br />`
+                    : ""}
+                  <strong>${tEmail("orderConfirm.needHelpEmail")}</strong>
                   <a
                     href="mailto:${supportEmail}"
                     style="color: inherit; text-decoration: none"
@@ -730,20 +886,18 @@ export async function POST(req: NextRequest) {
                     color: #111827;
                   "
                 >
-                  A quick note about your products
+                  ${tEmail("orderConfirm.productsNoteHeading")}
                 </h3>
                 <p style="margin: 0 0 6px; color: #4b5563; font-size: 13px">
-                  All our products are curated from trusted Korean brands. For the best
-                  experience:
+                  ${tEmail("orderConfirm.productsNoteIntro")}
                 </p>
                 <ul style="margin: 0 0 6px 18px; padding: 0; color: #4b5563; font-size: 13px">
-                  <li>Follow the usage instructions on the product packaging.</li>
-                  <li>Store in a cool, dry place away from direct sunlight.</li>
-                  <li>Do a patch test before first use if you have sensitive skin.</li>
+                  <li>${tEmail("orderConfirm.productsNoteTip1")}</li>
+                  <li>${tEmail("orderConfirm.productsNoteTip2")}</li>
+                  <li>${tEmail("orderConfirm.productsNoteTip3")}</li>
                 </ul>
                 <p style="margin: 0; color: #4b5563; font-size: 13px">
-                  You’ll see the exact products and quantities for this order inside your
-                  account under <strong>“Orders”</strong>.
+                  ${tEmail("orderConfirm.productsNoteOutro")}
                 </p>
               </div>
 
@@ -755,13 +909,11 @@ export async function POST(req: NextRequest) {
                   font-size: 13px;
                 "
               >
-                Thank you again for choosing
-                <strong>MadenKorea</strong>. We’re excited for you to receive your
-                order!
+                ${tEmail("orderConfirm.closing")}
               </p>
               <p style="margin: 0; color: #4b5563; font-size: 13px">
-                Love,<br />
-                <strong>Team MadenKorea</strong>
+                ${tEmail("orderConfirm.signoff")}<br />
+                <strong>${tEmail("orderConfirm.signoffName")}</strong>
               </p>
             </div>
 
@@ -774,35 +926,53 @@ export async function POST(req: NextRequest) {
                 font-size: 11px;
               "
             >
-              You’re receiving this email because you placed an order on
-              <strong>madenkorea.com</strong>.
+              ${tEmail("orderConfirm.footer")}
             </p>
           </div>
         `;
 
         const userText = [
-          `Hi ${friendlyName},`,
+          tEmail("orderConfirm.heading", { name: friendlyName }),
           "",
-          "Thank you for shopping with MadenKorea. Your order has been placed successfully and is now being processed.",
+          tEmail("orderConfirm.intro"),
           "",
-          `Order number: ${orderNumber}`,
-          `Subtotal: ${currency} ${base.toFixed(2)}`,
-          `Discount: ${currency} ${discountAmount.toFixed(
-            2
-          )} (${discountPct.toFixed(2)}%)`,
-          `Shipping: ${currency} ${shippingFee.toFixed(2)}`,
-          `Total paid: ${totalFormatted}`,
-          "Payment method: Razorpay",
+          // Line items
+          ...(orderItems.length > 0
+            ? [
+                tEmail("orderConfirm.itemsHeading") + ":",
+                ...orderItems.map(
+                  (it) =>
+                    `  - ${it.name ?? "—"}${it.sku ? ` (${it.sku})` : ""} × ${it.quantity}  @  ${fmt(it.unit_price)}  =  ${fmt(it.line_total)}`
+                ),
+                "",
+              ]
+            : []),
+          // Shipping address
+          ...(addrLines.length > 0
+            ? [
+                tEmail("orderConfirm.shippingAddressHeading") + ":",
+                ...addrLines.map((l) => `  ${l}`),
+                "",
+              ]
+            : []),
+          `${tEmail("orderConfirm.rowOrderNumber")}: ${orderNumber}`,
+          `${tEmail("orderConfirm.rowSubtotal")}: ${fmt(base)}`,
+          `${tEmail("orderConfirm.rowDiscount")}: ${fmt(discountAmount)} (${discountPct.toFixed(2)}%)`,
+          `${tEmail("orderConfirm.rowShipping")}: ${fmt(shippingFee)}`,
+          `${tEmail("orderConfirm.rowTotal")}: ${totalFormatted}`,
+          `${tEmail("orderConfirm.rowPaymentMethod")}: Razorpay`,
           "",
-          "You can view your full order, download invoice copies, and see your transaction history here:",
-          `Account orders: ${accountOrdersUrl}`,
+          tEmail("orderConfirm.trackBody"),
+          accountOrdersUrl,
           "",
-          "For any support, product questions, or shipment updates, contact us at:",
-          `Phone: ${supportPhoneDisplay}`,
-          `Email: ${supportEmail}`,
+          tEmail("orderConfirm.needHelpBody"),
+          ...(supportPhoneDisplay
+            ? [`${tEmail("orderConfirm.needHelpPhone")} ${supportPhoneDisplay}`]
+            : []),
+          `${tEmail("orderConfirm.needHelpEmail")} ${supportEmail}`,
           "",
-          "Love,",
-          "Team MadenKorea",
+          tEmail("orderConfirm.signoff"),
+          tEmail("orderConfirm.signoffName"),
         ].join("\n");
 
         emailPromises.push(
@@ -906,21 +1076,19 @@ export async function POST(req: NextRequest) {
                   <tr>
                     <td style="padding: 4px 0; color: #6b7280">Subtotal</td>
                     <td style="padding: 4px 0; text-align: right;">
-                      ${currency} ${base.toFixed(2)}
+                      ${fmt(base)}
                     </td>
                   </tr>
                   <tr>
                     <td style="padding: 4px 0; color: #6b7280">Discount</td>
                     <td style="padding: 4px 0; text-align: right;">
-                      - ${currency} ${discountAmount.toFixed(
-        2
-      )} (${discountPct.toFixed(2)}%)
+                      - ${fmt(discountAmount)} (${discountPct.toFixed(2)}%)
                     </td>
                   </tr>
                   <tr>
                     <td style="padding: 4px 0; color: #6b7280">Shipping</td>
                     <td style="padding: 4px 0; text-align: right;">
-                      ${currency} ${shippingFee.toFixed(2)}
+                      ${fmt(shippingFee)}
                     </td>
                   </tr>
                   <tr>
@@ -933,7 +1101,7 @@ export async function POST(req: NextRequest) {
                         color: #111827;
                       "
                     >
-                      ${currency} ${paidAmount.toFixed(2)}
+                      ${fmt(paidAmount)}
                     </td>
                   </tr>
                   <tr>
@@ -1003,16 +1171,62 @@ export async function POST(req: NextRequest) {
                 <strong>Commission %:</strong> ${commissionPct.toFixed(2)}%
               </p>
               <p style="margin: 0; color: #064e3b; font-size: 13px">
-                <strong>Commission amount:</strong> ${currency} ${commissionAmount.toFixed(
-        2
-      )}
+                <strong>Commission amount:</strong> ${fmt(commissionAmount)}
               </p>
             </div>
 
-            <p style="margin: 0; color: #6b7280; font-size: 12px">
-              For full product line items and shipping details, refer to the admin
-              dashboard or Supabase orders table.
-            </p>
+            ${
+              orderItems.length > 0
+                ? `
+            <div style="margin-bottom: 16px">
+              <h3 style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #111827">
+                Items
+              </h3>
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden">
+                <thead style="background: #f9fafb">
+                  <tr>
+                    <th style="text-align: left; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">Item</th>
+                    <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb; width: 50px">Qty</th>
+                    <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">Unit</th>
+                    <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">Line total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${orderItems
+                    .map(
+                      (it) => `
+                  <tr>
+                    <td style="padding: 8px 10px; border-bottom: 1px solid #f3f4f6">
+                      <div style="font-weight: 500; color: #111827">${escapeHtml(it.name ?? "—")}</div>
+                      ${it.sku ? `<div style="font-size: 11px; color: #9ca3af; font-family: monospace">${escapeHtml(it.sku)}</div>` : ""}
+                    </td>
+                    <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6">${it.quantity}</td>
+                    <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6">${fmt(it.unit_price)}</td>
+                    <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6; font-weight: 500">${fmt(it.line_total)}</td>
+                  </tr>`
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            </div>
+              `
+                : ""
+            }
+
+            ${
+              addrLines.length > 0
+                ? `
+            <div style="margin-bottom: 16px; padding: 12px 14px; border-radius: 8px; background: #f9fafb; border: 1px solid #e5e7eb">
+              <h3 style="margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #111827">
+                Shipping address
+              </h3>
+              <p style="margin: 0; color: #4b5563; font-size: 13px; line-height: 1.5">
+                ${addressHtml}
+              </p>
+            </div>
+              `
+                : ""
+            }
           </div>
         </div>
       `;
@@ -1020,58 +1234,83 @@ export async function POST(req: NextRequest) {
       const adminText = [
         "New order placed:",
         `Order number: ${orderNumber}`,
-        `Subtotal: ${currency} ${base.toFixed(2)}`,
-        `Discount: ${currency} ${discountAmount.toFixed(
-          2
-        )} (${discountPct.toFixed(2)}%)`,
-        `Shipping: ${currency} ${shippingFee.toFixed(2)}`,
-        `Total paid: ${currency} ${paidAmount.toFixed(2)}`,
+        `Subtotal: ${fmt(base)}`,
+        `Discount: ${fmt(discountAmount)} (${discountPct.toFixed(2)}%)`,
+        `Shipping: ${fmt(shippingFee)}`,
+        `Total paid: ${fmt(paidAmount)}`,
         `User ID: ${order.user_id || "guest"}`,
         `User email: ${userEmail || "—"}`,
         `Payment provider: Razorpay`,
         `Promo code ID: ${promoCodeId || "—"}`,
         `Influencer ID: ${influencerId || "—"}`,
         `Commission %: ${commissionPct.toFixed(2)}%`,
-        `Commission amount: ${currency} ${commissionAmount.toFixed(2)}`,
+        `Commission amount: ${fmt(commissionAmount)}`,
+        // Line items
+        ...(orderItems.length > 0
+          ? [
+              "",
+              "Items:",
+              ...orderItems.map(
+                (it) =>
+                  `  - ${it.name ?? "—"}${it.sku ? ` (${it.sku})` : ""} × ${it.quantity}  @  ${fmt(it.unit_price)}  =  ${fmt(it.line_total)}`
+              ),
+            ]
+          : []),
+        // Shipping address
+        ...(addrLines.length > 0
+          ? ["", "Shipping address:", ...addrLines.map((l) => `  ${l}`)]
+          : []),
       ].join("\n");
 
-      console.log("SES: sending admin email", {
-        to: ADMIN_EMAILS,
-        subject: adminSubject,
-      });
+      // Resolve admin recipients dynamically from
+      // `notification_recipients`. Admin manages the list at
+      // /admin/settings/notification-emails. If the list is empty we
+      // skip the admin notification (customer email still fires).
+      const adminRecipients = await getAdminRecipientEmails();
 
-      emailPromises.push(
-        ses
-          .send(
-            new SendEmailCommand({
-              Source: FROM_EMAIL,
-              Destination: {
-                ToAddresses: ADMIN_EMAILS,
-                CcAddresses: [FROM_EMAIL],
-              },
-              Message: {
-                Subject: { Data: adminSubject },
-                Body: {
-                  Html: { Data: adminHtml },
-                  Text: { Data: adminText },
+      if (adminRecipients.length === 0) {
+        dbg.push({ step: "email.admin.skip", reason: "no active recipients" });
+      } else {
+        console.log("SES: sending admin email", {
+          to: adminRecipients,
+          subject: adminSubject,
+        });
+
+        emailPromises.push(
+          ses
+            .send(
+              new SendEmailCommand({
+                Source: FROM_EMAIL,
+                Destination: {
+                  ToAddresses: adminRecipients,
+                  CcAddresses: [FROM_EMAIL],
                 },
+                Message: {
+                  Subject: { Data: adminSubject },
+                  Body: {
+                    Html: { Data: adminHtml },
+                    Text: { Data: adminText },
+                  },
+                },
+              })
+            )
+            .then(
+              () => {
+                console.log("SES: admin email sent OK", {
+                  to: adminRecipients,
+                });
+                dbg.push({ step: "email.admin.ok", to: adminRecipients });
               },
-            })
-          )
-          .then(
-            () => {
-              console.log("SES: admin email sent OK", { to: ADMIN_EMAILS });
-              dbg.push({ step: "email.admin.ok", to: ADMIN_EMAILS });
-            },
-            (e) => {
-              console.error("SES: admin email failed", e);
-              dbg.push({
-                step: "email.admin.error",
-                error: e?.message || String(e),
-              });
-            }
-          )
-      );
+              (e) => {
+                console.error("SES: admin email failed", e);
+                dbg.push({
+                  step: "email.admin.error",
+                  error: e?.message || String(e),
+                });
+              }
+            )
+        );
+      }
     } catch (e: any) {
       console.error("SES: email setup failed", e);
       dbg.push({ step: "email.error", error: e?.message || String(e) });

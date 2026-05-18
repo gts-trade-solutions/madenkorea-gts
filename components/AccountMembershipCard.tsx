@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { MEMBERSHIP_PLAN_NAME } from "@/lib/membership";
+import { useCurrency } from "@/lib/contexts/CurrencyContext";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,6 +24,7 @@ type MembershipRow = {
 
 export function AccountMembershipCard() {
   const t = useTranslations("membershipCard");
+  const { isINR } = useCurrency();
   const [loading, setLoading] = useState(true);
   const [membership, setMembership] = useState<MembershipRow | null>(null);
 
@@ -61,6 +63,10 @@ export function AccountMembershipCard() {
       cancelled = true;
     };
   }, []);
+
+  // K Plus is India-only; hide the entire card for international
+  // customers. Early-return AFTER all hooks to keep hook order stable.
+  if (!isINR) return null;
 
   return (
     <div className="rounded-2xl border bg-white p-6 shadow-sm">

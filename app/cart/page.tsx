@@ -18,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/lib/contexts/CartContext";
 import { useCurrency } from "@/lib/contexts/CurrencyContext";
-import { InternationalOrderModal } from "@/components/InternationalOrderModal";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import {
   computeShippingFee,
@@ -123,7 +122,6 @@ export default function CartPage() {
   const [membership, setMembership] = useState<MembershipRow | null>(null);
   // International order request modal — opened by the Checkout button
   // when the visitor isn't on INR. Indian visitors never see this.
-  const [showIntlModal, setShowIntlModal] = useState(false);
 
   const [guestProducts, setGuestProducts] = useState<
     Record<string, ProductRow>
@@ -134,6 +132,16 @@ export default function CartPage() {
 
   const [totals, setTotals] = useState<TotalsResponse>(null);
   const [loadingTotals, setLoadingTotals] = useState(false);
+  // Error from /api/checkout/calc-totals — populated when the API
+  // refuses to price the cart (e.g. MISSING_PRODUCT_WEIGHT,
+  // NO_SHIPPING_RATE_FOR_COUNTRY for international visitors). Without
+  // surfacing this the cart silently falls back to a placeholder
+  // (free shipping) and the customer can't tell why their payment
+  // won't proceed.
+  const [totalsError, setTotalsError] = useState<{
+    code: string;
+    productId?: string;
+  } | null>(null);
   const [qtyUpdating, setQtyUpdating] = useState<Record<string, boolean>>({});
   const [removing, setRemoving] = useState<Record<string, boolean>>({});
 
@@ -298,6 +306,7 @@ export default function CartPage() {
 async function recalcTotals() {
   if (rows.length === 0 || availableRows.length === 0) {
     setTotals(null);
+    setTotalsError(null);
     return;
   }
 
@@ -317,17 +326,34 @@ async function recalcTotals() {
       }),
     });
 
-    const data = (await res.json()) as TotalsResponse & { error?: string };
+    const data = (await res.json()) as TotalsResponse & {
+      error?: string;
+      product_id?: string;
+    };
 
     if (!res.ok || !data || (data as any).ok === false) {
-      throw new Error((data as any)?.error || "Failed to calculate totals");
+      // Known structured errors get persisted so the cart can render a
+      // specific banner explaining why pricing failed. Unknown errors
+      // fall through to the generic toast.
+      const code = (data as any)?.error || "CALC_FAILED";
+      setTotals(null);
+      setTotalsError({ code, productId: (data as any)?.product_id });
+      if (
+        code !== "MISSING_PRODUCT_WEIGHT" &&
+        code !== "NO_SHIPPING_RATE_FOR_COUNTRY"
+      ) {
+        toast.error(t("calcFailedToast"));
+      }
+      return;
     }
 
     setTotals(data);
+    setTotalsError(null);
   } catch (e: any) {
     console.error(e);
     toast.error(t("calcFailedToast"));
     setTotals(null);
+    setTotalsError({ code: "CALC_FAILED" });
   } finally {
     setLoadingTotals(false);
   }
@@ -646,24 +672,21 @@ async function clearPromo() {
                 <div className="flex justify-between">
                   <span>{t("shipping")}</span>
                   <span className="font-semibold">
-                    {!isINR
-                      ? t("shippingQuoted")
-                      : displayShipping === 0
+                    {displayShipping === 0
                       ? t("shippingFree")
                       : formatPrice(displayShipping)}
                   </span>
                 </div>
 
-                {/* Shipping copy is India-specific (free above threshold,
-                    K Plus benefit). For international visitors, shipping
-                    is quoted manually when they submit the order request.
-                    `shippingMessage()` now returns a kind+params discriminated
-                    union — we translate it locally here. */}
+                {/* India: existing threshold + K-Plus copy. International:
+                    a single-line note that customs/duties are on the
+                    buyer. `shippingMessage()` returns a kind+params
+                    discriminated union — we translate it locally here. */}
                 {(() => {
                   if (!isINR) {
                     return (
                       <p className="text-sm text-muted-foreground">
-                        {t("shippingIntl")}
+                        {t("intlCustomsNotice")}
                       </p>
                     );
                   }
@@ -701,23 +724,47 @@ async function clearPromo() {
                 {loadingTotals && (
                   <p className="text-xs text-muted-foreground">{t("updatingTotals")}</p>
                 )}
+
+                {totalsError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+                    {totalsError.code === "MISSING_PRODUCT_WEIGHT" && (
+                      <>
+                        <strong>{t("calcMissingWeightTitle")}</strong>
+                        <p className="mt-1">{t("calcMissingWeightBody")}</p>
+                      </>
+                    )}
+                    {totalsError.code === "NO_SHIPPING_RATE_FOR_COUNTRY" && (
+                      <>
+                        <strong>{t("calcNoCountryRateTitle")}</strong>
+                        <p className="mt-1">{t("calcNoCountryRateBody")}</p>
+                      </>
+                    )}
+                    {totalsError.code !== "MISSING_PRODUCT_WEIGHT" &&
+                      totalsError.code !== "NO_SHIPPING_RATE_FOR_COUNTRY" && (
+                        <>
+                          <strong>{t("calcGenericErrorTitle")}</strong>
+                          <p className="mt-1 font-mono">{totalsError.code}</p>
+                        </>
+                      )}
+                  </div>
+                )}
               </CardContent>
               <CardFooter className="flex flex-col gap-2">
                 <Button
                   className="w-full"
                   size="lg"
-                  disabled={unavailableCount > 0 || availableRows.length === 0}
+                  disabled={
+                    unavailableCount > 0 ||
+                    availableRows.length === 0 ||
+                    !!totalsError ||
+                    loadingTotals
+                  }
                   onClick={() => {
-                    if (unavailableCount > 0 || availableRows.length === 0) {
-                      return;
-                    }
-                    // Non-INR: open the international order request
-                    // modal. Razorpay isn't wired for non-INR billing,
-                    // and DTDC doesn't ship outside India, so we route
-                    // these visitors through the manual fulfilment
-                    // pipeline.
-                    if (!isINR) {
-                      setShowIntlModal(true);
+                    if (
+                      unavailableCount > 0 ||
+                      availableRows.length === 0 ||
+                      !!totalsError
+                    ) {
                       return;
                     }
                     if (!isAuthenticated) {
@@ -733,7 +780,7 @@ async function clearPromo() {
                     router.push("/checkout");
                   }}
                 >
-                  {isINR ? t("checkoutBtn") : t("intlOrderBtn")}
+                  {t("checkoutBtn")}
                 </Button>
                 <Button asChild variant="outline" className="w-full">
                   <Link href="/">{t("continueShopping")}</Link>
@@ -743,26 +790,6 @@ async function clearPromo() {
           </div>
         </div>
       </div>
-
-      {/* International order request modal — only opened for non-INR
-          visitors via the Checkout button above. The modal holds its
-          own form state; we just pass the cart snapshot in. */}
-      <InternationalOrderModal
-        open={showIntlModal}
-        onOpenChange={setShowIntlModal}
-        cart={availableRows.map((r) => ({
-          product_id: r.productId,
-          name: r.product.name ?? "Product",
-          // ProductRow doesn't carry sku in this page's local type —
-          // it's only fetched for ops display elsewhere. Omit until
-          // we extend the cart row shape.
-          sku: null,
-          quantity: r.quantity,
-          unit_price_inr: r.unitPrice,
-          hero_image_url: r.product.hero_image_url ?? null,
-        }))}
-        subtotalInr={baseSubtotal}
-      />
     </CustomerLayout>
   );
 }

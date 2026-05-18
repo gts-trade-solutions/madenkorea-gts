@@ -65,6 +65,19 @@ export default function AdminProductVideosPage() {
   // can't double-click and trigger a duplicate upload.
   const [saving, setSaving] = useState(false);
 
+  // ── Home carousel cap ───────────────────────────────────────────────
+  // Persisted in `store_settings.home_video_limit`. Loaded on mount via
+  // /api/admin/settings/home-video-limit so admins see the live value;
+  // edited inline with a single Save click.
+  const [homeVideoLimit, setHomeVideoLimit] = useState<number>(16);
+  const [limitBounds, setLimitBounds] = useState<{
+    min: number;
+    max: number;
+    default: number;
+  }>({ min: 1, max: 50, default: 16 });
+  const [limitDirty, setLimitDirty] = useState(false);
+  const [savingLimit, setSavingLimit] = useState(false);
+
   const toPublicUrl = (bucket: string, path?: string | null) =>
     path ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}` : undefined;
 
@@ -93,6 +106,69 @@ export default function AdminProductVideosPage() {
     fetchList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope]);
+
+  // Load the current home-carousel cap on mount. Best-effort —
+  // failures fall through to the seeded default and a save will still
+  // work because the PATCH endpoint clamps server-side.
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const token = s?.session?.access_token;
+        const res = await fetch("/api/admin/settings/home-video-limit", {
+          credentials: "include",
+          headers: token ? { authorization: `Bearer ${token}` } : undefined,
+          cache: "no-store",
+        });
+        const body = await res.json().catch(() => ({}));
+        if (res.ok && body?.ok) {
+          setHomeVideoLimit(Number(body.limit) || 16);
+          if (body.bounds) setLimitBounds(body.bounds);
+        }
+      } catch {
+        // ignore — default state is fine
+      }
+    })();
+  }, []);
+
+  async function saveLimit() {
+    const value = Math.floor(Number(homeVideoLimit));
+    if (
+      !Number.isFinite(value) ||
+      value < limitBounds.min ||
+      value > limitBounds.max
+    ) {
+      toast.error(
+        `Limit must be between ${limitBounds.min} and ${limitBounds.max}`
+      );
+      return;
+    }
+    setSavingLimit(true);
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      const res = await fetch("/api/admin/settings/home-video-limit", {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ limit: value }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.ok) {
+        toast.error(body?.error || "Failed to save limit");
+        return;
+      }
+      toast.success(`Home carousel cap set to ${value}`);
+      setLimitDirty(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save limit");
+    } finally {
+      setSavingLimit(false);
+    }
+  }
 
   function resetForm() {
     setTitle('');
@@ -203,17 +279,38 @@ export default function AdminProductVideosPage() {
     return (data as { id: string }).id;
   }
 
+  // Tells the home route to drop its cached video-section data and
+  // re-render. Best-effort: we never block the admin action on this
+  // network call, and never surface its failure — the next ISR tick
+  // will catch up anyway. Same posture as the banner admin's
+  // `revalidateHome()` helper.
+  async function revalidateHome() {
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      await fetch("/api/admin/product-videos/revalidate", {
+        method: "POST",
+        credentials: "include",
+        headers: token ? { authorization: `Bearer ${token}` } : undefined,
+      });
+    } catch {
+      // ignore — non-critical
+    }
+  }
+
   async function handleDelete(id: string) {
     if (!confirm('Delete this video card?')) return;
     const { error } = await supabase.from('home_product_videos').delete().eq('id', id);
     if (error) return alert(error.message);
     await fetchList();
+    revalidateHome();
   }
 
   async function handleToggle(r: Row) {
     const { error } = await supabase.from('home_product_videos').update({ active: !r.active }).eq('id', r.id);
     if (error) return alert(error.message);
     await fetchList();
+    revalidateHome();
   }
 
   async function swapPositions(a: Row, b: Row) {
@@ -234,6 +331,7 @@ export default function AdminProductVideosPage() {
     try {
       await swapPositions(rows[idx], rows[swapIdx]);
       await fetchList();
+      revalidateHome();
     } catch (e: any) {
       alert(e?.message || 'Reorder failed');
     }
@@ -343,6 +441,7 @@ export default function AdminProductVideosPage() {
 
       setOpen(false);
       await fetchList();
+      revalidateHome();
       toast.success(mode === 'create' ? 'Video created' : 'Video saved');
     } catch (err: any) {
       const message = err?.message || 'Save failed';
@@ -394,6 +493,41 @@ export default function AdminProductVideosPage() {
             + Add Video
           </button>
         </div>
+      </div>
+
+      {/* Home carousel cap. Lives in store_settings.home_video_limit;
+          driving this from the same page that manages the videos means
+          admins don't have to hunt for it under generic Settings. */}
+      <div className="rounded-xl border bg-gray-50 px-4 py-3 mb-4 flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-[260px]">
+          <div className="text-sm font-medium text-gray-900">
+            Home carousel cap
+          </div>
+          <div className="text-xs text-gray-500">
+            Maximum number of videos rendered on the home page. Active videos beyond this rank by{" "}
+            <code>position</code> get hidden until the cap is raised or
+            another video is removed. Range {limitBounds.min}–{limitBounds.max}.
+          </div>
+        </div>
+        <input
+          type="number"
+          min={limitBounds.min}
+          max={limitBounds.max}
+          step={1}
+          value={homeVideoLimit}
+          onChange={(e) => {
+            setHomeVideoLimit(Number(e.target.value));
+            setLimitDirty(true);
+          }}
+          className="border rounded px-2 py-1 w-20 text-right"
+        />
+        <button
+          onClick={saveLimit}
+          disabled={savingLimit || !limitDirty}
+          className="rounded bg-black text-white px-3 py-2 text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {savingLimit ? "Saving…" : "Save"}
+        </button>
       </div>
 
       <div className="rounded-xl border overflow-hidden">

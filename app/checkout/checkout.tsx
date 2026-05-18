@@ -13,7 +13,9 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/lib/contexts/CartContext";
 import { useCurrency } from "@/lib/contexts/CurrencyContext";
+import { useCountry } from "@/lib/contexts/CountryContext";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { COUNTRY_PROFILES } from "@/lib/countries";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import { useRazorpayCheckout } from "@/lib/hooks/useRazorpayCheckout";
@@ -107,7 +109,8 @@ export default function CheckoutPage() {
 
   const { items } = useCart();
   const { isAuthenticated, ready } = useAuth();
-  const { formatPrice, isINR } = useCurrency();
+  const { formatPrice, isINR, currency } = useCurrency();
+  const { country, profile: countryProfile } = useCountry();
   const { start } = useRazorpayCheckout();
   const shippingConfig = useShippingConfig();
 
@@ -118,6 +121,14 @@ export default function CheckoutPage() {
 
   const [calc, setCalc] = useState<CalcTotals | null>(null);
   const [loadingTotals, setLoadingTotals] = useState(false);
+  // Surfaces structured errors from /api/checkout/calc-totals so the
+  // order summary doesn't stay forever-loading when the API can't price
+  // the cart (e.g. international visitor's country has no rate, or a
+  // product in the cart is missing net_weight_g).
+  const [calcError, setCalcError] = useState<{
+    code: string;
+    productId?: string;
+  } | null>(null);
   const [membership, setMembership] = useState<MembershipRow | null>(null);
 
   const totalsSeq = useRef(0);
@@ -286,6 +297,7 @@ export default function CheckoutPage() {
 
     setLoadingTotals(true);
     setCalc(null);
+    setCalcError(null);
 
     const payload = {
       lines: items.map((i) => ({ product_id: i.product_id, qty: i.quantity })),
@@ -314,13 +326,20 @@ export default function CheckoutPage() {
           setCalc(j as CalcTotals);
         } else {
           setCalc(null);
+          setCalcError({
+            code: j?.error || "CALC_FAILED",
+            productId: j?.product_id,
+          });
         }
       } else {
         console.log(`[TOTALS][${mySeq}] (stale) ignored`);
       }
     } catch (err) {
       console.warn(`[TOTALS][${mySeq}] error`, err);
-      if (mySeq === totalsSeq.current) setCalc(null);
+      if (mySeq === totalsSeq.current) {
+        setCalc(null);
+        setCalcError({ code: "CALC_FAILED" });
+      }
     } finally {
       if (mySeq === totalsSeq.current) setLoadingTotals(false);
     }
@@ -386,36 +405,47 @@ export default function CheckoutPage() {
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // India-specific validation: 10-digit mobile + 6-digit PIN +
+    // DTDC serviceability. International addresses are freeform so
+    // none of these are enforced for non-IN buyers — postal codes
+    // and phone formats vary too widely to validate client-side.
     const phone = formData.phone.replace(/\D/g, "");
-    if (!/^[6-9]\d{9}$/.test(phone)) {
-      toast.error(t("errInvalidPhone"));
-      return;
-    }
-
     const pincode = formData.pincode.replace(/\D/g, "");
-    if (!/^\d{6}$/.test(pincode)) {
-      toast.error(t("errInvalidPincode"));
-      return;
-    }
 
-    // C-04: pre-payment serviceability check. Fail-open if the
-    // courier check returns undetermined / errors so we don't block
-    // checkout on transient failures.
-    try {
-      const sres = await fetch(
-        `/api/dtdc/serviceability?pincode=${encodeURIComponent(pincode)}`,
-        { cache: "no-store" }
-      );
-      const sj = (await sres.json().catch(() => null)) as {
-        ok?: boolean;
-        serviceable: boolean | null;
-      } | null;
-      if (sres.ok && sj?.ok && sj.serviceable === false) {
-        toast.error(t("errUnservicedPincode", { pincode }));
+    if (isINR) {
+      if (!/^[6-9]\d{9}$/.test(phone)) {
+        toast.error(t("errInvalidPhone"));
         return;
       }
-    } catch {
-      // network error → fail open, let payment proceed
+      if (!/^\d{6}$/.test(pincode)) {
+        toast.error(t("errInvalidPincode"));
+        return;
+      }
+
+      // C-04: pre-payment serviceability check. Fail-open if the
+      // courier check returns undetermined / errors so we don't block
+      // checkout on transient failures.
+      try {
+        const sres = await fetch(
+          `/api/dtdc/serviceability?pincode=${encodeURIComponent(pincode)}`,
+          { cache: "no-store" }
+        );
+        const sj = (await sres.json().catch(() => null)) as {
+          ok?: boolean;
+          serviceable: boolean | null;
+        } | null;
+        if (sres.ok && sj?.ok && sj.serviceable === false) {
+          toast.error(t("errUnservicedPincode", { pincode }));
+          return;
+        }
+      } catch {
+        // network error → fail open, let payment proceed
+      }
+    } else {
+      // For international buyers we only require the basic fields the
+      // form already marks as `required` — name, email, address line,
+      // city, postal code, country. Empty trims through `required`
+      // attributes; nothing further to validate here.
     }
 
     if (!calc) {
@@ -434,6 +464,10 @@ export default function CheckoutPage() {
       promo_code: calc.applied?.code ?? null,
     });
 
+    // Snapshot the destination country alongside the address so the
+    // order row knows where it was shipping to even if the buyer's
+    // session cookie later changes. India = "India" string literal for
+    // backward compatibility with India-only consumers (DTDC, etc).
     const addressSnapshot = {
       name: formData.name,
       email: formData.email,
@@ -442,6 +476,8 @@ export default function CheckoutPage() {
       city: formData.city,
       state: formData.state,
       pincode: formData.pincode,
+      country: isINR ? "India" : countryProfile.name,
+      country_code: country,
     };
 
     console.log(
@@ -458,7 +494,11 @@ export default function CheckoutPage() {
     try {
       const { data: authData } = await supabase.auth.getUser();
       const user = authData?.user;
-      if (user) {
+      // Only sync the user's `addresses` row for Indian orders. That
+      // table's schema (PIN, state, country='India') is India-shaped;
+      // the order's `address_snapshot` already carries the full
+      // international address for shipping / fulfilment.
+      if (user && isINR) {
         const payload = {
           line1: formData.address,
           line2: null,
@@ -599,10 +639,13 @@ export default function CheckoutPage() {
                         name="phone"
                         type="tel"
                         autoComplete="tel"
-                        inputMode="numeric"
-                        pattern="[6-9][0-9]{9}"
-                        title={t("phoneTooltip")}
-                        maxLength={10}
+                        inputMode={isINR ? "numeric" : "tel"}
+                        // India: 10-digit mobile starting 6/7/8/9.
+                        // International: freeform — country code + local
+                        // number, no client-side pattern enforcement.
+                        pattern={isINR ? "[6-9][0-9]{9}" : undefined}
+                        title={isINR ? t("phoneTooltip") : undefined}
+                        maxLength={isINR ? 10 : undefined}
                         value={formData.phone}
                         onChange={handleChange}
                         required
@@ -635,18 +678,26 @@ export default function CheckoutPage() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="state">{t("stateLabel")}</Label>
+                      <Label htmlFor="state">
+                        {isINR ? t("stateLabel") : t("stateOptionalLabel")}
+                      </Label>
                       <Input
                         id="state"
                         name="state"
                         autoComplete="address-level1"
                         value={formData.state}
                         onChange={handleChange}
-                        required
+                        // State/region is mandatory for Indian addresses
+                        // (it's part of the GST / GSTIN destination).
+                        // Many international addresses have no state
+                        // equivalent; relax to optional for non-IN.
+                        required={isINR}
                       />
                     </div>
                     <div>
-                      <Label htmlFor="pincode">{t("pincodeLabel")}</Label>
+                      <Label htmlFor="pincode">
+                        {isINR ? t("pincodeLabel") : t("postalCodeLabel")}
+                      </Label>
                       <Input
                         id="pincode"
                         name="pincode"
@@ -654,10 +705,13 @@ export default function CheckoutPage() {
                         onChange={handleChange}
                         autoComplete="postal-code"
                         required
-                        inputMode="numeric"
-                        pattern="\d{6}"
-                        title={t("pincodeTooltip")}
-                        maxLength={6}
+                        // India = 6-digit numeric PIN. International =
+                        // freeform postal code (UK alphanumerics, EU 4-5
+                        // digit, etc. — we can't validate per country).
+                        inputMode={isINR ? "numeric" : "text"}
+                        pattern={isINR ? "\\d{6}" : undefined}
+                        title={isINR ? t("pincodeTooltip") : undefined}
+                        maxLength={isINR ? 6 : 16}
                       />
                     </div>
                   </div>
@@ -738,7 +792,39 @@ export default function CheckoutPage() {
 
                   <Separator />
 
-                  {loadingTotals || !calc ? (
+                  {/* If calc-totals returned an error, render a clear
+                      explanation instead of an indefinite skeleton.
+                      Pay button is disabled below until the error
+                      clears. */}
+                  {calcError ? (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-800">
+                      {calcError.code === "MISSING_PRODUCT_WEIGHT" && (
+                        <>
+                          <strong>{t("calcMissingWeightTitle")}</strong>
+                          <p className="mt-1 text-xs">
+                            {t("calcMissingWeightBody")}
+                          </p>
+                        </>
+                      )}
+                      {calcError.code === "NO_SHIPPING_RATE_FOR_COUNTRY" && (
+                        <>
+                          <strong>{t("calcNoCountryRateTitle")}</strong>
+                          <p className="mt-1 text-xs">
+                            {t("calcNoCountryRateBody")}
+                          </p>
+                        </>
+                      )}
+                      {calcError.code !== "MISSING_PRODUCT_WEIGHT" &&
+                        calcError.code !== "NO_SHIPPING_RATE_FOR_COUNTRY" && (
+                          <>
+                            <strong>{t("calcGenericErrorTitle")}</strong>
+                            <p className="mt-1 text-xs font-mono">
+                              {calcError.code}
+                            </p>
+                          </>
+                        )}
+                    </div>
+                  ) : loadingTotals || !calc ? (
                     <TotalsSkeleton />
                   ) : (
                     <>
@@ -759,9 +845,7 @@ export default function CheckoutPage() {
                           )}
                         </span>
                         <span className="font-semibold">
-                          {!isINR
-                            ? t("shippingQuoted")
-                            : calc.shipping_fee === 0
+                          {calc.shipping_fee === 0
                             ? t("shippingFree")
                             : formatPrice(calc.shipping_fee)}
                         </span>
@@ -781,6 +865,16 @@ export default function CheckoutPage() {
                           </div>
                         );
                       })()}
+
+                      {/* International orders ship DDU — duties and taxes
+                          are payable by the customer at customs in their
+                          country. This is a regulatory disclosure, not a
+                          UI nicety; do not hide it. */}
+                      {!isINR && (
+                        <div className="rounded-lg border border-dashed border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          {t("intlCustomsNotice")}
+                        </div>
+                      )}
 
                       {calc.sale_savings && calc.sale_savings > 0 && (
                         <div className="flex justify-between text-emerald-700">
@@ -811,7 +905,12 @@ export default function CheckoutPage() {
                         type="submit"
                         className="w-full"
                         size="lg"
-                        disabled={isProcessing || loadingProducts || loadingTotals}
+                        disabled={
+                          isProcessing ||
+                          loadingProducts ||
+                          loadingTotals ||
+                          !!calcError
+                        }
                       >
                         {isProcessing ? t("processing") : t("payWithRazorpay")}
                       </Button>

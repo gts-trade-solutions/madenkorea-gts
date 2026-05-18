@@ -300,6 +300,17 @@ export function ProductEditor({
   const onSave = async (closeAfter = false) => {
     if (!vendor) { toast.error("Vendor not ready"); return; }
     if (!canSave) { toast.error("Please fill name, brand and category"); return; }
+    // Weight is mandatory before a product can go live — international
+    // shipping fee = sum(net_weight_g × qty) × country rate, so a
+    // missing weight would crash international checkout. Drafts may be
+    // saved without it so works-in-progress aren't blocked.
+    if (model.is_published) {
+      const w = Number(model.net_weight_g ?? 0);
+      if (!Number.isFinite(w) || w <= 0) {
+        toast.error("Net weight (g) is required to publish — used to compute international shipping.");
+        return;
+      }
+    }
     setBusy(true);
     try {
       // 1) Normalize identity
@@ -701,9 +712,32 @@ export function ProductEditor({
                 value={model.volume_ml ?? ""} onChange={e => setModel(m => ({...m, volume_ml: e.target.value ? Number(e.target.value) : null}))} />
             </div>
             <div>
-              <Label>Net weight (g)</Label>
-              <Input type="number" min="0" step="0.01"
-                value={model.net_weight_g ?? ""} onChange={e => setModel(m => ({...m, net_weight_g: e.target.value ? Number(e.target.value) : null}))} />
+              <Label>
+                Net weight (g)
+                {model.is_published && (
+                  <span className="text-red-600 ml-1" aria-hidden>*</span>
+                )}
+              </Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                required={!!model.is_published}
+                aria-invalid={
+                  model.is_published &&
+                  (!model.net_weight_g || Number(model.net_weight_g) <= 0)
+                }
+                value={model.net_weight_g ?? ""}
+                onChange={(e) =>
+                  setModel((m) => ({
+                    ...m,
+                    net_weight_g: e.target.value ? Number(e.target.value) : null,
+                  }))
+                }
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Required for published products — used to compute international shipping fees.
+              </p>
             </div>
             <div>
               <Label>Country of origin</Label>

@@ -1,7 +1,9 @@
 import crypto from "crypto";
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabaseServer";
 import { sendEmail } from "@/lib/ses";
+import { getEmailTranslator } from "@/lib/i18n/email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,16 +118,47 @@ export async function POST(req: NextRequest) {
             sesRegion: sesRegion || "(empty)",
           });
 
+          // Locale comes from the device that just requested the reset
+          // (cookie is fresh and reflects what they were just reading).
+          // The user's stored `preferred_locale` could also be used,
+          // but a fresh cookie is more reliably current than a profile
+          // value that may be stale from another device.
+          const requestLocale = cookies().get("mik_locale")?.value || null;
+          const { t: tEmail } = await getEmailTranslator(requestLocale);
+
           await sendEmail({
             to: email,
             from: resetFrom,
-            subject: "Reset your password",
+            subject: tEmail("passwordReset.subject"),
             html: `
-              <p>Hello,</p>
-              <p>We received a request to reset your password.</p>
-              <p><a href="${resetUrl}">Reset your password</a></p>
-              <p>This link expires in 30 minutes and can only be used once.</p>
-              <p>If you did not request this, you can ignore this email.</p>
+              <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: #111827; background-color: #f9fafb; padding: 24px">
+                <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 10px; border: 1px solid #e5e7eb; padding: 24px">
+                  <h2 style="margin: 0 0 12px; font-size: 20px; font-weight: 600">
+                    ${tEmail("passwordReset.heading")}
+                  </h2>
+                  <p style="margin: 0 0 14px; color: #4b5563">
+                    ${tEmail("passwordReset.intro")}
+                  </p>
+                  <p style="margin: 0 0 18px">
+                    <a href="${resetUrl}" style="display: inline-block; padding: 10px 18px; border-radius: 999px; background: #111827; color: #f9fafb; font-weight: 500; text-decoration: none">
+                      ${tEmail("passwordReset.cta")}
+                    </a>
+                  </p>
+                  <p style="margin: 0 0 10px; color: #6b7280; font-size: 12px">
+                    ${tEmail("passwordReset.fallbackPrefix")}<br />
+                    <span style="word-break: break-all">${resetUrl}</span>
+                  </p>
+                  <p style="margin: 0 0 6px; color: #6b7280; font-size: 12px">
+                    ${tEmail("passwordReset.expiryNotice", { minutes: 30 })}
+                  </p>
+                  <p style="margin: 0; color: #6b7280; font-size: 12px">
+                    ${tEmail("passwordReset.ignoreNotice")}
+                  </p>
+                  <p style="margin: 18px 0 0; color: #4b5563; font-size: 13px">
+                    — ${tEmail("passwordReset.signoff")}
+                  </p>
+                </div>
+              </div>
             `,
           });
           console.log("[forgot-password] SES send success", {

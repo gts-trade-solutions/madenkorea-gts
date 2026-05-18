@@ -83,7 +83,7 @@ export function Header() {
   // `formatPrice` accepts an INR amount and renders it in the visitor's
   // active currency at the live FX rate. The ticker's product prices
   // are stored in INR in the DB, so this is a straight pass-through.
-  const { formatPrice } = useCurrency();
+  const { formatPrice, isINR } = useCurrency();
   const t = useTranslations("header");
   const tc = useTranslations("common");
 
@@ -455,9 +455,11 @@ export function Header() {
                       <Link href="/contact" className="block text-base uppercase">
                         {t("navSupport")}
                       </Link>
-                      <Link href="/k-plus" className="block text-base uppercase">
-                        {t("navKPlus")}
-                      </Link>
+                      {isINR && (
+                        <Link href="/k-plus" className="block text-base uppercase">
+                          {t("navKPlus")}
+                        </Link>
+                      )}
                     </div>
 
                     <Accordion type="multiple" className="w-full">
@@ -677,15 +679,17 @@ export function Header() {
                     </Link>
                   </NavigationMenuItem>
 
-                  <NavigationMenuItem>
-                    <Link
-  href="/k-plus"
-  className="inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-sky-600 via-indigo-600 to-violet-600 px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white shadow-md shadow-indigo-500/25"
->
-  <Sparkles className="mr-2 h-4 w-4" />
-  {t("navKPlus")}
-</Link>
-                  </NavigationMenuItem>
+                  {isINR && (
+                    <NavigationMenuItem>
+                      <Link
+                        href="/k-plus"
+                        className="inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-sky-600 via-indigo-600 to-violet-600 px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white shadow-md shadow-indigo-500/25"
+                      >
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        {t("navKPlus")}
+                      </Link>
+                    </NavigationMenuItem>
+                  )}
                 </NavigationMenuList>
               </NavigationMenu>
             </nav>

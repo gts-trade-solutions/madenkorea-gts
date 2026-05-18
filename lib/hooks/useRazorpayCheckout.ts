@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+import { useCart } from "@/lib/contexts/CartContext";
 import { trackEvent } from "@/lib/analytics/track";
 
 export type AttributionSnapshot = null | {
@@ -34,6 +35,11 @@ declare global {
 export function useRazorpayCheckout() {
   const router = useRouter();
   const busyRef = useRef(false);
+  // Cart context — used to flush the in-memory items + totals after a
+  // successful payment. Without this, the verify route clears the DB
+  // cart but the badge + cart page keep their stale React state until
+  // the user manually refreshes.
+  const cart = useCart();
 
   const start = async (
     address: AddressSnapshot = null,
@@ -106,8 +112,22 @@ export function useRazorpayCheckout() {
         key,
         amount: razorpay_order.amount,
         currency: razorpay_order.currency,
-        name: "Checkout",
-        description: "Order payment",
+        // Merchant branding shown at the top of the Razorpay modal.
+        // Anything generic ("Checkout", "Order") undermines trust at
+        // the exact moment customers are entering card details.
+        //
+        // Logo: a purpose-built 1:1 SVG (`razorpay-merchant-logo.svg`).
+        // Razorpay centre-crops to a tight square, which mangled
+        // `logo-md.png` (brand mark left, wordmark right — both halves
+        // cut) and shaved the `.CO` off `square-logo.png` (which is
+        // 353x318, not actually square). The dedicated 512×512 asset
+        // has the MADEN-KOREA wordmark stacked dead-centre so the
+        // crop never touches type.
+        name: "MadenKorea",
+        description: "MadenKorea order payment",
+        image:
+          process.env.NEXT_PUBLIC_RAZORPAY_LOGO_URL ||
+          "https://madenkorea.com/razorpay-merchant-logo.svg",
         order_id: razorpay_order.id,
         prefill: {
           name: address?.name || "",
@@ -170,10 +190,15 @@ export function useRazorpayCheckout() {
               `/order/success?order=${encodeURIComponent(successOrderId)}`
             );
 
-            // Clear cart in background after navigation is triggered so checkout
-            // page cart-empty guards don't override success redirect.
+            // Flush the client-side cart state (badge, cart page items,
+            // totals) AFTER nav has been kicked off so the checkout
+            // page's empty-cart guard doesn't short-circuit the
+            // /order/success redirect. The DB cart was already cleared
+            // by the verify route via `cart_clear_for_user`; this just
+            // syncs the React state.
             void (async () => {
               try {
+                await cart.clear();
                 if (typeof window !== "undefined") {
                   localStorage.setItem("guest_cart_v1", "[]");
                   sessionStorage.removeItem("guest_cart_v1");
@@ -204,7 +229,13 @@ export function useRazorpayCheckout() {
             busyRef.current = false;
           },
         },
-        theme: { color: "#3399cc" },
+        // Brand accent for the Razorpay modal (button + highlight tint).
+        // Razorpay's `theme.color` tints the header band and CTA
+        // buttons; the modal body itself stays on a light background
+        // by default. Using the brand coral (matches the "Order
+        // Confirmed" pill in our SES emails) keeps the modal feeling
+        // light and on-brand instead of stock-teal or dark.
+        theme: { color: "#ea580c" },
       });
 
       rzp.on("payment.failed", function (resp: any) {

@@ -25,22 +25,37 @@ const supabaseAdmin = createClient(
 );
 
 async function isAuthorized(req: NextRequest): Promise<boolean> {
-  // Path 1: cron bearer token.
   const auth = req.headers.get("authorization") ?? "";
   const bearer = auth.toLowerCase().startsWith("bearer ")
     ? auth.slice(7).trim()
     : null;
+
+  // Path 1: cron bearer token.
   if (bearer && process.env.CRON_SECRET && bearer === process.env.CRON_SECRET) {
     return true;
   }
 
-  // Path 2: signed-in admin session. Lazily import the route client
-  // because cron pings don't have cookies.
+  // Path 2: signed-in admin session. Try the bearer first (sent by the
+  // /admin/settings/currencies "Refresh now" button), then fall back
+  // to cookie-based auth. Either yields a userId we look up in
+  // `profiles` to confirm admin role.
   try {
-    const { supabaseRouteClient } = await import("@/lib/supabaseRoute");
-    const sb = supabaseRouteClient();
-    const { data: authData } = await sb.auth.getUser();
-    const userId = authData.user?.id;
+    const { createRouteHandlerClient } = await import(
+      "@supabase/auth-helpers-nextjs"
+    );
+    const { cookies } = await import("next/headers");
+    const sb = createRouteHandlerClient({ cookies });
+
+    let userId: string | null = null;
+
+    if (bearer) {
+      const { data, error } = await sb.auth.getUser(bearer);
+      if (!error) userId = data.user?.id ?? null;
+    }
+    if (!userId) {
+      const { data } = await sb.auth.getUser();
+      userId = data.user?.id ?? null;
+    }
     if (!userId) return false;
 
     const { data: profile } = await sb

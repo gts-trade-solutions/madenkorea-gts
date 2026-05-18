@@ -424,7 +424,12 @@ export default function BannersAdminPage() {
                   <td className="px-3 py-2">{r.alt}</td>
                   <td className="px-3 py-2">
                     {(() => {
-                      const p = COUNTRY_PROFILES[r.country];
+                      // r.country is `string` from the DB; narrow before
+                      // indexing the typed COUNTRY_PROFILES map. Anything
+                      // outside the supported set just shows the code.
+                      const p = isSupportedCountry(r.country)
+                        ? COUNTRY_PROFILES[r.country]
+                        : null;
                       return p ? (
                         <span title={p.name}>
                           {p.flag} {r.country}

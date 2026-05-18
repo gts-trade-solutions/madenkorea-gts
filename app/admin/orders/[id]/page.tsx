@@ -102,7 +102,7 @@ export default function AdminOrderDetailPage() {
         const { data: ord, error: oErr } = await supabase
           .from("orders")
           .select(
-            "id, order_number, status, currency, subtotal, shipping_fee, discount_total, total, address_snapshot, created_at, user_id"
+            "id, order_number, status, currency, subtotal, shipping_fee, discount_total, total, subtotal_inr, shipping_fee_inr, discount_total_inr, total_inr, fx_rate_snapshot, address_snapshot, created_at, user_id"
           )
           .eq("id", orderId)
           .maybeSingle();
@@ -584,6 +584,30 @@ const handleCreateDtdc = async (force_new = false) => {
                         <span>Total</span>
                         <span>{formatINR(total, currency)}</span>
                       </div>
+
+                      {/* INR-equivalent snapshot for international orders. The
+                          buyer-currency view above is the authoritative one
+                          (what Razorpay charged); these are the INR amounts
+                          recorded at the time of order so analytics and
+                          reconciliation can roll up across currencies. */}
+                      {currency !== "INR" && order?.total_inr != null && (
+                        <div className="mt-3 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs space-y-1">
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>INR equivalent (at order time)</span>
+                            <span className="tabular-nums">
+                              {formatINR(Number(order.total_inr), "INR")}
+                            </span>
+                          </div>
+                          {order?.fx_rate_snapshot != null && (
+                            <div className="flex justify-between text-muted-foreground">
+                              <span>FX rate snapshot</span>
+                              <span className="tabular-nums font-mono">
+                                1 INR = {Number(order.fx_rate_snapshot).toFixed(6)} {currency}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </>
                 )}

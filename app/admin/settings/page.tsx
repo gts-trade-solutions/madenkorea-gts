@@ -440,6 +440,34 @@ export default function AdminSettingsPage() {
                     </Button>
                   </div>
                 </div>
+
+                <div className="border-t pt-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <Label>International Shipping Rates</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Per-country rate in ₹/gram used for non-India orders. Required for international Razorpay checkout to compute shipping.
+                      </p>
+                    </div>
+                    <Button variant="outline" onClick={() => router.push('/admin/settings/international-shipping')}>
+                      Manage rates
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <Label>Notification Emails</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Email addresses that receive admin notifications (new order, payout request, contact submissions, international order requests).
+                      </p>
+                    </div>
+                    <Button variant="outline" onClick={() => router.push('/admin/settings/notification-emails')}>
+                      Manage list
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

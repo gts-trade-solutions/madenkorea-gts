@@ -3,7 +3,7 @@
     "common": "7625ff0cab4d5903a7cc3aa3fc5bfa02596e4354",
     "header": "9d2ef6d3c8ad58f0f6100cb6958d478f5b617bdb",
     "footer": "39beab9167f69249e5adf036c8fb43a12c9433ed",
-    "cart": "a8287a06f6759e6cb7c4636318fccac40079b49e",
+    "cart": "7a99a9aeb1bc8e69573edcbf5929e06e4381a429",
     "auth": "a4a980ffb7b60d60103b8ccd98c80b22a5f0b9d8",
     "home": "3f7cca90244de956c4752ebd840003ab0b940c7c",
     "pcard": "72fadf5c38992c0b3a1c31345d632dc038fcae7a",
@@ -29,16 +29,17 @@
     "account": "6fba690c14320ee90f2f373eaf95c38c1e30395d",
     "membershipCard": "b21a1e05a361edef28f3963dd897f167321f61cd",
     "pdp": "792c53438c24396ec9fdaa3292ece59ef764336c",
-    "checkoutPage": "7b272309c107ae0a867631cb2849ff1653392eac",
+    "checkoutPage": "96f6b4dfe59ffa1b4d6fcd08f626de435d0d4296",
     "floatingWhatsapp": "94ee1671a024070c79950d4d660e776f2ca740de",
     "influencerRequest": "541b90e99e3468c5e84fe731d79fed014d4c22c2",
-    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207"
+    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207",
+    "emails": "7c2a0950daa010cfee7b31ca3b97550e4cc011b7"
   },
   "pl": {
     "common": "7625ff0cab4d5903a7cc3aa3fc5bfa02596e4354",
     "header": "9d2ef6d3c8ad58f0f6100cb6958d478f5b617bdb",
     "footer": "39beab9167f69249e5adf036c8fb43a12c9433ed",
-    "cart": "a8287a06f6759e6cb7c4636318fccac40079b49e",
+    "cart": "7a99a9aeb1bc8e69573edcbf5929e06e4381a429",
     "auth": "a4a980ffb7b60d60103b8ccd98c80b22a5f0b9d8",
     "home": "3f7cca90244de956c4752ebd840003ab0b940c7c",
     "pcard": "72fadf5c38992c0b3a1c31345d632dc038fcae7a",
@@ -64,16 +65,17 @@
     "account": "6fba690c14320ee90f2f373eaf95c38c1e30395d",
     "membershipCard": "b21a1e05a361edef28f3963dd897f167321f61cd",
     "pdp": "792c53438c24396ec9fdaa3292ece59ef764336c",
-    "checkoutPage": "7b272309c107ae0a867631cb2849ff1653392eac",
+    "checkoutPage": "96f6b4dfe59ffa1b4d6fcd08f626de435d0d4296",
     "floatingWhatsapp": "94ee1671a024070c79950d4d660e776f2ca740de",
     "influencerRequest": "541b90e99e3468c5e84fe731d79fed014d4c22c2",
-    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207"
+    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207",
+    "emails": "7c2a0950daa010cfee7b31ca3b97550e4cc011b7"
   },
   "vi": {
     "common": "7625ff0cab4d5903a7cc3aa3fc5bfa02596e4354",
     "header": "9d2ef6d3c8ad58f0f6100cb6958d478f5b617bdb",
     "footer": "39beab9167f69249e5adf036c8fb43a12c9433ed",
-    "cart": "a8287a06f6759e6cb7c4636318fccac40079b49e",
+    "cart": "7a99a9aeb1bc8e69573edcbf5929e06e4381a429",
     "auth": "a4a980ffb7b60d60103b8ccd98c80b22a5f0b9d8",
     "home": "3f7cca90244de956c4752ebd840003ab0b940c7c",
     "pcard": "72fadf5c38992c0b3a1c31345d632dc038fcae7a",
@@ -99,16 +101,17 @@
     "account": "6fba690c14320ee90f2f373eaf95c38c1e30395d",
     "membershipCard": "b21a1e05a361edef28f3963dd897f167321f61cd",
     "pdp": "792c53438c24396ec9fdaa3292ece59ef764336c",
-    "checkoutPage": "7b272309c107ae0a867631cb2849ff1653392eac",
+    "checkoutPage": "96f6b4dfe59ffa1b4d6fcd08f626de435d0d4296",
     "floatingWhatsapp": "94ee1671a024070c79950d4d660e776f2ca740de",
     "influencerRequest": "541b90e99e3468c5e84fe731d79fed014d4c22c2",
-    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207"
+    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207",
+    "emails": "7c2a0950daa010cfee7b31ca3b97550e4cc011b7"
   },
   "fr": {
     "common": "7625ff0cab4d5903a7cc3aa3fc5bfa02596e4354",
     "header": "9d2ef6d3c8ad58f0f6100cb6958d478f5b617bdb",
     "footer": "39beab9167f69249e5adf036c8fb43a12c9433ed",
-    "cart": "a8287a06f6759e6cb7c4636318fccac40079b49e",
+    "cart": "7a99a9aeb1bc8e69573edcbf5929e06e4381a429",
     "auth": "a4a980ffb7b60d60103b8ccd98c80b22a5f0b9d8",
     "home": "3f7cca90244de956c4752ebd840003ab0b940c7c",
     "pcard": "72fadf5c38992c0b3a1c31345d632dc038fcae7a",
@@ -134,16 +137,17 @@
     "account": "6fba690c14320ee90f2f373eaf95c38c1e30395d",
     "membershipCard": "b21a1e05a361edef28f3963dd897f167321f61cd",
     "pdp": "792c53438c24396ec9fdaa3292ece59ef764336c",
-    "checkoutPage": "7b272309c107ae0a867631cb2849ff1653392eac",
+    "checkoutPage": "96f6b4dfe59ffa1b4d6fcd08f626de435d0d4296",
     "floatingWhatsapp": "94ee1671a024070c79950d4d660e776f2ca740de",
     "influencerRequest": "541b90e99e3468c5e84fe731d79fed014d4c22c2",
-    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207"
+    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207",
+    "emails": "7c2a0950daa010cfee7b31ca3b97550e4cc011b7"
   },
   "de": {
     "common": "7625ff0cab4d5903a7cc3aa3fc5bfa02596e4354",
     "header": "9d2ef6d3c8ad58f0f6100cb6958d478f5b617bdb",
     "footer": "39beab9167f69249e5adf036c8fb43a12c9433ed",
-    "cart": "a8287a06f6759e6cb7c4636318fccac40079b49e",
+    "cart": "7a99a9aeb1bc8e69573edcbf5929e06e4381a429",
     "auth": "a4a980ffb7b60d60103b8ccd98c80b22a5f0b9d8",
     "home": "3f7cca90244de956c4752ebd840003ab0b940c7c",
     "pcard": "72fadf5c38992c0b3a1c31345d632dc038fcae7a",
@@ -169,16 +173,17 @@
     "account": "6fba690c14320ee90f2f373eaf95c38c1e30395d",
     "membershipCard": "b21a1e05a361edef28f3963dd897f167321f61cd",
     "pdp": "792c53438c24396ec9fdaa3292ece59ef764336c",
-    "checkoutPage": "7b272309c107ae0a867631cb2849ff1653392eac",
+    "checkoutPage": "96f6b4dfe59ffa1b4d6fcd08f626de435d0d4296",
     "floatingWhatsapp": "94ee1671a024070c79950d4d660e776f2ca740de",
     "influencerRequest": "541b90e99e3468c5e84fe731d79fed014d4c22c2",
-    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207"
+    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207",
+    "emails": "7c2a0950daa010cfee7b31ca3b97550e4cc011b7"
   },
   "es": {
     "common": "7625ff0cab4d5903a7cc3aa3fc5bfa02596e4354",
     "header": "9d2ef6d3c8ad58f0f6100cb6958d478f5b617bdb",
     "footer": "39beab9167f69249e5adf036c8fb43a12c9433ed",
-    "cart": "a8287a06f6759e6cb7c4636318fccac40079b49e",
+    "cart": "7a99a9aeb1bc8e69573edcbf5929e06e4381a429",
     "auth": "a4a980ffb7b60d60103b8ccd98c80b22a5f0b9d8",
     "home": "3f7cca90244de956c4752ebd840003ab0b940c7c",
     "pcard": "72fadf5c38992c0b3a1c31345d632dc038fcae7a",
@@ -204,16 +209,17 @@
     "account": "6fba690c14320ee90f2f373eaf95c38c1e30395d",
     "membershipCard": "b21a1e05a361edef28f3963dd897f167321f61cd",
     "pdp": "792c53438c24396ec9fdaa3292ece59ef764336c",
-    "checkoutPage": "7b272309c107ae0a867631cb2849ff1653392eac",
+    "checkoutPage": "96f6b4dfe59ffa1b4d6fcd08f626de435d0d4296",
     "floatingWhatsapp": "94ee1671a024070c79950d4d660e776f2ca740de",
     "influencerRequest": "541b90e99e3468c5e84fe731d79fed014d4c22c2",
-    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207"
+    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207",
+    "emails": "7c2a0950daa010cfee7b31ca3b97550e4cc011b7"
   },
   "it": {
     "common": "7625ff0cab4d5903a7cc3aa3fc5bfa02596e4354",
     "header": "9d2ef6d3c8ad58f0f6100cb6958d478f5b617bdb",
     "footer": "39beab9167f69249e5adf036c8fb43a12c9433ed",
-    "cart": "a8287a06f6759e6cb7c4636318fccac40079b49e",
+    "cart": "7a99a9aeb1bc8e69573edcbf5929e06e4381a429",
     "auth": "a4a980ffb7b60d60103b8ccd98c80b22a5f0b9d8",
     "home": "3f7cca90244de956c4752ebd840003ab0b940c7c",
     "pcard": "72fadf5c38992c0b3a1c31345d632dc038fcae7a",
@@ -239,16 +245,17 @@
     "account": "6fba690c14320ee90f2f373eaf95c38c1e30395d",
     "membershipCard": "b21a1e05a361edef28f3963dd897f167321f61cd",
     "pdp": "792c53438c24396ec9fdaa3292ece59ef764336c",
-    "checkoutPage": "7b272309c107ae0a867631cb2849ff1653392eac",
+    "checkoutPage": "96f6b4dfe59ffa1b4d6fcd08f626de435d0d4296",
     "floatingWhatsapp": "94ee1671a024070c79950d4d660e776f2ca740de",
     "influencerRequest": "541b90e99e3468c5e84fe731d79fed014d4c22c2",
-    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207"
+    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207",
+    "emails": "7c2a0950daa010cfee7b31ca3b97550e4cc011b7"
   },
   "pt": {
     "common": "7625ff0cab4d5903a7cc3aa3fc5bfa02596e4354",
     "header": "9d2ef6d3c8ad58f0f6100cb6958d478f5b617bdb",
     "footer": "39beab9167f69249e5adf036c8fb43a12c9433ed",
-    "cart": "a8287a06f6759e6cb7c4636318fccac40079b49e",
+    "cart": "7a99a9aeb1bc8e69573edcbf5929e06e4381a429",
     "auth": "a4a980ffb7b60d60103b8ccd98c80b22a5f0b9d8",
     "home": "3f7cca90244de956c4752ebd840003ab0b940c7c",
     "pcard": "72fadf5c38992c0b3a1c31345d632dc038fcae7a",
@@ -274,9 +281,10 @@
     "account": "6fba690c14320ee90f2f373eaf95c38c1e30395d",
     "membershipCard": "b21a1e05a361edef28f3963dd897f167321f61cd",
     "pdp": "792c53438c24396ec9fdaa3292ece59ef764336c",
-    "checkoutPage": "7b272309c107ae0a867631cb2849ff1653392eac",
+    "checkoutPage": "96f6b4dfe59ffa1b4d6fcd08f626de435d0d4296",
     "floatingWhatsapp": "94ee1671a024070c79950d4d660e776f2ca740de",
     "influencerRequest": "541b90e99e3468c5e84fe731d79fed014d4c22c2",
-    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207"
+    "influencer": "04bdaf6539ae49a80fbda5351d2f1cb253e85207",
+    "emails": "7c2a0950daa010cfee7b31ca3b97550e4cc011b7"
   }
 }

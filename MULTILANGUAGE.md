@@ -333,6 +333,28 @@ node scripts/translate-content.mjs --locales pl,vi    # restrict locales
 
 ---
 
+## Deferred: Multi-country contact details (paused 2026-05-15)
+
+The site has a single `store_settings` row (id=1) holding the legal entity name, registered address, public phone, support email, business hours, Grievance Officer details, GSTIN, CDSCO registration, jurisdiction city. It's read via [lib/businessInfo.ts](lib/businessInfo.ts) and rendered on ~12 surfaces:
+
+- Customer-facing: contact, about, FAQ, terms, privacy, all 4 policy pages, footer disclosures
+- System emails: order confirmation, payment failure (`razorpay/verify`, `international-order`)
+- Floating WhatsApp button + contact form CTA (separate `WHATSAPP_PHONE_NUMBER` in [lib/config/site.ts](lib/config/site.ts))
+- Admin: `/admin/settings`
+
+**Requirement**: different contact details per country, with the option to *share* one set across multiple countries (e.g. one set for all GCC countries, one for all EU).
+
+**Two implementation paths considered**:
+
+1. **Contact Profiles** (recommended): `contact_profiles` table (one row per distinct contact set) + a `country → profile_id` mapping table. Admin edits each profile once and assigns N countries to it. No data duplication; clean to add/remove countries from a profile.
+2. **Per-country `store_settings` rows**: add `country` column to `store_settings`, copy the IN row per country, override only the fields that differ. Simpler but re-types shared values across countries.
+
+**When to resume**: after international payments ship. Prerequisite for region-specific compliance copy (Grievance Officer must be local to each market) and for the "Contact us" CTA in international shipping confirmations.
+
+**Estimated effort**: 4–6 hr for the profile approach including migration + admin UI + reader-side fallback.
+
+---
+
 ## Next phases (candidates)
 
 Listed in rough priority order based on customer-facing impact vs effort.

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseRouteClient } from "@/lib/supabaseRoute";
 import { sendEmail } from "@/lib/ses";
 import { getBusinessInfo } from "@/lib/businessInfo";
 import { FALLBACK_RATES, formatPrice, isSupportedCurrency } from "@/lib/currency";
+import { getEmailTranslator } from "@/lib/i18n/email";
+import { getAdminRecipientEmails } from "@/lib/notificationRecipients";
 
 // International order request endpoint.
 //
@@ -128,22 +131,34 @@ function buildTeamEmail(req: RequestBody, requestId: string): string {
   `;
 }
 
-function buildCustomerEmail(req: RequestBody, requestId: string): string {
+type CustomerEmailStrings = {
+  subject: string;
+  heading: string;
+  intro: string;
+  needHelpHeading: string;
+  needHelpBody: string;
+  signoff: string;
+};
+
+function buildCustomerEmail(
+  req: RequestBody,
+  requestId: string,
+  t: CustomerEmailStrings
+): string {
+  const firstName = escapeHtml(req.customer_name.split(" ")[0] || "there");
   return `
     <div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111">
-      <h1 style="font-size:20px;margin:0 0 12px">We've received your request</h1>
-      <p style="margin:0 0 16px;color:#444">Hi ${escapeHtml(req.customer_name.split(" ")[0] || "there")},</p>
+      <h1 style="font-size:20px;margin:0 0 12px">${escapeHtml(t.heading.replace("{name}", firstName))}</h1>
       <p style="margin:0 0 16px;color:#444">
-        Thanks for your interest in MadenKorea. We've received your order request
-        (reference <code>${escapeHtml(requestId)}</code>) and our team will get
-        back to you within 24 business hours with a shipping quote, total in
-        ${escapeHtml(req.currency_code)}, and payment instructions for your country.
+        ${escapeHtml(t.intro.replace("{country}", escapeHtml(req.country)))}
       </p>
-      <p style="margin:0 0 16px;color:#444">
-        If you have any questions in the meantime, just reply to this email.
+      <p style="margin:0 0 8px;color:#444;font-size:13px">
+        <strong>Reference:</strong> <code>${escapeHtml(requestId)}</code>
       </p>
+      <p style="margin:16px 0 6px;color:#111;font-size:14px"><strong>${escapeHtml(t.needHelpHeading)}</strong></p>
+      <p style="margin:0 0 16px;color:#444">${escapeHtml(t.needHelpBody)}</p>
       <p style="margin:24px 0 0;color:#888;font-size:13px">
-        — The MadenKorea team
+        — ${escapeHtml(t.signoff)}
       </p>
     </div>
   `;
@@ -218,13 +233,21 @@ export async function POST(req: NextRequest) {
   // /admin/international-orders. Email errors are returned as warnings
   // so the client can soften the success toast if needed.
   const business = await getBusinessInfo();
-  const teamTo = business.supportEmail || "info@madenkorea.com";
   const emailErrors: string[] = [];
+
+  // Admin/team notification: list is admin-managed at
+  // /admin/settings/notification-emails. Falls back to the business
+  // support email if the recipients table is empty, so a freshly
+  // installed environment still notifies someone.
+  const adminRecipients = await getAdminRecipientEmails();
+  const teamTo =
+    adminRecipients[0] || business.supportEmail || "info@madenkorea.com";
+  const teamCc = adminRecipients.slice(1);
 
   try {
     await sendEmail({
       to: teamTo,
-      cc: ["operations@madenkorea.com"],
+      cc: teamCc.length > 0 ? teamCc : undefined,
       subject: `[International Order Request] ${body.country} · ${body.customer_name}`,
       html: buildTeamEmail(body, inserted.id),
     });
@@ -233,10 +256,27 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // The customer's preferred language at submission time. Cookie is
+    // canonical because this form runs anonymously most of the time
+    // (the buyer hasn't necessarily logged in yet).
+    const requestLocale = cookies().get("mik_locale")?.value || null;
+    const { t: tEmail } = await getEmailTranslator(requestLocale);
+
+    const strings: CustomerEmailStrings = {
+      subject: tEmail("internationalOrderAck.subject"),
+      heading: tEmail("internationalOrderAck.heading", {
+        name: body.customer_name.split(" ")[0] || "there",
+      }),
+      intro: tEmail("internationalOrderAck.intro", { country: body.country }),
+      needHelpHeading: tEmail("internationalOrderAck.needHelpHeading"),
+      needHelpBody: tEmail("internationalOrderAck.needHelpBody"),
+      signoff: tEmail("internationalOrderAck.signoff"),
+    };
+
     await sendEmail({
       to: body.customer_email,
-      subject: `We received your order request — MadenKorea`,
-      html: buildCustomerEmail(body, inserted.id),
+      subject: strings.subject,
+      html: buildCustomerEmail(body, inserted.id, strings),
     });
   } catch (err: any) {
     emailErrors.push(`customer: ${err?.message ?? "unknown"}`);

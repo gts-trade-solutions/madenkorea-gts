@@ -1784,6 +1784,29 @@ Recommended launch baseline:
 
 ## Deferred — flagged 2026-05-09 (not yet fixed)
 
+### D-04: K-Partnership commission accounting is currency-buggy for international orders — flagged 2026-05-16
+
+**Status:** Audit performed during international-payments testing pass. Both bugs are live but only trigger when an influencer promo is redeemed on a non-INR order. India-only orders are unaffected. Full spec, recommended fix, and backfill SQL are in [INTERNATIONAL_PAYMENTS.md](INTERNATIONAL_PAYMENTS.md) → "Deferred: K-Partnership currency handling".
+
+**Confidence:** `[VERIFIED-CODE]`
+
+**Summary of the two coupled defects:**
+
+1. **Commission recorded in buyer currency.** [app/api/razorpay/verify/route.ts](app/api/razorpay/verify/route.ts) line ~311 computes `commissionAmount = order.subtotal × commissionPct/100`. After the Phase 2 cutover (INTERNATIONAL_PAYMENTS.md) `order.subtotal` is in buyer currency for non-INR orders, so the resulting `order_attributions.commission_amount` is in USD/EUR/etc with `currency = orderCurrency`. Merchant pays out from India in INR — this forces a payout-time FX conversion at a worse rate than what was earned.
+2. **Dashboard sums mix currencies.** [app/api/me/summary/route.ts](app/api/me/summary/route.ts) and [app/api/me/request/route.ts](app/api/me/request/route.ts) both `reduce` `commission_amount` across all rows without currency normalisation. One Polish-USD order makes the dashboard read `₹1,000 + $10 = "₹1,010"`, undercounting the foreign commission by ~99×. Same math feeds payout-availability gating.
+
+**Single-point fix:** swap the commission base from `order.subtotal` (buyer-currency) to `order.subtotal_inr` (INR canonical, populated since Phase 2). All downstream sums become correct automatically.
+
+**Backfill needed:** any orders placed between Phase 2 cutover and the fix date with attribution + non-INR currency. SQL UPDATE included in INTERNATIONAL_PAYMENTS.md.
+
+**Effort (~40 min total):** 20 min code, 5 min backfill, 15 min verification.
+
+**What's NOT broken (don't fix what isn't):** `/influencer-request` apply form, `/r/[code]` + `/rl/[id]` tracking, promo/referral code application in cart, 25% cap, `order_attributions` row creation, per-row currency display in dashboard list view.
+
+**Adjacent (out of scope for this fix):** International influencer banking (SWIFT/IBAN), influencer-dashboard string translation, per-currency payout buckets. These are separate product decisions.
+
+---
+
 ### D-01: PWA "Add to Home Screen" broken
 
 **Status:** Implementation exists at [app/manifest.ts](app/manifest.ts) and is linked from [app/layout.tsx](app/layout.tsx), but install prompts do not fire on Android Chrome, and iOS Home Screen icons are visibly rescaled / distorted.

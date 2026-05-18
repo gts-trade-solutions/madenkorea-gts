@@ -227,28 +227,13 @@ export default function KPlusPage() {
       })
     : "";
 
-  // International gate: no Razorpay flow, no shipping benefit, just
-  // direct them to contact us for international orders.
-  if (!isINR) {
-    return (
-      <CustomerLayout>
-        <div className="container mx-auto py-16 max-w-2xl text-center">
-          <h1 className="text-3xl font-bold tracking-tight">
-            {MEMBERSHIP_PLAN_NAME} membership
-          </h1>
-          <p className="mt-4 text-muted-foreground">
-            K Plus is currently available only for customers in India — it
-            unlocks free delivery on every Indian order. For international
-            shipments, please submit an order request from the cart and our
-            team will provide a personalised quote.
-          </p>
-          <Button asChild className="mt-8 rounded-full" size="lg">
-            <Link href="/contact">Contact us</Link>
-          </Button>
-        </div>
-      </CustomerLayout>
-    );
-  }
+  // International gate: K Plus is an India-only product; hide it
+  // entirely for non-IN visitors (redirect home so the URL leaves no
+  // trace of the membership flow).
+  useEffect(() => {
+    if (!isINR) router.replace("/");
+  }, [isINR, router]);
+  if (!isINR) return null;
 
   return (
     <>

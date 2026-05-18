@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabaseServer";
 import { sendEmail } from "@/lib/ses";
+import { getAdminRecipientEmails } from "@/lib/notificationRecipients";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,22 +45,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const notifyTo = process.env.CONTACT_NOTIFY_EMAIL || "info@madenkorea.com";
-    try {
-      await sendEmail({
-        to: notifyTo,
-        cc: ["operations@madenkorea.com"],
-        subject: `New contact message${subject ? `: ${subject}` : ""}`,
-        html: `
-          <p><strong>Name:</strong> ${name}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Subject:</strong> ${subject || "-"}</p>
-          <p><strong>Message:</strong></p>
-          <p>${message.replace(/\n/g, "<br/>")}</p>
-        `,
-      });
-    } catch (mailError) {
-      console.error("[contact] notification email failed:", mailError);
+    // Admin recipients now come from the admin-managed list. First
+    // entry is the primary "to"; the rest get CC'd. This replaces the
+    // old CONTACT_NOTIFY_EMAIL env + hardcoded operations@... CC.
+    const recipients = await getAdminRecipientEmails();
+    if (recipients.length > 0) {
+      const [primary, ...cc] = recipients;
+      try {
+        await sendEmail({
+          to: primary,
+          cc: cc.length > 0 ? cc : undefined,
+          subject: `New contact message${subject ? `: ${subject}` : ""}`,
+          html: `
+            <p><strong>Name:</strong> ${name}</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Subject:</strong> ${subject || "-"}</p>
+            <p><strong>Message:</strong></p>
+            <p>${message.replace(/\n/g, "<br/>")}</p>
+          `,
+        });
+      } catch (mailError) {
+        console.error("[contact] notification email failed:", mailError);
+      }
+    } else {
+      console.warn(
+        "[contact] no notification recipients configured; message saved but no admin email sent"
+      );
     }
 
     return NextResponse.json({

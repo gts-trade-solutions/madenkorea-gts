@@ -75,12 +75,33 @@ export default function CurrenciesAdminPage() {
     })();
   }, [hasRole, router]);
 
+  // Most-recent FX refresh timestamp across all rows. Useful at-a-glance
+  // signal so admins know whether the daily cron is alive. Falls back
+  // to null if no row has a timestamp yet.
+  const lastFetched = (() => {
+    const stamps = rows
+      .map((r) => r.last_updated_at)
+      .filter(Boolean)
+      .map((s) => new Date(s).getTime())
+      .filter((n) => Number.isFinite(n));
+    if (stamps.length === 0) return null;
+    return new Date(Math.max(...stamps));
+  })();
+
   const refresh = async () => {
     setRefreshing(true);
     try {
+      // Send the Supabase access token as a Bearer header in addition
+      // to the cookies. The refresh endpoint's `supabaseRouteClient()`
+      // path occasionally fails to resolve a session purely from
+      // cookies (e.g. on some SameSite / sub-domain configurations),
+      // and falling back to the bearer keeps the admin button working.
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
       const res = await fetch("/api/currency/refresh", {
         method: "POST",
         credentials: "include",
+        headers: token ? { authorization: `Bearer ${token}` } : undefined,
       });
       const body = await res.json();
       if (!res.ok || !body?.ok) {
@@ -150,6 +171,12 @@ export default function CurrenciesAdminPage() {
               currency from the customer-facing switcher without deleting
               its row.
             </CardDescription>
+            <p className="mt-2 text-xs text-muted-foreground">
+              <strong>Last fetched:</strong>{" "}
+              {lastFetched
+                ? lastFetched.toLocaleString("en-IN")
+                : "never"}
+            </p>
           </div>
           <Button onClick={refresh} disabled={refreshing}>
             {refreshing ? (

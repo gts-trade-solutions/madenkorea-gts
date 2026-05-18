@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { supabaseRouteClient } from "@/lib/supabaseRoute";
 import { getPromoCodeFromCookie } from "@/lib/promo-cookie";
-import { roundMoney } from "@/lib/currency";
+import {
+  roundMoney,
+  isSupportedCurrency,
+  type CurrencyCode,
+} from "@/lib/currency";
 import { computeShippingFee } from "@/lib/membership";
 import { getShippingConfig } from "@/lib/storeSettings";
+import {
+  getCountryShippingRate,
+  totalCartWeightGrams,
+} from "@/lib/internationalShipping";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
 
 type LineInput = { product_id: string; qty: number };
 
@@ -64,7 +74,7 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
   const { data: products, error: pErr } = await sb
     .from("products")
     .select(
-      "id,name,price,currency,is_published,promo_exempt,sale_price,sale_starts_at,sale_ends_at,stock_qty"
+      "id,name,price,currency,is_published,promo_exempt,sale_price,sale_starts_at,sale_ends_at,stock_qty,net_weight_g"
     )
     .in("id", productIds);
 
@@ -84,8 +94,11 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
     );
   }
 
-  const currency = products![0].currency;
-
+  // All products are stored canonically in INR. The mixed-currency
+  // guard from the INR-only era is gone — international support
+  // (model A) does the per-buyer FX conversion further down. We still
+  // validate that every row claims INR so a future bad import row
+  // doesn't silently slip in.
   for (const p of products as any[]) {
     if (!p.is_published) {
       return NextResponse.json(
@@ -99,11 +112,10 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
         { status: 400 }
       );
     }
-
-    if (p.currency !== currency) {
+    if (p.currency && p.currency !== "INR") {
       return NextResponse.json(
-        { ok: false, error: "MIXED_CURRENCY_NOT_SUPPORTED" },
-        { status: 400 }
+        { ok: false, error: "NON_INR_PRODUCT_PRICE", product_id: p.id },
+        { status: 500 }
       );
     }
   }
@@ -220,20 +232,91 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
     activeMembership = membership ?? null;
   }
 
- const shippingConfig = await getShippingConfig();
- const shipping_fee = roundMoney(
-   computeShippingFee(subtotal, activeMembership, shippingConfig)
- );
+  // ─── International vs Indian shipping branch ────────────────────
+  //
+  // Indian carts use the existing threshold + K-Plus logic. Non-IN
+  // carts derive shipping from `country_shipping_rates.rate_per_gram_inr`
+  // multiplied by `sum(product.net_weight_g × qty)`. The buyer's
+  // currency comes from the `mik_currency` cookie; the amount sent
+  // to Razorpay is INR × the current FX rate, snapshotted on the
+  // order at create-time so the bill the customer pays matches the
+  // total they saw on this page.
 
-const total = roundMoney(subtotal + shipping_fee - discount_total);
+  const cookieJar = cookies();
+  const rawCountry = cookieJar.get("mik_country")?.value;
+  const country = isSupportedCountry(rawCountry) ? rawCountry : DEFAULT_COUNTRY;
+  const rawCurrency = cookieJar.get("mik_currency")?.value;
+  const buyerCurrency: CurrencyCode =
+    isSupportedCurrency(rawCurrency) ? rawCurrency : "INR";
+
+  const isIntl = country !== "IN";
+
+  let shipping_fee_inr = 0;
+  let shippingError: { error: string; product_id?: string } | null = null;
+
+  if (!isIntl) {
+    const shippingConfig = await getShippingConfig();
+    shipping_fee_inr = roundMoney(
+      computeShippingFee(subtotal, activeMembership, shippingConfig)
+    );
+  } else {
+    // Every product participating in an international cart MUST have a
+    // positive net_weight_g. Catching this here means the UI can show
+    // a clear "missing weight" error instead of Razorpay failing later.
+    const missing = (products as any[]).filter(
+      (p) => !p.net_weight_g || Number(p.net_weight_g) <= 0
+    );
+    if (missing.length > 0) {
+      shippingError = {
+        error: "MISSING_PRODUCT_WEIGHT",
+        product_id: missing[0].id,
+      };
+    } else {
+      const rate = await getCountryShippingRate(country);
+      if (!rate) {
+        shippingError = { error: "NO_SHIPPING_RATE_FOR_COUNTRY" };
+      } else {
+        const grams = totalCartWeightGrams(
+          lines.map((l) => ({
+            qty: l.qty,
+            net_weight_g: prodMap.get(l.product_id)?.net_weight_g ?? null,
+          }))
+        );
+        shipping_fee_inr = roundMoney(grams * Number(rate.rate_per_gram_inr));
+      }
+    }
+  }
+
+  if (shippingError) {
+    return NextResponse.json(
+      { ok: false, ...shippingError },
+      { status: 400 }
+    );
+  }
+
+  const total = roundMoney(subtotal + shipping_fee_inr - discount_total);
+
+  // Response amounts are in INR — the storefront's `useCurrency()`
+  // hook converts to the buyer's currency at render-time via
+  // `formatPrice(amountInr)`. Keeping the response INR-canonical
+  // means callers don't have to know whether they're rendering for
+  // an Indian or international visitor; the conversion is one
+  // consistent layer, not two.
+  //
+  // razorpay/create re-reads the order row (INR) and applies the FX
+  // snapshot when it creates the Razorpay order, so it doesn't
+  // consume calc-totals output at all.
 
   return NextResponse.json({
     ok: true,
-    currency,
+    currency: "INR",
     subtotal,
-    shipping_fee,
+    shipping_fee: shipping_fee_inr,
     discount_total,
     total,
+    country,
+    is_intl: isIntl,
+    buyer_currency: buyerCurrency,
     commission_total,
     applied: promo
       ? {

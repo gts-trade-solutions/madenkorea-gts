@@ -158,3 +158,79 @@ export function currencyForCountry(country?: string | null): CurrencyCode {
 export function isSupportedCurrency(code: unknown): code is CurrencyCode {
   return typeof code === "string" && (SUPPORTED_CURRENCIES as string[]).includes(code);
 }
+
+// ─── Razorpay minor-unit handling ──────────────────────────────────
+//
+// Razorpay's orders API takes `amount` in the smallest unit of the
+// target currency. For most currencies that means cents/paise (exponent
+// 2 → × 100), but a handful are zero-decimal (VND, JPY, KRW, etc.) and
+// the amount must be passed as the whole-unit integer (× 1).
+//
+// Source: https://razorpay.com/docs/payments/payments/international-payments/supported-currencies/
+// We only encode the codes we actually accept in the storefront. If
+// the switcher gains a new currency, add it here AND verify Razorpay
+// supports it.
+
+const RAZORPAY_EXPONENT: Record<CurrencyCode, number> = {
+  INR: 2,
+  USD: 2,
+  EUR: 2,
+  GBP: 2,
+  PLN: 2,
+  ZAR: 2,
+  TZS: 2,
+  NGN: 2,
+  QAR: 2,
+  AED: 2,
+  VND: 0,
+};
+
+/**
+ * Convert a major-unit amount (e.g. 36.42 USD) into the integer minor
+ * units Razorpay expects (3642). For zero-decimal currencies returns
+ * the rounded integer of the amount itself.
+ */
+export function toRazorpayMinorUnits(
+  amount: number,
+  currency: CurrencyCode
+): number {
+  const exp = RAZORPAY_EXPONENT[currency] ?? 2;
+  return Math.round(amount * Math.pow(10, exp));
+}
+
+/**
+ * Inverse of `toRazorpayMinorUnits` — convert the integer minor-unit
+ * value Razorpay returns (e.g. `order.amount_paid`) into the major
+ * unit your DB/UI uses.
+ */
+export function fromRazorpayMinorUnits(
+  minor: number,
+  currency: CurrencyCode
+): number {
+  const exp = RAZORPAY_EXPONENT[currency] ?? 2;
+  return minor / Math.pow(10, exp);
+}
+
+/**
+ * Format an *already-converted* amount (i.e. one that's in `currency`,
+ * not INR) for display. Used by the order-confirmation emails and the
+ * admin order detail surfaces where the stored amount is in the
+ * buyer's currency, not INR.
+ *
+ * Distinguished from `formatPrice` which takes an INR input and
+ * converts on the fly.
+ */
+export function formatMoney(amount: number, currency: CurrencyCode): string {
+  const locale = FORMAT_LOCALE[currency] ?? "en-US";
+  const decimals = FALLBACK_RATES[currency]?.decimals ?? 2;
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(decimals)}`;
+  }
+}
