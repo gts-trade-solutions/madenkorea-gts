@@ -72,17 +72,18 @@ export async function createDtdcShipmentForOrder(
     new Set((items ?? []).map((x) => x.product_id).filter(Boolean))
   );
 
-  // 3) Load product weights (net_weight_g)
+  // 3) Load product weights — gross (with retail packaging), since
+  //    that's what actually goes into the DTDC consignment box.
   const { data: prods, error: pErr } = await admin
     .from("products")
-    .select("id, net_weight_g")
+    .select("id, gross_weight_g")
     .in("id", ids);
 
   if (pErr) throw new Error(pErr.message);
 
-  const productMap: Record<string, { net_weight_g?: number | null }> = {};
+  const productMap: Record<string, { gross_weight_g?: number | null }> = {};
   (prods ?? []).forEach((p: any) => {
-    productMap[p.id] = { net_weight_g: p.net_weight_g ?? null };
+    productMap[p.id] = { gross_weight_g: p.gross_weight_g ?? null };
   });
 
   // 4) Find existing active shipment

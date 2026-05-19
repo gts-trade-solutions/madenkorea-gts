@@ -61,6 +61,7 @@ type BulkProductRow = {
   // misc
   volume_ml: number | null;
   net_weight_g: number | null;
+  gross_weight_g: number | null;
   country_of_origin: string | null;
 };
 
@@ -345,6 +346,7 @@ async function bulkDownloadTemplate() {
 
     { header: "volume_ml", key: "volume_ml", width: 12 },
     { header: "net_weight_g", key: "net_weight_g", width: 12 },
+    { header: "gross_weight_g", key: "gross_weight_g", width: 14 },
     { header: "country_of_origin", key: "country_of_origin", width: 16 },
   ];
   ws.views = [{ state: "frozen", ySplit: 1 }];
@@ -386,7 +388,7 @@ async function bulkDownloadTemplate() {
     attributes_json: "{\"shade\":\"01\",\"size\":\"100ml\"}",
     faq: "Q1?::A1||Q2?::A2",
     key_benefits: "Hydrating|Brightening|Soothing",
-    volume_ml: 100, net_weight_g: "", country_of_origin: "Korea",
+    volume_ml: 100, net_weight_g: "", gross_weight_g: "", country_of_origin: "Korea",
   };
 
   writeRow(2, ex1);
@@ -516,6 +518,7 @@ async function bulkDownloadTemplate() {
 
         volume_ml: toNumOrNull(r.volume_ml),
         net_weight_g: toNumOrNull(r.net_weight_g),
+        gross_weight_g: toNumOrNull(r.gross_weight_g),
         country_of_origin: r.country_of_origin || null,
       };
 
@@ -876,6 +879,7 @@ async function bulkDownloadTemplate() {
           // misc
           volume_ml: p.volume_ml,
           net_weight_g: p.net_weight_g,
+          gross_weight_g: p.gross_weight_g,
           country_of_origin: p.country_of_origin,
         };
 

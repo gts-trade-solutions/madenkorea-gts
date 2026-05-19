@@ -128,6 +128,8 @@ export default function CheckoutPage() {
   const [calcError, setCalcError] = useState<{
     code: string;
     productId?: string;
+    maxKg?: number;
+    effectiveKg?: number;
   } | null>(null);
   const [membership, setMembership] = useState<MembershipRow | null>(null);
 
@@ -370,6 +372,8 @@ export default function CheckoutPage() {
           setCalcError({
             code: j?.error || "CALC_FAILED",
             productId: j?.product_id,
+            maxKg: j?.maxKg,
+            effectiveKg: j?.effectiveKg,
           });
         }
       } else {
@@ -1076,8 +1080,21 @@ export default function CheckoutPage() {
                           </p>
                         </>
                       )}
+                      {calcError.code === "SHIPPING_CAP_EXCEEDED" && (
+                        <>
+                          <strong>{t("calcShippingCapTitle")}</strong>
+                          <p className="mt-1 text-xs">
+                            {t("calcShippingCapBody", {
+                              maxKg: (calcError as any).maxKg ?? 20,
+                              actualKg:
+                                (calcError as any).effectiveKg ?? "?",
+                            })}
+                          </p>
+                        </>
+                      )}
                       {calcError.code !== "MISSING_PRODUCT_WEIGHT" &&
-                        calcError.code !== "NO_SHIPPING_RATE_FOR_COUNTRY" && (
+                        calcError.code !== "NO_SHIPPING_RATE_FOR_COUNTRY" &&
+                        calcError.code !== "SHIPPING_CAP_EXCEEDED" && (
                           <>
                             <strong>{t("calcGenericErrorTitle")}</strong>
                             <p className="mt-1 text-xs font-mono">

@@ -123,6 +123,7 @@ type Model = {
 
   volume_ml: number | null;
   net_weight_g: number | null;
+  gross_weight_g: number | null;
   country_of_origin: string;
 
   /* admin-only */
@@ -212,6 +213,7 @@ export function AdminProductEditor({ productId }: { productId: string }) {
 
         volume_ml: prod.volume_ml ?? null,
         net_weight_g: prod.net_weight_g ?? null,
+        gross_weight_g: prod.gross_weight_g ?? null,
         country_of_origin: prod.country_of_origin || "",
 
         is_featured: !!prod.is_featured,
@@ -311,6 +313,7 @@ export function AdminProductEditor({ productId }: { productId: string }) {
 
         volume_ml: model.volume_ml ?? null,
         net_weight_g: model.net_weight_g ?? null,
+        gross_weight_g: model.gross_weight_g ?? null,
         country_of_origin: model.country_of_origin || null,
 
         /* admin-only */
@@ -698,6 +701,13 @@ export function AdminProductEditor({ productId }: { productId: string }) {
               <Label>Net weight (g)</Label>
               <Input type="number" min="0" step="0.01"
                 value={model.net_weight_g ?? ""} onChange={e => setModel(m => m ? ({...m, net_weight_g: e.target.value ? Number(e.target.value) : null}) : m)} />
+              <p className="text-xs text-muted-foreground mt-1">Contents only — informational.</p>
+            </div>
+            <div>
+              <Label>Gross weight (g)</Label>
+              <Input type="number" min="0" step="0.01"
+                value={model.gross_weight_g ?? ""} onChange={e => setModel(m => m ? ({...m, gross_weight_g: e.target.value ? Number(e.target.value) : null}) : m)} />
+              <p className="text-xs text-muted-foreground mt-1">With retail packaging — drives shipping math.</p>
             </div>
             <div>
               <Label>Country of origin</Label>

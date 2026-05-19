@@ -12,7 +12,9 @@ import { computeShippingFee } from "@/lib/membership";
 import { getShippingConfig } from "@/lib/storeSettings";
 import {
   getCountryShippingRate,
+  getIntlShippingSettings,
   totalCartWeightGrams,
+  computeIntlShippingInr,
 } from "@/lib/internationalShipping";
 import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
 
@@ -81,7 +83,7 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
   const { data: products, error: pErr } = await sb
     .from("products")
     .select(
-      "id,name,price,currency,is_published,promo_exempt,sale_price,sale_starts_at,sale_ends_at,stock_qty,net_weight_g"
+      "id,name,price,currency,is_published,promo_exempt,sale_price,sale_starts_at,sale_ends_at,stock_qty,net_weight_g,gross_weight_g"
     )
     .in("id", productIds);
 
@@ -248,13 +250,20 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
 
   // ─── International vs Indian shipping branch ────────────────────
   //
-  // Indian carts use the existing threshold + K-Plus logic. Non-IN
-  // carts derive shipping from `country_shipping_rates.rate_per_gram_inr`
-  // multiplied by `sum(product.net_weight_g × qty)`. The buyer's
-  // currency comes from the `mik_currency` cookie; the amount sent
-  // to Razorpay is INR × the current FX rate, snapshotted on the
-  // order at create-time so the bill the customer pays matches the
-  // total they saw on this page.
+  // India: existing threshold + K-Plus logic in lib/membership.ts.
+  //
+  // Non-IN: slab pricing on `country_shipping_rates`. The cart's
+  // gross weight (sum of products.gross_weight_g × qty) is inflated
+  // by `store_settings.intl_packaging_tare_pct`, bracketed to the
+  // smallest of nine slab cutoffs (0.5/1/2/3/5/7/10/15/20 kg), looked
+  // up against the destination row, then multiplied by
+  // `(1 + intl_buffer_pct/100)` to derive the customer fee. If the
+  // effective weight exceeds `intl_max_shipping_weight_kg * 1000`,
+  // checkout is blocked with SHIPPING_CAP_EXCEEDED.
+  //
+  // Buyer currency comes from the `mik_currency` cookie; the amount
+  // sent to Razorpay is INR × current FX rate, snapshotted on the
+  // order at create-time.
 
   const cookieJar = cookies();
   const rawCountry = cookieJar.get("mik_country")?.value;
@@ -266,7 +275,9 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
   const isIntl = country !== "IN";
 
   let shipping_fee_inr = 0;
-  let shippingError: { error: string; product_id?: string } | null = null;
+  let shippingError:
+    | { code: string; error: string; product_id?: string; maxKg?: number; effectiveKg?: number }
+    | null = null;
 
   if (!isIntl) {
     const shippingConfig = await getShippingConfig();
@@ -275,28 +286,52 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
     );
   } else {
     // Every product participating in an international cart MUST have a
-    // positive net_weight_g. Catching this here means the UI can show
+    // positive gross_weight_g. Catching this here means the UI can show
     // a clear "missing weight" error instead of Razorpay failing later.
     const missing = (products as any[]).filter(
-      (p) => !p.net_weight_g || Number(p.net_weight_g) <= 0
+      (p) => !p.gross_weight_g || Number(p.gross_weight_g) <= 0
     );
     if (missing.length > 0) {
       shippingError = {
+        code: "MISSING_PRODUCT_WEIGHT",
         error: "MISSING_PRODUCT_WEIGHT",
         product_id: missing[0].id,
       };
     } else {
-      const rate = await getCountryShippingRate(country);
+      const [rate, settings] = await Promise.all([
+        getCountryShippingRate(country),
+        getIntlShippingSettings(),
+      ]);
       if (!rate) {
-        shippingError = { error: "NO_SHIPPING_RATE_FOR_COUNTRY" };
+        shippingError = {
+          code: "NO_SHIPPING_RATE_FOR_COUNTRY",
+          error: "NO_SHIPPING_RATE_FOR_COUNTRY",
+        };
       } else {
-        const grams = totalCartWeightGrams(
+        const grossG = totalCartWeightGrams(
           lines.map((l) => ({
             qty: l.qty,
-            net_weight_g: prodMap.get(l.product_id)?.net_weight_g ?? null,
+            gross_weight_g: prodMap.get(l.product_id)?.gross_weight_g ?? null,
           }))
         );
-        shipping_fee_inr = roundMoney(grams * Number(rate.rate_per_gram_inr));
+        const result = computeIntlShippingInr({ grossG, rate, settings });
+        if (!result.ok) {
+          if (result.reason === "OVER_CAP") {
+            shippingError = {
+              code: "SHIPPING_CAP_EXCEEDED",
+              error: "SHIPPING_CAP_EXCEEDED",
+              maxKg: settings.intl_max_shipping_weight_kg,
+              effectiveKg: Math.round((result.effectiveG / 1000) * 100) / 100,
+            };
+          } else {
+            shippingError = {
+              code: "NO_SHIPPING_RATE_FOR_COUNTRY",
+              error: "NO_SHIPPING_RATE_FOR_COUNTRY",
+            };
+          }
+        } else {
+          shipping_fee_inr = roundMoney(result.amountInr);
+        }
       }
     }
   }

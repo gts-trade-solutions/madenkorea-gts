@@ -122,6 +122,7 @@ type ProductModel = {
   // misc
   volume_ml: number | null;
   net_weight_g: number | null;
+  gross_weight_g: number | null;
   country_of_origin: string;
   // media (derived or selected)
   images: ImageRow[]; // up to 5
@@ -185,6 +186,7 @@ export function ProductEditor({
 
     volume_ml: null,
     net_weight_g: null,
+    gross_weight_g: null,
     country_of_origin: "",
 
     images: [],
@@ -287,6 +289,7 @@ export function ProductEditor({
           key_benefits_text: ((prod.key_benefits ?? []) as any[]).join("|"),
           volume_ml: prod.volume_ml ?? null,
           net_weight_g: prod.net_weight_g ?? null,
+          gross_weight_g: prod.gross_weight_g ?? null,
           country_of_origin: prod.country_of_origin || "",
           video_path: prod.video_path ?? null,
           images: (imgs ?? []).map((r) => ({
@@ -363,14 +366,15 @@ export function ProductEditor({
   const onSave = async (closeAfter = false) => {
     if (!vendor) { toast.error("Vendor not ready"); return; }
     if (!canSave) { toast.error("Please fill name, brand and category"); return; }
-    // Weight is mandatory before a product can go live — international
-    // shipping fee = sum(net_weight_g × qty) × country rate, so a
-    // missing weight would crash international checkout. Drafts may be
-    // saved without it so works-in-progress aren't blocked.
+    // Gross weight is mandatory before a product can go live — shipping
+    // math (India DTDC + international EMS slabs) reads from it. Drafts
+    // may be saved without it so works-in-progress aren't blocked.
     if (model.is_published) {
-      const w = Number(model.net_weight_g ?? 0);
+      const w = Number(model.gross_weight_g ?? 0);
       if (!Number.isFinite(w) || w <= 0) {
-        toast.error("Net weight (g) is required to publish — used to compute international shipping.");
+        toast.error(
+          "Gross weight (g) is required to publish — used to compute shipping."
+        );
         return;
       }
     }
@@ -437,6 +441,7 @@ export function ProductEditor({
 
         volume_ml: model.volume_ml ?? null,
         net_weight_g: model.net_weight_g ?? null,
+        gross_weight_g: model.gross_weight_g ?? null,
         country_of_origin: model.country_of_origin || null,
       };
 
@@ -842,8 +847,27 @@ export function ProductEditor({
                 value={model.volume_ml ?? ""} onChange={e => setModel(m => ({...m, volume_ml: e.target.value ? Number(e.target.value) : null}))} />
             </div>
             <div>
+              <Label>Net weight (g)</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={model.net_weight_g ?? ""}
+                onChange={(e) =>
+                  setModel((m) => ({
+                    ...m,
+                    net_weight_g: e.target.value ? Number(e.target.value) : null,
+                  }))
+                }
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Contents only (no packaging). Informational — shown on the
+                product page for label compliance.
+              </p>
+            </div>
+            <div>
               <Label>
-                Net weight (g)
+                Gross weight (g)
                 {model.is_published && (
                   <span className="text-red-600 ml-1" aria-hidden>*</span>
                 )}
@@ -855,18 +879,20 @@ export function ProductEditor({
                 required={!!model.is_published}
                 aria-invalid={
                   model.is_published &&
-                  (!model.net_weight_g || Number(model.net_weight_g) <= 0)
+                  (!model.gross_weight_g || Number(model.gross_weight_g) <= 0)
                 }
-                value={model.net_weight_g ?? ""}
+                value={model.gross_weight_g ?? ""}
                 onChange={(e) =>
                   setModel((m) => ({
                     ...m,
-                    net_weight_g: e.target.value ? Number(e.target.value) : null,
+                    gross_weight_g: e.target.value ? Number(e.target.value) : null,
                   }))
                 }
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Required for published products — used to compute international shipping fees.
+                Including retail packaging (bottle, box, label). Required for
+                published products — drives India + international shipping
+                fees. Keep this accurate.
               </p>
             </div>
             <div>

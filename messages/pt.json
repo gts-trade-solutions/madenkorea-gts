@@ -99,7 +99,7 @@
     "shippingMembership": "Benefício K Plus aplicado: Entrega gratuita",
     "shippingFreeApplied": "Entrega gratuita aplicada",
     "shippingThreshold": "Entrega gratuita em encomendas acima de {amount}",
-    "shippingIntl": "O envio internacional é orçamentado quando a nossa equipa responde ao seu pedido.",
+    "shippingIntl": "O envio internacional é orçado quando a nossa equipa responde ao seu pedido.",
     "intlCustomsNotice": "Os direitos aduaneiros e impostos são da sua responsabilidade na entrega no seu país de destino.",
     "deliveryEstimate": "Entrega estimada em {min}–{max} dias",
     "total": "Total",
@@ -108,7 +108,9 @@
     "intlOrderBtn": "Solicitar Encomenda Internacional",
     "signInToastTitle": "Inicie sessão para continuar",
     "signInToastBody": "O seu carrinho será preservado.",
-    "signInToastAction": "Iniciar sessão"
+    "signInToastAction": "Iniciar sessão",
+    "calcShippingCapTitle": "O seu carrinho é demasiado pesado para enviar.",
+    "calcShippingCapBody": "A sua encomenda pesa aproximadamente {actualKg} kg após embalagem, o que está acima do nosso limite atual de {maxKg} kg para envio internacional. Remova alguns artigos ou envie um e-mail para info@madenkorea.com para um orçamento manual."
   },
   "auth": {
     "signIn": {
@@ -852,7 +854,7 @@
     "nextImage": "Próxima imagem"
   },
   "checkoutPage": {
-    "title": "Finalizar Compra",
+    "title": "Checkout",
     "confirmingPayment": "A confirmar o seu pagamento…",
     "contactHeading": "Contacto e Envio",
     "fullNameLabel": "Nome Completo *",
@@ -882,27 +884,29 @@
     "total": "Total",
     "processing": "A processar…",
     "payWithRazorpay": "Pagar com Razorpay",
-    "errLoadProducts": "Não foi possível carregar os produtos para finalizar a compra",
+    "errLoadProducts": "Não foi possível carregar os produtos para o checkout",
     "errInvalidPhone": "Introduza um número de telefone válido com 10 dígitos.",
     "errInvalidPincode": "Introduza um código postal válido com 6 dígitos.",
     "errUnservicedPincode": "Ainda não entregamos em {pincode}. Utilize um código postal diferente ou envie um email para info@madenkorea.com.",
-    "errTotalsNotReady": "Totais ainda não disponíveis.",
+    "errTotalsNotReady": "Totais ainda não prontos.",
     "calcMissingWeightTitle": "Ainda não conseguimos calcular o preço de um destes produtos.",
     "calcMissingWeightBody": "Um ou mais artigos no seu carrinho não têm informações de peso necessárias para envio internacional. Remova o artigo afetado ou contacte-nos em info@madenkorea.com para que possamos atualizar o produto.",
     "calcNoCountryRateTitle": "O envio internacional ainda não está configurado para o seu país.",
-    "calcNoCountryRateBody": "Ainda não temos uma tarifa de envio definida para o país selecionado. Altere o seu país no cabeçalho para um para o qual entregamos atualmente, ou contacte-nos em info@madenkorea.com para um orçamento manual.",
+    "calcNoCountryRateBody": "Não temos uma tarifa de envio definida para o seu país selecionado. Mude o seu país no cabeçalho para um para o qual entregamos atualmente, ou contacte-nos em info@madenkorea.com para um orçamento manual.",
     "calcGenericErrorTitle": "Não conseguimos calcular o total do seu carrinho.",
     "deliveryEstimate": "Entrega estimada em {min}–{max} dias",
-    "useSavedAddressTitle": "Utilizar uma morada guardada",
+    "useSavedAddressTitle": "Utilize uma morada guardada",
     "useSavedAddressBody": "Escolha uma para preencher automaticamente os campos abaixo, ou comece do zero.",
-    "useNewAddressBtn": "Utilizar uma nova morada",
+    "useNewAddressBtn": "Utilize uma nova morada",
     "savedNoNameFallback": "(sem nome)",
     "savedDefaultBadge": "Predefinida",
     "saveAddressNewLabel": "Guardar esta morada na minha conta para a próxima vez",
     "saveAddressUpdateLabel": "Atualizar esta morada guardada com as minhas alterações",
     "makeDefaultLabel": "Tornar esta a minha morada predefinida",
     "phonePlaceholderIndia": "Telemóvel com 10 dígitos",
-    "phonePlaceholderIntl": "Incluir código do país"
+    "phonePlaceholderIntl": "Incluir código do país",
+    "calcShippingCapTitle": "O seu carrinho é demasiado pesado para enviar.",
+    "calcShippingCapBody": "O seu pedido pesa aproximadamente {actualKg} kg após embalagem, o que está acima do nosso limite atual de {maxKg} kg para envio internacional. Remova alguns artigos ou envie um email para info@madenkorea.com para um orçamento manual."
   },
   "floatingWhatsapp": {
     "open": "Conversar no WhatsApp",

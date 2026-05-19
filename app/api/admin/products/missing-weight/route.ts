@@ -6,9 +6,9 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@supabase/supabase-js";
 
 // Admin-only audit list: published products without a usable
-// net_weight_g. Surfaces the data dependency that international
-// checkout has on weight — admin can scan, click into the product
-// editor, and backfill.
+// gross_weight_g. Surfaces the data dependency that shipping math
+// (India DTDC + international EMS slabs) has on weight — admin can
+// scan, click into the product editor, and backfill.
 
 const json = (d: any, s = 200) =>
   NextResponse.json(d, { status: s, headers: { "cache-control": "no-store" } });
@@ -55,9 +55,9 @@ export async function GET() {
 
   const { data, error: dbErr } = await sb
     .from("products")
-    .select("id, slug, name, net_weight_g, brands(name)")
+    .select("id, slug, name, net_weight_g, gross_weight_g, brands(name)")
     .eq("is_published", true)
-    .or("net_weight_g.is.null,net_weight_g.lte.0")
+    .or("gross_weight_g.is.null,gross_weight_g.lte.0")
     .order("name", { ascending: true });
 
   if (dbErr) return json({ ok: false, error: dbErr.message }, 500);
@@ -68,6 +68,7 @@ export async function GET() {
     name: p.name,
     brand: p.brands?.name ?? null,
     net_weight_g: p.net_weight_g,
+    gross_weight_g: p.gross_weight_g,
   }));
 
   return json({ ok: true, total: rows.length, rows });

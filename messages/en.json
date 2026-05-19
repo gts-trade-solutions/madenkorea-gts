@@ -108,7 +108,9 @@
     "intlOrderBtn": "Request International Order",
     "signInToastTitle": "Sign in to continue",
     "signInToastBody": "Your cart will be preserved.",
-    "signInToastAction": "Sign in"
+    "signInToastAction": "Sign in",
+    "calcShippingCapTitle": "Your cart is too heavy to ship.",
+    "calcShippingCapBody": "Your order weighs roughly {actualKg} kg after packaging, which is above our current {maxKg} kg international shipping cap. Please remove a few items, or email info@madenkorea.com for a manual quote."
   },
   "auth": {
     "signIn": {
@@ -864,7 +866,7 @@
     "stateLabel": "State *",
     "stateOptionalLabel": "State / Region",
     "pincodeLabel": "Postal Code *",
-    "postalCodeLabel": "Postal Code *",
+    "postalCodeLabel": "Postal code *",
     "pincodeTooltip": "Enter a valid postal code",
     "paymentMethodHeading": "Payment Method",
     "summaryHeading": "Order Summary",
@@ -901,8 +903,10 @@
     "saveAddressNewLabel": "Save this address to my account for next time",
     "saveAddressUpdateLabel": "Update this saved address with my changes",
     "makeDefaultLabel": "Make this my default address",
-    "phonePlaceholderIndia": "10-digit mobile",
-    "phonePlaceholderIntl": "Include country code"
+    "phonePlaceholderIndia": "Phone number",
+    "phonePlaceholderIntl": "Include country code",
+    "calcShippingCapTitle": "Your cart is too heavy to ship.",
+    "calcShippingCapBody": "Your order weighs roughly {actualKg} kg after packaging, which is above our current {maxKg} kg international shipping cap. Please remove a few items, or email info@madenkorea.com for a manual quote."
   },
   "floatingWhatsapp": {
     "open": "Chat on WhatsApp",

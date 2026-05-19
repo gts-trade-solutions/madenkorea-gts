@@ -88,7 +88,7 @@
     "calcMissingWeightTitle": "Nie możemy jeszcze wycenić jednego z tych produktów.",
     "calcMissingWeightBody": "Jeden lub więcej przedmiotów w Twoim koszyku nie ma informacji o wadze wymaganej do międzynarodowej dostawy. Usuń przedmiot lub skontaktuj się z nami na adres info@madenkorea.com, abyśmy mogli zaktualizować produkt.",
     "calcNoCountryRateTitle": "Dostawa międzynarodowa nie jest jeszcze skonfigurowana dla Twojego kraju.",
-    "calcNoCountryRateBody": "Nie mamy ustawionej stawki dostawy dla wybranego kraju. Zmień swój kraj w nagłówku na jeden, do którego aktualnie wysyłamy, lub skontaktuj się z nami na adres info@madenkorea.com, aby uzyskać wycenę ręczną.",
+    "calcNoCountryRateBody": "Nie mamy ustawionej stawki wysyłki dla wybranego kraju. Zmień swój kraj w nagłówku na jeden, do którego aktualnie wysyłamy, lub skontaktuj się z nami na adres info@madenkorea.com, aby uzyskać wycenę ręczną.",
     "calcGenericErrorTitle": "Nie mogliśmy obliczyć sumy Twojego koszyka.",
     "subtotal": "Razem brutto",
     "discount": "Rabat",
@@ -100,7 +100,7 @@
     "shippingFreeApplied": "Bezpłatna dostawa zastosowana",
     "shippingThreshold": "Bezpłatna dostawa na zamówienia powyżej {amount}",
     "shippingIntl": "Dostawa międzynarodowa jest wyceniana, gdy nasz zespół odpowie na Twoją prośbę o zamówienie.",
-    "intlCustomsNotice": "Cła i podatki celne są płatne przez Ciebie przy dostawie w kraju docelowym.",
+    "intlCustomsNotice": "Cła i podatki celne są płatne przez Ciebie przy dostawie w Twoim kraju docelowym.",
     "deliveryEstimate": "Szacunkowa dostawa w ciągu {min}–{max} dni",
     "total": "Razem",
     "updatingTotals": "Aktualizowanie sum…",
@@ -108,7 +108,9 @@
     "intlOrderBtn": "Poproś o zamówienie międzynarodowe",
     "signInToastTitle": "Zaloguj się, aby kontynuować",
     "signInToastBody": "Twój koszyk zostanie zachowany.",
-    "signInToastAction": "Zaloguj się"
+    "signInToastAction": "Zaloguj się",
+    "calcShippingCapTitle": "Twój koszyk jest zbyt ciężki do wysłania.",
+    "calcShippingCapBody": "Twoje zamówienie waży około {actualKg} kg po pakowaniu, co przekracza nasz obecny limit {maxKg} kg dla międzynarodowej dostawy. Usuń kilka przedmiotów lub wyślij wiadomość na adres info@madenkorea.com, aby uzyskać wycenę ręczną."
   },
   "auth": {
     "signIn": {
@@ -885,12 +887,12 @@
     "errLoadProducts": "Nie można załadować produktów do kasy",
     "errInvalidPhone": "Wpisz ważny 10-cyfrowy numer telefonu.",
     "errInvalidPincode": "Wpisz ważny 6-cyfrowy kod pocztowy.",
-    "errUnservicedPincode": "Nie dostarczamy jeszcze do {pincode}. Użyj innego kodu pocztowego lub napisz na info@madenkorea.com.",
+    "errUnservicedPincode": "Nie dostarczamy jeszcze do {pincode}. Użyj innego kodu pocztowego lub wyślij wiadomość na adres info@madenkorea.com.",
     "errTotalsNotReady": "Sumy nie są jeszcze gotowe.",
     "calcMissingWeightTitle": "Nie możemy jeszcze wycenić jednego z tych produktów.",
-    "calcMissingWeightBody": "Jeden lub więcej artykułów w Twojej koszyku nie ma informacji o wadze wymaganej do międzynarodowej dostawy. Usuń dany artykuł lub skontaktuj się z nami na info@madenkorea.com, abyśmy mogli zaktualizować produkt.",
+    "calcMissingWeightBody": "Jeden lub więcej artykułów w Twojej koszyku nie ma informacji o wadze wymaganej do międzynarodowej dostawy. Usuń odpowiedni artykuł lub skontaktuj się z nami na adres info@madenkorea.com, abyśmy mogli zaktualizować produkt.",
     "calcNoCountryRateTitle": "Dostawa międzynarodowa nie jest jeszcze skonfigurowana dla Twojego kraju.",
-    "calcNoCountryRateBody": "Nie mamy ustawionej stawki dostawy dla wybranego kraju. Zmień swój kraj w nagłówku na jeden, do którego aktualnie dostarczamy, lub skontaktuj się z nami na info@madenkorea.com w celu uzyskania wyceny ręcznej.",
+    "calcNoCountryRateBody": "Nie mamy ustawionej stawki dostawy dla wybranego kraju. Zmień swój kraj w nagłówku na jeden, do którego aktualnie dostarczamy, lub skontaktuj się z nami na adres info@madenkorea.com w celu uzyskania wyceny ręcznej.",
     "calcGenericErrorTitle": "Nie mogliśmy obliczyć sumy Twojego koszyka.",
     "deliveryEstimate": "Szacunkowa dostawa w ciągu {min}–{max} dni",
     "useSavedAddressTitle": "Użyj zapisanego adresu",
@@ -902,7 +904,9 @@
     "saveAddressUpdateLabel": "Zaktualizuj ten zapisany adres moimi zmianami",
     "makeDefaultLabel": "Ustaw ten adres jako mój domyślny",
     "phonePlaceholderIndia": "10-cyfrowy numer telefonu",
-    "phonePlaceholderIntl": "Dołącz kod kraju"
+    "phonePlaceholderIntl": "Dołącz kod kraju",
+    "calcShippingCapTitle": "Twoja koszyk jest zbyt ciężki do wysłania.",
+    "calcShippingCapBody": "Twoje zamówienie waży około {actualKg} kg po pakowaniu, co przekracza nasz obecny limit międzynarodowej dostawy {maxKg} kg. Usuń kilka artykułów lub wyślij wiadomość na adres info@madenkorea.com w celu uzyskania wyceny ręcznej."
   },
   "floatingWhatsapp": {
     "open": "Czat na WhatsApp",

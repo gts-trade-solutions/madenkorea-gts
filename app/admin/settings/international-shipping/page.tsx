@@ -6,48 +6,90 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { AdminBackBar } from "@/components/admin/AdminBackBar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Flag } from "@/components/Flag";
+import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import {
   SUPPORTED_COUNTRIES,
   COUNTRY_PROFILES,
   type CountryCode,
 } from "@/lib/countries";
 
-// Per-country shipping rate editor for international payments.
-// India is intentionally excluded — it uses the existing
-// /admin/settings (threshold + flat fee) configuration.
+// Admin page for international shipping. Three things live here:
 //
-// Spec: INTERNATIONAL_PAYMENTS.md → step 3
+//  1. Global slab settings (tare %, buffer %, max-kg cap) — applied to
+//     every country's slab lookup at runtime.
+//  2. Per-country slab matrix (9 weight brackets, INR base cost).
+//  3. Per-country ETA window + notes + active toggle.
+//
+// India shipping is NOT managed here — that uses /admin/settings
+// (threshold + flat fee).
+
+const SLAB_KEYS = [
+  "slab_500g_inr",
+  "slab_1kg_inr",
+  "slab_2kg_inr",
+  "slab_3kg_inr",
+  "slab_5kg_inr",
+  "slab_7kg_inr",
+  "slab_10kg_inr",
+  "slab_15kg_inr",
+  "slab_20kg_inr",
+] as const;
+type SlabKey = (typeof SLAB_KEYS)[number];
+
+const SLAB_LABELS: Record<SlabKey, string> = {
+  slab_500g_inr: "0.5 kg",
+  slab_1kg_inr: "1 kg",
+  slab_2kg_inr: "2 kg",
+  slab_3kg_inr: "3 kg",
+  slab_5kg_inr: "5 kg",
+  slab_7kg_inr: "7 kg",
+  slab_10kg_inr: "10 kg",
+  slab_15kg_inr: "15 kg",
+  slab_20kg_inr: "20 kg",
+};
 
 type RateRow = {
   country: string;
-  rate_per_gram_inr: number;
   active: boolean;
   notes: string | null;
   eta_days_min: number | null;
   eta_days_max: number | null;
   updated_at: string | null;
-};
+} & Record<SlabKey, number | null>;
 
 type DraftRow = {
   country: CountryCode;
-  rate: string;        // string while editing; parsed on save
-  etaMin: string;      // ditto — empty string means "not set"
+  // All 9 slab inputs as strings — parsed at save time.
+  slabs: Record<SlabKey, string>;
+  etaMin: string;
   etaMax: string;
   active: boolean;
   notes: string;
   isPersisted: boolean;
   dirty: boolean;
   saving: boolean;
+  expanded: boolean;
 };
 
-// Countries we offer in the switcher minus India — these are the only
-// destinations a buyer can actually checkout from.
+type GlobalSettings = {
+  intl_packaging_tare_pct: number;
+  intl_buffer_pct: number;
+  intl_max_shipping_weight_kg: number;
+};
+
 const ELIGIBLE_COUNTRIES = SUPPORTED_COUNTRIES.filter((c) => c !== "IN");
+
+function formatInr(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(Number(n))) return "—";
+  return `₹${Number(n).toLocaleString("en-IN", {
+    maximumFractionDigits: 0,
+  })}`;
+}
 
 export default function InternationalShippingPage() {
   const router = useRouter();
@@ -57,12 +99,15 @@ export default function InternationalShippingPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Wait for auth to resolve before deciding to redirect; without
-    // this, the first render sees `hasRole=false` (user not loaded
-    // yet) and we'd kick admins to /admin before their session lands.
-    if (!ready) return;
+  // Global settings (tare %, buffer %, max-kg cap).
+  const [tare, setTare] = useState<string>("15");
+  const [buffer, setBuffer] = useState<string>("20");
+  const [cap, setCap] = useState<string>("20");
+  const [globalDirty, setGlobalDirty] = useState(false);
+  const [savingGlobals, setSavingGlobals] = useState(false);
 
+  useEffect(() => {
+    if (!ready) return;
     if (!hasRole("admin")) {
       router.push("/admin");
       return;
@@ -89,14 +134,27 @@ export default function InternationalShippingPage() {
         const rates: RateRow[] = body.rates ?? [];
         const byCountry = new Map(rates.map((r) => [r.country, r]));
 
-        // Seed one DraftRow per eligible country. If a row exists in DB
-        // we mark it persisted so the UI shows "active" badges; if not,
-        // the draft is empty and saving creates the row.
+        const settings: GlobalSettings = body.settings ?? {
+          intl_packaging_tare_pct: 15,
+          intl_buffer_pct: 20,
+          intl_max_shipping_weight_kg: 20,
+        };
+        setTare(String(settings.intl_packaging_tare_pct));
+        setBuffer(String(settings.intl_buffer_pct));
+        setCap(String(settings.intl_max_shipping_weight_kg));
+        setGlobalDirty(false);
+
         const seeded: DraftRow[] = ELIGIBLE_COUNTRIES.map((c) => {
           const r = byCountry.get(c);
+          const slabs = Object.fromEntries(
+            SLAB_KEYS.map((k) => [
+              k,
+              r?.[k] != null ? String(r[k]) : "",
+            ])
+          ) as Record<SlabKey, string>;
           return {
             country: c,
-            rate: r ? String(r.rate_per_gram_inr) : "",
+            slabs,
             etaMin: r?.eta_days_min != null ? String(r.eta_days_min) : "",
             etaMax: r?.eta_days_max != null ? String(r.eta_days_max) : "",
             active: r ? r.active : true,
@@ -104,6 +162,7 @@ export default function InternationalShippingPage() {
             isPersisted: !!r,
             dirty: false,
             saving: false,
+            expanded: false,
           };
         });
 
@@ -123,13 +182,11 @@ export default function InternationalShippingPage() {
     [drafts]
   );
 
-  // While auth resolves, show a placeholder instead of either flashing
-  // "Loading…" then redirecting or returning null (which renders blank).
   if (!ready) {
     return (
       <>
         <AdminBackBar to="/admin/settings" title="International Shipping" />
-        <div className="container mx-auto py-6 max-w-4xl">
+        <div className="container mx-auto py-6 max-w-5xl">
           <p className="text-sm text-muted-foreground">Loading session…</p>
         </div>
       </>
@@ -145,19 +202,39 @@ export default function InternationalShippingPage() {
     );
   };
 
+  const setSlabValue = (country: CountryCode, key: SlabKey, value: string) => {
+    setDrafts((rows) =>
+      rows.map((r) =>
+        r.country === country
+          ? { ...r, slabs: { ...r.slabs, [key]: value }, dirty: true }
+          : r
+      )
+    );
+  };
+
+  const toggleExpanded = (country: CountryCode) => {
+    setDrafts((rows) =>
+      rows.map((r) =>
+        r.country === country ? { ...r, expanded: !r.expanded } : r
+      )
+    );
+  };
+
   const saveRow = async (country: CountryCode) => {
     const row = drafts.find((d) => d.country === country);
     if (!row) return;
 
-    const rateNum = Number(row.rate);
-    if (!Number.isFinite(rateNum) || rateNum < 0) {
-      toast.error("Rate must be a number ≥ 0");
-      return;
+    // Parse all 9 slab fields.
+    const slabPayload: Record<string, number> = {};
+    for (const k of SLAB_KEYS) {
+      const v = Number(row.slabs[k]);
+      if (!Number.isFinite(v) || v < 0) {
+        toast.error(`${SLAB_LABELS[k]} must be a number ≥ 0`);
+        return;
+      }
+      slabPayload[k] = v;
     }
 
-    // ETA: both fields must be set together or neither. If one is set
-    // and the other isn't, refuse — otherwise the storefront falls
-    // back to "no estimate" silently and the admin won't know why.
     const minStr = row.etaMin.trim();
     const maxStr = row.etaMax.trim();
     const hasEta = minStr !== "" || maxStr !== "";
@@ -198,7 +275,7 @@ export default function InternationalShippingPage() {
         },
         body: JSON.stringify({
           country,
-          rate_per_gram_inr: rateNum,
+          ...slabPayload,
           active: row.active,
           notes: row.notes || null,
           eta_days_min: etaMin,
@@ -226,24 +303,146 @@ export default function InternationalShippingPage() {
     }
   };
 
+  const saveGlobals = async () => {
+    const tareNum = Math.floor(Number(tare));
+    const bufferNum = Math.floor(Number(buffer));
+    const capNum = Math.floor(Number(cap));
+    if (!Number.isFinite(tareNum) || tareNum < 0 || tareNum > 100) {
+      toast.error("Tare % must be a whole number 0..100");
+      return;
+    }
+    if (!Number.isFinite(bufferNum) || bufferNum < 0 || bufferNum > 100) {
+      toast.error("Buffer % must be a whole number 0..100");
+      return;
+    }
+    if (!Number.isFinite(capNum) || capNum < 1 || capNum > 100) {
+      toast.error("Max weight must be a whole number 1..100 kg");
+      return;
+    }
+    setSavingGlobals(true);
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      const res = await fetch("/api/admin/settings/international-shipping", {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          intl_packaging_tare_pct: tareNum,
+          intl_buffer_pct: bufferNum,
+          intl_max_shipping_weight_kg: capNum,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok || body.ok === false) {
+        toast.error(body.error || "Save failed");
+        return;
+      }
+      toast.success("Global settings saved");
+      setGlobalDirty(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Save failed");
+    } finally {
+      setSavingGlobals(false);
+    }
+  };
+
   return (
     <>
       <AdminBackBar to="/admin/settings" title="International Shipping" />
 
-      <div className="container mx-auto py-6 space-y-4 max-w-4xl">
+      <div className="container mx-auto py-6 space-y-6 max-w-5xl">
         <p className="text-sm text-muted-foreground">
-          Per-country rate in <strong>₹ per gram</strong>. Order shipping ={" "}
-          <code>Σ(product net weight × quantity) × country rate</code>, then
-          FX-converted to the buyer&apos;s currency at checkout. Countries
-          without a rate or marked inactive cannot complete an international
-          payment.
+          International orders use Korea Post EMS weight slabs. For each
+          destination, set the base INR cost at each of nine weight
+          brackets. Three global knobs (below) shape how the bracket
+          lookup runs: a <strong>tare %</strong> inflates the cart&apos;s
+          gross weight to cover packaging, a <strong>buffer %</strong> is
+          added on top of the chosen slab to give the customer-facing
+          price, and the <strong>max weight</strong> blocks checkout
+          above its threshold with a contact-us message. India isn&apos;t
+          listed here — it uses the existing threshold + flat-fee
+          configuration in Settings → Shipping.
         </p>
-        <p className="text-sm text-muted-foreground">
-          <strong>Delivery (days)</strong> sets the estimated delivery window
-          shown on the cart and checkout pages for that country
-          (e.g. min=5, max=10 renders as &quot;Delivers in 5–10 days&quot;).
-          Leave both blank to hide the estimate for that country.
-        </p>
+
+        {/* GLOBAL SETTINGS */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Global settings</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:gap-3 sm:items-end">
+            <label className="block">
+              <div className="text-xs font-medium mb-1">
+                Packaging tare (%)
+              </div>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={tare}
+                onChange={(e) => {
+                  setTare(e.target.value);
+                  setGlobalDirty(true);
+                }}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Inflates the cart&apos;s gross weight before slab lookup.
+                Covers shipping-box, bubble-wrap, etc.
+              </p>
+            </label>
+            <label className="block">
+              <div className="text-xs font-medium mb-1">Buffer (%)</div>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={buffer}
+                onChange={(e) => {
+                  setBuffer(e.target.value);
+                  setGlobalDirty(true);
+                }}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Markup over EMS base cost shown to the customer. Covers
+                FX swings + handling.
+              </p>
+            </label>
+            <label className="block">
+              <div className="text-xs font-medium mb-1">Max weight (kg)</div>
+              <Input
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+                value={cap}
+                onChange={(e) => {
+                  setCap(e.target.value);
+                  setGlobalDirty(true);
+                }}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Hard cap (post-tare). Checkout is blocked above this.
+              </p>
+            </label>
+            <div>
+              <Button
+                onClick={saveGlobals}
+                disabled={savingGlobals || !globalDirty}
+                className="w-full sm:w-auto"
+              >
+                {savingGlobals ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : null}
+                Save
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="text-xs text-muted-foreground">
           {loading
@@ -253,84 +452,125 @@ export default function InternationalShippingPage() {
 
         {loadError && (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-            <strong>Couldn’t load rates.</strong>
+            <strong>Couldn&apos;t load rates.</strong>
             <p className="mt-1 text-xs font-mono">{loadError}</p>
             <p className="mt-1 text-xs">
-              If this keeps happening, sign out and back in to refresh your
-              admin session, then reload this page.
+              If this keeps happening, sign out and back in to refresh
+              your admin session, then reload this page.
             </p>
           </div>
         )}
 
-        <Card>
-          <CardContent className="p-0">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-muted-foreground border-b">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium">Country</th>
-                  <th className="text-left px-4 py-3 font-medium">
-                    Rate (₹/gram)
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium">
-                    Delivery (days)
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium">Notes</th>
-                  <th className="text-left px-4 py-3 font-medium">Active</th>
-                  <th className="text-right px-4 py-3 font-medium">Save</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-8 text-center text-muted-foreground"
-                    >
-                      Loading…
-                    </td>
-                  </tr>
-                )}
-                {!loading &&
-                  drafts.map((d) => {
-                    const profile = COUNTRY_PROFILES[d.country];
-                    return (
-                      <tr
-                        key={d.country}
-                        className="border-b last:border-b-0 hover:bg-muted/30"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <Flag
-                              code={d.country}
-                              width={20}
-                              className="rounded-[2px] shrink-0"
-                              alt=""
-                            />
-                            <span className="font-medium">{profile.name}</span>
-                            <span className="text-xs text-muted-foreground font-mono">
-                              {d.country}
-                            </span>
-                            {!d.isPersisted && (
-                              <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
-                                Not set
-                              </span>
-                            )}
+        {/* PER-COUNTRY SLAB ROWS */}
+        <div className="space-y-2">
+          {loading && (
+            <p className="text-sm text-muted-foreground">Loading rates…</p>
+          )}
+          {!loading &&
+            drafts.map((d) => {
+              const profile = COUNTRY_PROFILES[d.country];
+              return (
+                <Card
+                  key={d.country}
+                  className={d.dirty ? "ring-2 ring-amber-300/60" : ""}
+                >
+                  {/* Clickable header. Implemented as a div + role="button"
+                      (not a real <button>) because a <button> can't legally
+                      contain block-level children — when nested, the
+                      browser ejects them and the flag goes missing. */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleExpanded(d.country)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleExpanded(d.country);
+                      }
+                    }}
+                    aria-expanded={d.expanded}
+                    className="w-full text-left px-6 py-3 flex flex-row items-center gap-3 cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-t-xl"
+                  >
+                    <Flag
+                      code={d.country}
+                      width={24}
+                      className="rounded-[2px] shrink-0"
+                      alt=""
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">{profile.name}</span>
+                        <span className="text-xs text-muted-foreground font-mono">
+                          {d.country}
+                        </span>
+                        {!d.isPersisted && (
+                          <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                            Not set
+                          </span>
+                        )}
+                        {d.isPersisted && !d.active && (
+                          <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-600 border">
+                            Inactive
+                          </span>
+                        )}
+                        {d.dirty && (
+                          <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                            Unsaved
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1 tabular-nums">
+                        0.5 kg: {formatInr(Number(d.slabs.slab_500g_inr))} ·
+                        {" "}5 kg: {formatInr(Number(d.slabs.slab_5kg_inr))} ·
+                        {" "}20 kg: {formatInr(Number(d.slabs.slab_20kg_inr))}
+                        {d.etaMin && d.etaMax && (
+                          <span>
+                            {" "}· {d.etaMin}–{d.etaMax} days
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {d.expanded ? (
+                      <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </div>
+
+                  {d.expanded && (
+                    <CardContent className="pt-0 space-y-4">
+                      {/* 9 slab inputs in a 3x3 grid */}
+                      <div>
+                        <div className="text-xs font-medium mb-2">
+                          Base cost per slab (₹, no buffer)
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-3 md:grid-cols-5">
+                          {SLAB_KEYS.map((k) => (
+                            <label key={k} className="block">
+                              <div className="text-[11px] text-muted-foreground mb-1">
+                                {SLAB_LABELS[k]}
+                              </div>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={d.slabs[k]}
+                                onChange={(e) =>
+                                  setSlabValue(d.country, k, e.target.value)
+                                }
+                                placeholder="0.00"
+                                className="h-8 tabular-nums"
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                        <div>
+                          <div className="text-xs font-medium mb-1">
+                            Delivery ETA (days)
                           </div>
-                        </td>
-                        <td className="px-4 py-3 w-44">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={d.rate}
-                            onChange={(e) =>
-                              updateDraft(d.country, { rate: e.target.value })
-                            }
-                            placeholder="0.00"
-                            className="h-8"
-                          />
-                        </td>
-                        <td className="px-4 py-3 w-40">
                           <div className="flex items-center gap-1">
                             <Input
                               type="number"
@@ -344,7 +584,7 @@ export default function InternationalShippingPage() {
                                 })
                               }
                               placeholder="min"
-                              className="h-8 w-16"
+                              className="h-8 w-20"
                             />
                             <span className="text-muted-foreground text-xs">
                               –
@@ -361,49 +601,59 @@ export default function InternationalShippingPage() {
                                 })
                               }
                               placeholder="max"
-                              className="h-8 w-16"
+                              className="h-8 w-20"
                             />
                           </div>
-                        </td>
-                        <td className="px-4 py-3">
+                        </div>
+                        <div>
+                          <div className="text-xs font-medium mb-1">
+                            Internal notes (optional)
+                          </div>
                           <Input
                             value={d.notes}
                             onChange={(e) =>
                               updateDraft(d.country, { notes: e.target.value })
                             }
-                            placeholder="Internal note (optional)"
+                            placeholder="e.g. Region 3 (Europe)"
                             className="h-8"
                           />
-                        </td>
-                        <td className="px-4 py-3">
+                        </div>
+                        <div className="flex items-center gap-2 pt-2 sm:pt-0">
                           <Switch
                             checked={d.active}
                             onCheckedChange={(v) =>
                               updateDraft(d.country, { active: v })
                             }
                           />
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Button
-                            size="sm"
-                            variant={d.dirty ? "default" : "outline"}
-                            onClick={() => saveRow(d.country)}
-                            disabled={d.saving || !d.dirty}
-                          >
-                            {d.saving ? "Saving…" : "Save"}
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
+                          <span className="text-xs text-muted-foreground">
+                            Active
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button
+                          size="sm"
+                          variant={d.dirty ? "default" : "outline"}
+                          onClick={() => saveRow(d.country)}
+                          disabled={d.saving || !d.dirty}
+                        >
+                          {d.saving ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                          ) : null}
+                          {d.saving ? "Saving…" : "Save changes"}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  )}
+                </Card>
+              );
+            })}
+        </div>
 
         <p className="text-xs text-muted-foreground">
-          India uses the existing <code>Settings → Shipping</code> threshold +
-          flat-fee configuration, not this table.
+          India uses the existing <code>Settings → Shipping</code> threshold
+          + flat-fee configuration, not this table.
         </p>
       </div>
     </>

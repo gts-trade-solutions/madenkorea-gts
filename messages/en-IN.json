@@ -108,7 +108,9 @@
     "intlOrderBtn": "Request International Order",
     "signInToastTitle": "Sign in to continue",
     "signInToastBody": "Your cart will be preserved.",
-    "signInToastAction": "Sign in"
+    "signInToastAction": "Sign in",
+    "calcShippingCapTitle": "Your cart is too heavy to ship.",
+    "calcShippingCapBody": "Your order weighs roughly {actualKg} kg after packaging, which is above our current {maxKg} kg international shipping cap. Please remove a few items, or email info@madenkorea.com for a manual quote."
   },
   "auth": {
     "signIn": {
@@ -902,7 +904,9 @@
     "saveAddressUpdateLabel": "Update this saved address with my changes",
     "makeDefaultLabel": "Make this my default address",
     "phonePlaceholderIndia": "10-digit mobile",
-    "phonePlaceholderIntl": "Include country code"
+    "phonePlaceholderIntl": "Include country code",
+    "calcShippingCapTitle": "Your cart is too heavy to ship.",
+    "calcShippingCapBody": "Your order weighs roughly {actualKg} kg after packaging, which is above our current {maxKg} kg international shipping cap. Please remove a few items, or email info@madenkorea.com for a manual quote."
   },
   "floatingWhatsapp": {
     "open": "Chat on WhatsApp",
@@ -1002,12 +1006,10 @@
     "walletCreditNote": "≈ {amount} will be credited from your INR wallet at today’s exchange rate.",
     "payoutAvailableLabel": "Available: {amount}",
     "withdrawAmountLabel": "Withdraw amount",
-
     "portalTitle": "Influencer Portal",
     "adminMode": "Admin mode",
     "navDashboard": "Dashboard",
     "navPromos": "Promos",
-
     "displayCurrencyLabel": "Display currency:",
     "walletSectionTitle": "Manual payouts",
     "walletSectionDesc": "Submit your UPI/Bank details and choose an amount to withdraw.",
@@ -1025,7 +1027,6 @@
     "payoutHistoryCta": "See payout history",
     "availableToWithdraw": "Available to withdraw: {amount}. You can request any amount up to this balance.",
     "noApprovedBalance": "You do not have any approved balance yet. Once your commissions are approved, they will appear in your available balance and you can request a payout.",
-
     "createPromoTitle": "Create a global promo",
     "codeLabel": "Code",
     "codePlaceholder": "MYCODE",
@@ -1060,14 +1061,12 @@
     "errPromoDeleteTitle": "Could not delete promo.",
     "errPromoBetween": "Customer % must be between 0 and {max}.",
     "errPromoSumExceed": "Customer + your commission cannot exceed {max}%.",
-
     "recentPayoutsTitle": "Recent payout activity",
     "recentPayoutsEmptyTitle": "No payouts yet",
     "recentPayoutsEmptyDesc": "You have not requested any payouts yet. Submit your first withdrawal using the form above when you are ready.",
     "viewAllBtn": "View all",
     "walletSavedToast": "Wallet saved",
     "requestSubmittedToast": "Payout request submitted",
-
     "editPromoTitle": "Edit promo {code}",
     "deletePromoTitle": "Delete promo {code}",
     "deletePromoConfirm": "This will permanently delete this promo code. Active links using this code will stop working. Continue?",
@@ -1075,7 +1074,6 @@
     "saveBtn": "Save",
     "cancelBtn": "Cancel",
     "deleteForeverBtn": "Delete forever",
-
     "walletModalTitle": "Wallet — payout methods",
     "walletModalIntro": "Fill in any of the methods you'd like to receive payouts on. You can save as many as you want; admin chooses the best one for each payout.",
     "walletUpiTitle": "UPI",
@@ -1116,7 +1114,6 @@
     "walletErrBankIncomplete": "Indian bank: please fill account name, number, and IFSC together.",
     "walletErrBankIntlIncomplete": "International bank: please fill bank, holder, account, and SWIFT or IBAN together.",
     "walletSaving": "Saving…",
-
     "requestModalTitle": "Request payout (manual)",
     "noBalanceMessage": "You don't have any available balance to withdraw right now. Once your commissions are approved and added to your wallet, you'll be able to submit a payout request here.",
     "noMethodsTitle": "No payout methods saved yet",
@@ -1145,7 +1142,6 @@
     "errSubmitFailed": "Could not submit request.",
     "closeBtn": "Close",
     "maxBtn": "Max",
-
     "payoutHistoryTitle": "Payout history",
     "filterAll": "All",
     "filterPending": "Pending",
@@ -1164,7 +1160,6 @@
     "settledAtSeparator": " • Settled: {datetime}",
     "noteLine": "Note: {note}",
     "emailLine": "Email: {email}",
-
     "promosPageTitle": "Promo codes",
     "promosPageDesc": "Create a simple code your audience can remember. Only global codes are allowed.",
     "globalCartWide": "Global (cart-wide)",
@@ -1173,7 +1168,6 @@
     "promoCreatedCelebrationToast": "Promo created 🎉",
     "errPercentRange": "Percents must be between 0 and 100.",
     "promoAppliesToEntireCart": "Applies to entire cart",
-
     "linksPageTitle": "Create product share link",
     "linksHandleMissing": "Handle not found — ensure your influencer profile is approved and has a handle.",
     "searchPlaceholder": "Search product…",

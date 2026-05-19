@@ -21,6 +21,7 @@ type Row = {
   name: string;
   brand: string | null;
   net_weight_g: number | null;
+  gross_weight_g: number | null;
 };
 
 export default function MissingWeightAuditPage() {
@@ -68,17 +69,19 @@ export default function MissingWeightAuditPage() {
 
       <div className="container mx-auto py-6 max-w-5xl space-y-4">
         <p className="text-sm text-muted-foreground">
-          Published products without a usable <code>net_weight_g</code> value.
-          International orders containing any of these will refuse to checkout —
-          backfill the weight on each product before enabling that country.
+          Published products without a usable <code>gross_weight_g</code> value
+          (i.e. the total weight including retail packaging). Shipping math
+          — India DTDC and the international EMS slab pricing — both read
+          from this column, so any cart line containing one of these will
+          refuse to checkout. Backfill the gross weight on each product.
         </p>
 
         <div className="text-xs text-muted-foreground">
           {loading
             ? "Loading…"
             : total === 0
-            ? "Every published product has a weight set. 🎉"
-            : `${total} published product${total === 1 ? "" : "s"} need a weight.`}
+            ? "Every published product has a gross weight set. 🎉"
+            : `${total} published product${total === 1 ? "" : "s"} need a gross weight.`}
         </div>
 
         {!loading && total > 0 && (
@@ -104,12 +107,17 @@ export default function MissingWeightAuditPage() {
                       </td>
                       <td className="px-4 py-3 text-sm">{r.brand ?? "—"}</td>
                       <td className="px-4 py-3 text-sm">
-                        {r.net_weight_g == null ? (
+                        {r.gross_weight_g == null ? (
                           <span className="text-red-600">Not set</span>
                         ) : (
                           <span className="text-amber-700">
-                            {r.net_weight_g} g (invalid)
+                            {r.gross_weight_g} g (invalid)
                           </span>
+                        )}
+                        {r.net_weight_g != null && r.gross_weight_g == null && (
+                          <div className="text-xs text-muted-foreground">
+                            Net is {r.net_weight_g} g (for reference).
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">

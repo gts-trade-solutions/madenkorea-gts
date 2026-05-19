@@ -108,7 +108,9 @@
     "intlOrderBtn": "Yêu cầu đơn hàng quốc tế",
     "signInToastTitle": "Đăng nhập để tiếp tục",
     "signInToastBody": "Giỏ hàng của bạn sẽ được lưu giữ.",
-    "signInToastAction": "Đăng nhập"
+    "signInToastAction": "Đăng nhập",
+    "calcShippingCapTitle": "Giỏ hàng của bạn quá nặng để vận chuyển.",
+    "calcShippingCapBody": "Đơn hàng của bạn nặng khoảng {actualKg} kg sau khi đóng gói, vượt quá giới hạn vận chuyển quốc tế hiện tại {maxKg} kg của chúng tôi. Vui lòng xóa một vài sản phẩm hoặc gửi email tới info@madenkorea.com để nhận báo giá thủ công."
   },
   "auth": {
     "signIn": {
@@ -857,7 +859,7 @@
     "contactHeading": "Liên hệ & Giao hàng",
     "fullNameLabel": "Họ và tên *",
     "emailLabel": "Email *",
-    "phoneLabel": "Số điện thoại *",
+    "phoneLabel": "Điện thoại *",
     "phoneTooltip": "Nhập số điện thoại di động Ấn Độ hợp lệ gồm 10 chữ số, bắt đầu bằng 6, 7, 8 hoặc 9",
     "addressLabel": "Địa chỉ *",
     "cityLabel": "Thành phố *",
@@ -902,7 +904,9 @@
     "saveAddressUpdateLabel": "Cập nhật địa chỉ đã lưu này với những thay đổi của tôi",
     "makeDefaultLabel": "Đặt đây làm địa chỉ mặc định của tôi",
     "phonePlaceholderIndia": "Di động 10 chữ số",
-    "phonePlaceholderIntl": "Bao gồm mã quốc gia"
+    "phonePlaceholderIntl": "Bao gồm mã quốc gia",
+    "calcShippingCapTitle": "Giỏ hàng của bạn quá nặng để giao hàng.",
+    "calcShippingCapBody": "Đơn hàng của bạn nặng khoảng {actualKg} kg sau khi đóng gói, vượt quá giới hạn giao hàng quốc tế hiện tại là {maxKg} kg của chúng tôi. Vui lòng xóa một vài mục hoặc gửi email đến info@madenkorea.com để nhận báo giá thủ công."
   },
   "floatingWhatsapp": {
     "open": "Chat trên WhatsApp",

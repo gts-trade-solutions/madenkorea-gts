@@ -171,6 +171,8 @@ export default function CartPage() {
   const [totalsError, setTotalsError] = useState<{
     code: string;
     productId?: string;
+    maxKg?: number;
+    effectiveKg?: number;
   } | null>(null);
   const [qtyUpdating, setQtyUpdating] = useState<Record<string, boolean>>({});
   const [removing, setRemoving] = useState<Record<string, boolean>>({});
@@ -367,10 +369,16 @@ async function recalcTotals() {
       // fall through to the generic toast.
       const code = (data as any)?.error || "CALC_FAILED";
       setTotals(null);
-      setTotalsError({ code, productId: (data as any)?.product_id });
+      setTotalsError({
+        code,
+        productId: (data as any)?.product_id,
+        maxKg: (data as any)?.maxKg,
+        effectiveKg: (data as any)?.effectiveKg,
+      } as any);
       if (
         code !== "MISSING_PRODUCT_WEIGHT" &&
-        code !== "NO_SHIPPING_RATE_FOR_COUNTRY"
+        code !== "NO_SHIPPING_RATE_FOR_COUNTRY" &&
+        code !== "SHIPPING_CAP_EXCEEDED"
       ) {
         toast.error(t("calcFailedToast"));
       }
@@ -780,8 +788,21 @@ async function clearPromo() {
                         <p className="mt-1">{t("calcNoCountryRateBody")}</p>
                       </>
                     )}
+                    {totalsError.code === "SHIPPING_CAP_EXCEEDED" && (
+                      <>
+                        <strong>{t("calcShippingCapTitle")}</strong>
+                        <p className="mt-1">
+                          {t("calcShippingCapBody", {
+                            maxKg: (totalsError as any).maxKg ?? 20,
+                            actualKg:
+                              (totalsError as any).effectiveKg ?? "?",
+                          })}
+                        </p>
+                      </>
+                    )}
                     {totalsError.code !== "MISSING_PRODUCT_WEIGHT" &&
-                      totalsError.code !== "NO_SHIPPING_RATE_FOR_COUNTRY" && (
+                      totalsError.code !== "NO_SHIPPING_RATE_FOR_COUNTRY" &&
+                      totalsError.code !== "SHIPPING_CAP_EXCEEDED" && (
                         <>
                           <strong>{t("calcGenericErrorTitle")}</strong>
                           <p className="mt-1 font-mono">{totalsError.code}</p>

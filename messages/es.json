@@ -78,7 +78,7 @@
     "promoAppliedToast": "Promoción aplicada: {code}",
     "promoAppliedLabel": "Promoción aplicada: {code}",
     "promoScopeGlobal": "Global (carrito completo)",
-    "promoScopeProduct": "Específico del producto",
+    "promoScopeProduct": "Específica del producto",
     "removePromoTitle": "Eliminar promoción",
     "promoRemovedToast": "Promoción eliminada",
     "promoRemoveFailedToast": "No se pudo eliminar la promoción",
@@ -88,7 +88,7 @@
     "calcMissingWeightTitle": "Aún no podemos calcular el precio de uno de estos productos.",
     "calcMissingWeightBody": "Uno o más artículos en tu carrito no tienen la información de peso necesaria para el envío internacional. Por favor, elimina el artículo afectado o contacta con nosotros en info@madenkorea.com para que actualicemos el producto.",
     "calcNoCountryRateTitle": "El envío internacional aún no está configurado para tu país.",
-    "calcNoCountryRateBody": "No tenemos una tarifa de envío establecida para tu país seleccionado. Por favor, cambia tu país en el encabezado a uno al que actualmente enviamos, o contacta con nosotros en info@madenkorea.com para obtener un presupuesto manual.",
+    "calcNoCountryRateBody": "No tenemos una tarifa de envío establecida para tu país seleccionado. Por favor, cambia tu país en el encabezado a uno al que actualmente enviamos, o contacta con nosotros en info@madenkorea.com para un presupuesto manual.",
     "calcGenericErrorTitle": "No pudimos calcular el total de tu carrito.",
     "subtotal": "Subtotal",
     "discount": "Descuento",
@@ -108,7 +108,9 @@
     "intlOrderBtn": "Solicitar pedido internacional",
     "signInToastTitle": "Inicia sesión para continuar",
     "signInToastBody": "Tu carrito se conservará.",
-    "signInToastAction": "Iniciar sesión"
+    "signInToastAction": "Iniciar sesión",
+    "calcShippingCapTitle": "Tu carrito es demasiado pesado para enviar.",
+    "calcShippingCapBody": "Tu pedido pesa aproximadamente {actualKg} kg después del embalaje, lo que supera nuestro límite actual de {maxKg} kg para envío internacional. Por favor, elimina algunos artículos o envía un correo a info@madenkorea.com para un presupuesto manual."
   },
   "auth": {
     "signIn": {
@@ -902,7 +904,9 @@
     "saveAddressUpdateLabel": "Actualiza esta dirección guardada con mis cambios",
     "makeDefaultLabel": "Haz esta mi dirección predeterminada",
     "phonePlaceholderIndia": "Móvil de 10 dígitos",
-    "phonePlaceholderIntl": "Incluye código de país"
+    "phonePlaceholderIntl": "Incluye código de país",
+    "calcShippingCapTitle": "Tu carrito es demasiado pesado para enviar.",
+    "calcShippingCapBody": "Tu pedido pesa aproximadamente {actualKg} kg después del embalaje, lo que supera nuestro límite actual de {maxKg} kg para envío internacional. Por favor, elimina algunos artículos o envía un correo a info@madenkorea.com para un presupuesto manual."
   },
   "floatingWhatsapp": {
     "open": "Chatea en WhatsApp",

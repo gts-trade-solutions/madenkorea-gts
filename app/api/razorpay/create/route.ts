@@ -12,7 +12,9 @@ import {
 } from "@/lib/currency";
 import {
   getCountryShippingRate,
+  getIntlShippingSettings,
   totalCartWeightGrams,
+  computeIntlShippingInr,
 } from "@/lib/internationalShipping";
 import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
 
@@ -118,7 +120,7 @@ export async function POST(req: NextRequest) {
 
       const { data: weightRows, error: wErr } = await admin
         .from("products")
-        .select("id, net_weight_g")
+        .select("id, gross_weight_g")
         .in(
           "id",
           orderItems.map((r: any) => r.product_id)
@@ -130,7 +132,7 @@ export async function POST(req: NextRequest) {
         );
       }
       const weightMap = new Map(
-        (weightRows ?? []).map((r: any) => [r.id, r.net_weight_g])
+        (weightRows ?? []).map((r: any) => [r.id, r.gross_weight_g])
       );
 
       const missing = orderItems.find(
@@ -149,7 +151,10 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const rate = await getCountryShippingRate(country);
+      const [rate, settings] = await Promise.all([
+        getCountryShippingRate(country),
+        getIntlShippingSettings(),
+      ]);
       if (!rate) {
         return NextResponse.json(
           { ok: false, error: "NO_SHIPPING_RATE_FOR_COUNTRY", country },
@@ -157,13 +162,32 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const grams = totalCartWeightGrams(
+      const grossG = totalCartWeightGrams(
         orderItems.map((it: any) => ({
           qty: it.quantity,
-          net_weight_g: weightMap.get(it.product_id) ?? null,
+          gross_weight_g: weightMap.get(it.product_id) ?? null,
         }))
       );
-      shippingInr = roundMoney(grams * Number(rate.rate_per_gram_inr));
+      const result = computeIntlShippingInr({ grossG, rate, settings });
+      if (!result.ok) {
+        if (result.reason === "OVER_CAP") {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: "SHIPPING_CAP_EXCEEDED",
+              code: "SHIPPING_CAP_EXCEEDED",
+              maxKg: settings.intl_max_shipping_weight_kg,
+              effectiveKg: Math.round((result.effectiveG / 1000) * 100) / 100,
+            },
+            { status: 400 }
+          );
+        }
+        return NextResponse.json(
+          { ok: false, error: "NO_SHIPPING_RATE_FOR_COUNTRY", country },
+          { status: 400 }
+        );
+      }
+      shippingInr = roundMoney(result.amountInr);
     }
 
     const totalInr = roundMoney(subtotalInr + shippingInr - discountInr);

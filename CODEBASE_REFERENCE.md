@@ -122,12 +122,25 @@ Checkout:
 - `/api/razorpay/verify`: verifies signature, marks order paid, writes payment metadata/attribution, increments promo use, clears cart, and sends SES confirmation emails.
 - `/order/success` and `/order/failure`: payment result pages.
 
-Shipping math:
+Shipping math (India):
 
 - `lib/membership.ts`
 - K Plus members get free shipping.
 - Non-members get free shipping above `DELIVERY_THRESHOLD` of `2000`.
 - Default shipping fee is `149`.
+- Package weight for DTDC consignments reads from `products.gross_weight_g` (with retail packaging), not `net_weight_g`.
+
+Shipping math (international, slab pricing):
+
+- `lib/internationalShipping.ts` — single source of truth.
+- Per-country slab table: `country_shipping_rates` carries nine `slab_{500g,1kg,2kg,3kg,5kg,7kg,10kg,15kg,20kg}_inr` columns of un-buffered INR base costs (Korea Post EMS basis).
+- Three global knobs on `store_settings`:
+  - `intl_packaging_tare_pct` (default 15) — uplift applied to cart's gross weight before slab lookup. Covers outer/shipping packaging.
+  - `intl_buffer_pct` (default 20) — markup over EMS base cost applied at runtime to derive the customer-facing fee.
+  - `intl_max_shipping_weight_kg` (default 20) — hard cap (post-tare). Above this, checkout returns `SHIPPING_CAP_EXCEEDED` and cart/checkout block the Pay button with a "contact us" message.
+- Computation flow: `grossG = Σ(gross_weight_g × qty)` → `effectiveG = grossG × (1 + tare%)` → bracket-up to nearest of 9 slabs → look up `base_inr` from the country row → customer fee = `base × (1 + buffer%)`. FX to buyer currency happens downstream in `razorpay/create`.
+- Admin UI: `/admin/settings/international-shipping` — global settings card + per-country expandable card with all 9 slab inputs + ETA + notes + active toggle.
+- Product weight: `products.gross_weight_g` drives this (and DTDC). `products.net_weight_g` stays as informational/labelling metadata only.
 
 Promo and influencer attribution:
 

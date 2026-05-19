@@ -19,7 +19,7 @@ export type BuildConsignmentInput = {
     address_snapshot?: any | null;
   };
   items: Array<{ product_id: string; quantity: number; sku?: string | null; name?: string | null }>;
-  products: Record<string, { net_weight_g?: number | null }>;
+  products: Record<string, { gross_weight_g?: number | null }>;
   opts?: {
     is_cod?: boolean;
     cod_amount?: number;
@@ -59,10 +59,11 @@ export function buildConsignmentRequest(input: BuildConsignmentInput) {
   const isCod = !!input.opts?.is_cod;
   const orderTotal = num(input.order.total, 0);
 
-  // Weight in KG from products.net_weight_g * qty
+  // Weight in KG from products.gross_weight_g × qty (retail-packaged
+  // weight is what actually goes into the DTDC consignment box).
   let totalG = 0;
   for (const it of input.items) {
-    const w = num(input.products[it.product_id]?.net_weight_g, 0);
+    const w = num(input.products[it.product_id]?.gross_weight_g, 0);
     totalG += w * num(it.quantity, 0);
   }
   const weightKg = Math.max(totalG / 1000, 0.1); // keep >= 0.1kg
