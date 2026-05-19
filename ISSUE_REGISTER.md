@@ -1784,6 +1784,28 @@ Recommended launch baseline:
 
 ## Deferred — flagged 2026-05-09 (not yet fixed)
 
+### D-05: Per-product `influence_caps` table is not wired into checkout — flagged 2026-05-19
+
+**Status:** Per-influencer commission cap (`influencer_profiles.commission_cap_pct`) shipped today and replaces the previous global `GLOBAL_CAP_PERCENT = 25` constant in `calc-totals`. As part of that work, the per-product cap lookup (`influence_caps`) was also removed from `calc-totals` by request — to be re-wired later as a layered cap.
+
+**Confidence:** `[VERIFIED-CODE]`
+
+**Current state:**
+
+- `influence_caps` table still exists in the production schema and is preserved (no rows touched).
+- [app/api/checkout/calc-totals/route.ts](app/api/checkout/calc-totals/route.ts) no longer reads from it. Only `influencer_profiles.commission_cap_pct` governs cap math today.
+
+**When re-wiring, the rule should be:** `effectiveCap = min(influencer.commission_cap_pct, product.cap_percent)` so the influencer ceiling can never be bypassed by a permissive product row. A NULL product cap means "fall through to the influencer cap." A NULL influencer cap shouldn't happen (NOT NULL post-migration) — but if it does, the promo should be treated as ineligible (current safe-default behavior in `calc-totals`).
+
+**Code touch points when re-wiring:**
+
+1. `calc-totals/route.ts` — restore the `influence_caps` query against `productIds`, build `capMap`, then in the per-line loop compute `min(influencerCap, capMap.get(p.id) ?? Infinity)`.
+2. No admin UI changes needed; per-product caps are seeded manually today.
+
+**Effort estimate:** 30 min code + verification.
+
+---
+
 ### D-04: K-Partnership commission accounting is currency-buggy for international orders — flagged 2026-05-16
 
 **Status:** Audit performed during international-payments testing pass. Both bugs are live but only trigger when an influencer promo is redeemed on a non-INR order. India-only orders are unaffected. Full spec, recommended fix, and backfill SQL are in [INTERNATIONAL_PAYMENTS.md](INTERNATIONAL_PAYMENTS.md) → "Deferred: K-Partnership currency handling".

@@ -81,11 +81,12 @@ type WalletData = {
   preferred_method?: "upi" | "bank" | "bank_intl" | "paypal" | "wise" | null;
 };
 
-// total split cap
-const MAX_SPLIT = 25;
-
-const RECOMMENDED_USER = 10;
-const RECOMMENDED_COMM = MAX_SPLIT - RECOMMENDED_USER;
+// Per-influencer cap + default split are admin-managed on
+// influencer_profiles. Loaded from /api/me/summary at boot. Fallback
+// values are only used until the API responds (which is fast in
+// practice) — the form is disabled while loading anyway.
+const FALLBACK_CAP = 30;
+const FALLBACK_DEFAULT_USER = 15;
 
 /* ---------- Page ---------- */
 export default function InfluencerDashboardPage() {
@@ -146,6 +147,13 @@ export default function InfluencerDashboardPage() {
   const [statPaid, setStatPaid] = useState(0);
   const [statWallet, setStatWallet] = useState(0);
 
+  // Per-influencer cap settings loaded from /api/me/summary. Until
+  // the API responds we use the fallback values so the form has
+  // sensible bounds, but the create button stays disabled while
+  // loadingStats is true to avoid a flash of stale limits.
+  const [cap, setCap] = useState<number>(FALLBACK_CAP);
+  const [defaultUserPct, setDefaultUserPct] = useState<number>(FALLBACK_DEFAULT_USER);
+
   // Wallet & payout modals
   const [walletConnected, setWalletConnected] = useState(false);
   const [walletLoading, setWalletLoading] = useState(false);
@@ -158,8 +166,8 @@ export default function InfluencerDashboardPage() {
   const [promoLoading, setPromoLoading] = useState(false);
   const [promos, setPromos] = useState<PromoRow[]>([]);
   const [code, setCode] = useState("");
-  const [userPct, setUserPct] = useState(10);
-  const [commPct, setCommPct] = useState(MAX_SPLIT - 10); // auto-split
+  const [userPct, setUserPct] = useState(FALLBACK_DEFAULT_USER);
+  const [commPct, setCommPct] = useState(FALLBACK_CAP - FALLBACK_DEFAULT_USER); // auto-split
   const sumPct = useMemo(
     () => Number(userPct || 0) + Number(commPct || 0),
     [userPct, commPct]
@@ -258,6 +266,31 @@ export default function InfluencerDashboardPage() {
         setStatPending(Number(j.pending_total || 0));
         setStatPaid(Number(j.paid_total || 0));
         setStatWallet(Number(j.available_to_withdraw || 0));
+        // Cap + default split — admin-managed. If null (shouldn't
+        // happen post-migration since all rows were backfilled), keep
+        // the fallback values; the create-promo button stays
+        // functional and the server-side validator will enforce the
+        // real cap if there's a mismatch.
+        if (j.commission_cap_pct != null) {
+          const c = Number(j.commission_cap_pct);
+          setCap(c);
+          const d = Number(
+            j.default_user_discount_pct != null
+              ? j.default_user_discount_pct
+              : Math.floor(c / 2)
+          );
+          setDefaultUserPct(d);
+          // Seed the create-promo form with the influencer's
+          // admin-set default split. We only do this on first load
+          // (when userPct is still at the fallback) so we don't stomp
+          // on values the influencer has actively edited mid-session.
+          setUserPct((prev) =>
+            prev === FALLBACK_DEFAULT_USER ? d : prev
+          );
+          setCommPct((prev) =>
+            prev === FALLBACK_CAP - FALLBACK_DEFAULT_USER ? c - d : prev
+          );
+        }
       }
     } finally {
       setLoadingStats(false);
@@ -364,12 +397,12 @@ export default function InfluencerDashboardPage() {
       return;
     }
 
-    if (userPct < 0 || userPct > MAX_SPLIT) {
-      setUserPctError(t("customerDiscountError", { max: MAX_SPLIT }));
+    if (userPct < 0 || userPct > cap) {
+      setUserPctError(t("customerDiscountError", { max: cap }));
       return;
     }
 
-    const autoComm = Math.max(0, MAX_SPLIT - Number(userPct || 0));
+    const autoComm = Math.max(0, cap - Number(userPct || 0));
     setCommPct(autoComm);
 
     const payload: Record<string, any> = {
@@ -393,14 +426,23 @@ export default function InfluencerDashboardPage() {
     const j = await res.json().catch(() => ({}));
 
     if (!res.ok || j?.ok === false) {
-      // show API error under code field
-      setCodeError(j?.error || t("codeErrorCreateFailed"));
+      // Map stable server codes → translated strings; fall back to the
+      // server's raw english `error` for anything we don't recognise.
+      let message: string;
+      if (j?.code === "SETTINGS_NOT_FINALIZED") {
+        message = t("errSettingsNotFinalized");
+      } else if (j?.code === "SPLIT_EXCEEDS_CAP") {
+        message = t("errSplitExceedsCap", { cap: Number(j?.cap ?? cap) });
+      } else {
+        message = j?.error || t("codeErrorCreateFailed");
+      }
+      setCodeError(message);
       return;
     }
 
     setCode("");
-    setUserPct(10);
-    setCommPct(MAX_SPLIT - 10);
+    setUserPct(defaultUserPct);
+    setCommPct(cap - defaultUserPct);
     setFlash(t("promoCreatedToast"));
     setTimeout(() => setFlash(null), 1500);
     await loadPromos();
@@ -634,22 +676,22 @@ export default function InfluencerDashboardPage() {
                 className="w-full rounded-lg border px-3 py-2 text-sm"
                 type="number"
                 min={0}
-                max={MAX_SPLIT}
+                max={cap}
                 step={0.5}
                 value={userPct}
                 onChange={(e) => {
                   const raw = Number(e.target.value);
                   if (Number.isNaN(raw)) {
                     setUserPct(0);
-                    setCommPct(MAX_SPLIT);
+                    setCommPct(cap);
                     setUserPctError(null);
                     return;
                   }
                   let value = raw;
                   if (value < 0) value = 0;
-                  if (value > MAX_SPLIT) value = MAX_SPLIT;
+                  if (value > cap) value = cap;
                   setUserPct(value);
-                  setCommPct(MAX_SPLIT - value);
+                  setCommPct(cap - value);
                   setUserPctError(null);
                 }}
               />
@@ -669,7 +711,7 @@ export default function InfluencerDashboardPage() {
                 readOnly
               />
               <p className="mt-1 text-[11px] text-neutral-600">
-                {t("yourCommissionAutoNote", { max: MAX_SPLIT })}
+                {t("yourCommissionAutoNote", { max: cap })}
               </p>
             </div>
           </div>
@@ -679,16 +721,20 @@ export default function InfluencerDashboardPage() {
               type="button"
               className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs"
               onClick={() => {
-                setUserPct(RECOMMENDED_USER);
-    setCommPct(RECOMMENDED_COMM);
+                setUserPct(defaultUserPct);
+                setCommPct(cap - defaultUserPct);
                 setUserPctError(null);
                 setCodeError(null);
               }}
             >
-              <Check className="h-4 w-4" /> {t("recommendedSplitBtn", { user: RECOMMENDED_USER, comm: RECOMMENDED_COMM })}
+              <Check className="h-4 w-4" />{" "}
+              {t("recommendedSplitBtn", {
+                user: defaultUserPct,
+                comm: cap - defaultUserPct,
+              })}
             </button>
             <p className="text-[11px] text-neutral-600">
-              {t("splitTotalNote", { sum: sumPct, cap: MAX_SPLIT })}
+              {t("splitTotalNote", { sum: sumPct, cap })}
             </p>
           </div>
 
@@ -854,6 +900,7 @@ export default function InfluencerDashboardPage() {
       {editing && (
         <EditPromoModal
           promo={editing}
+          cap={cap}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -1728,10 +1775,12 @@ function RequestManualBody({
 /* ---------- Edit & Delete Promo Modals ---------- */
 function EditPromoModal({
   promo,
+  cap,
   onClose,
   onSaved,
 }: {
   promo: PromoRow;
+  cap: number;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -1765,15 +1814,15 @@ function EditPromoModal({
       return;
     }
 
-    if (form.discount_percent < 0 || form.discount_percent > MAX_SPLIT) {
+    if (form.discount_percent < 0 || form.discount_percent > cap) {
       setSaving(false);
-      setError(t("errPromoBetween", { max: MAX_SPLIT }));
+      setError(t("errPromoBetween", { max: cap }));
       return;
     }
 
     const autoComm = Math.max(
       0,
-      MAX_SPLIT - Number(form.discount_percent || 0)
+      cap - Number(form.discount_percent || 0)
     );
 
     const res = await fetch(
@@ -1798,7 +1847,15 @@ function EditPromoModal({
 
     setSaving(false);
     if (!res.ok || j?.ok === false) {
-      setError(j?.error || t("errFailedSave"));
+      let message: string;
+      if (j?.code === "SETTINGS_NOT_FINALIZED") {
+        message = t("errSettingsNotFinalized");
+      } else if (j?.code === "SPLIT_EXCEEDS_CAP") {
+        message = t("errSplitExceedsCap", { cap: Number(j?.cap ?? cap) });
+      } else {
+        message = j?.error || t("errFailedSave");
+      }
+      setError(message);
       return;
     }
     onSaved();
@@ -1825,7 +1882,7 @@ function EditPromoModal({
             <input
               type="number"
               min={0}
-              max={MAX_SPLIT}
+              max={cap}
               step="0.5"
               className="mt-1 w-full rounded-lg border px-3 py-2"
               value={form.discount_percent}
@@ -1833,8 +1890,8 @@ function EditPromoModal({
                 const raw = Number(e.target.value);
                 let value = Number.isNaN(raw) ? 0 : raw;
                 if (value < 0) value = 0;
-                if (value > MAX_SPLIT) value = MAX_SPLIT;
-                const autoComm = MAX_SPLIT - value;
+                if (value > cap) value = cap;
+                const autoComm = cap - value;
                 setForm((f) => ({
                   ...f,
                   discount_percent: value,
@@ -1849,7 +1906,7 @@ function EditPromoModal({
             <input
               type="number"
               min={0}
-              max={MAX_SPLIT}
+              max={cap}
               step="0.5"
               className="mt-1 w-full rounded-lg border px-3 py-2 bg-neutral-50"
               value={form.commission_percent}
@@ -1857,13 +1914,13 @@ function EditPromoModal({
               readOnly
             />
             <p className="mt-1 text-[11px] text-neutral-600">
-              {t("yourCommissionAutoNote", { max: MAX_SPLIT })}
+              {t("yourCommissionAutoNote", { max: cap })}
             </p>
           </div>
         </div>
 
         <p className="text-[11px] text-neutral-600">
-          {t("splitTotalNote", { sum, cap: MAX_SPLIT })}
+          {t("splitTotalNote", { sum, cap })}
         </p>
 
         {error && (

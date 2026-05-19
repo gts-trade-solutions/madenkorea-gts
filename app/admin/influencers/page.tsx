@@ -84,6 +84,18 @@ export default function AdminInfluencersPage() {
     profile?: Profile;
   } | null>(null);
 
+  // Cap-settings modal — opens in two modes:
+  //   mode='approve' → prompted on the Approve button before the
+  //     approve_influencer RPC fires. Carries the request_id.
+  //   mode='edit'    → fired from the Edit-cap button on approved rows
+  //     so admin can revise the cap later via PATCH /api/admin/influencers/[user_id].
+  const [capModal, setCapModal] = useState<{
+    mode: 'approve' | 'edit';
+    request: IR;          // approved rows still carry the request row
+    cap: number;          // initial value (cap %)
+    def: number;          // initial value (default user discount %)
+  } | null>(null);
+
   // === Payouts state ===
   const [pSearch, setPSearch] = useState('');
   const [pFilter, setPFilter] =
@@ -217,15 +229,16 @@ export default function AdminInfluencersPage() {
 
   const setStatus = async (row: IR, status: IRStatus) => {
     if (status === 'approved') {
-      const { error } = await supabase.rpc('approve_influencer', {
-        p_request_id: row.id,
+      // Don't fire the RPC directly any more — open the cap-settings
+      // modal so admin enters cap % + default customer-discount %
+      // before approval. The modal calls approve_influencer with all
+      // three params when admin submits.
+      setCapModal({
+        mode: 'approve',
+        request: row,
+        cap: 25,  // sensible starting point — admin can change
+        def: 10,
       });
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-      toast.success('Approved and profile created');
-      setRefreshKey((k) => k + 1);
       return;
     }
     if (status === 'rejected') {
@@ -240,6 +253,87 @@ export default function AdminInfluencersPage() {
       setRefreshKey((k) => k + 1);
       return;
     }
+  };
+
+  // Open the cap-editor modal for an already-approved row. Loads the
+  // current cap + default discount from the GET endpoint so the modal
+  // pre-fills with what's stored, not stale defaults.
+  const openEditCap = async (row: IR) => {
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      const res = await fetch(`/api/admin/influencers/${encodeURIComponent(row.user_id)}`, {
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        cache: 'no-store',
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body.ok === false) {
+        toast.error(body.error || 'Failed to load influencer');
+        return;
+      }
+      setCapModal({
+        mode: 'edit',
+        request: row,
+        cap: Number(body.influencer?.commission_cap_pct ?? 30),
+        def: Number(body.influencer?.default_user_discount_pct ?? 15),
+      });
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to load influencer');
+    }
+  };
+
+  // Submit handler for both modal modes. Approve mode → RPC call.
+  // Edit mode → PATCH endpoint.
+  const submitCapModal = async (cap: number, def: number) => {
+    if (!capModal) return;
+    if (!Number.isInteger(cap) || cap < 5 || cap > 100) {
+      toast.error('Cap must be a whole number between 5 and 100.');
+      return;
+    }
+    if (!Number.isInteger(def) || def < 0 || def > cap) {
+      toast.error(`Default customer % must be between 0 and ${cap}.`);
+      return;
+    }
+
+    if (capModal.mode === 'approve') {
+      const { error } = await supabase.rpc('approve_influencer', {
+        p_request_id: capModal.request.id,
+        p_cap_pct: cap,
+        p_default_discount_pct: def,
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      toast.success('Approved and profile created');
+    } else {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      const res = await fetch(
+        `/api/admin/influencers/${encodeURIComponent(capModal.request.user_id)}`,
+        {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: {
+            'content-type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            commission_cap_pct: cap,
+            default_user_discount_pct: def,
+          }),
+        }
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body.ok === false) {
+        toast.error(body.error || 'Failed to update');
+        return;
+      }
+      toast.success('Cap updated');
+    }
+    setCapModal(null);
+    setRefreshKey((k) => k + 1);
   };
 
   // ====== LOAD: Payouts ======
@@ -555,6 +649,15 @@ export default function AdminInfluencersPage() {
                                 >
                                   <Check className="h-4 w-4 mr-1" /> Approve
                                 </Button>
+                                {r.status === 'approved' && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openEditCap(r)}
+                                  >
+                                    <Edit3 className="h-4 w-4 mr-1" /> Edit cap
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
                                   variant="destructive"
@@ -880,6 +983,145 @@ export default function AdminInfluencersPage() {
           </div>
         </div>
       )}
+
+      {/* Cap-settings modal (approve OR edit existing) */}
+      {capModal && (
+        <CapSettingsModal
+          mode={capModal.mode}
+          initialCap={capModal.cap}
+          initialDefault={capModal.def}
+          handle={capModal.request.handle}
+          onClose={() => setCapModal(null)}
+          onSubmit={submitCapModal}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ---------- Cap-settings modal ---------- */
+function CapSettingsModal({
+  mode,
+  initialCap,
+  initialDefault,
+  handle,
+  onClose,
+  onSubmit,
+}: {
+  mode: 'approve' | 'edit';
+  initialCap: number;
+  initialDefault: number;
+  handle: string | null;
+  onClose: () => void;
+  onSubmit: (cap: number, def: number) => void | Promise<void>;
+}) {
+  const [cap, setCap] = useState<number>(initialCap);
+  const [def, setDef] = useState<number>(initialDefault);
+  const [busy, setBusy] = useState(false);
+
+  // Influencer-share is the auto-computed remainder. The form only
+  // collects the customer share + the cap because the influencer
+  // share is fully determined by (cap - customer).
+  const influencerShare = Math.max(0, cap - def);
+
+  const handleSubmit = async () => {
+    setBusy(true);
+    try {
+      await onSubmit(cap, def);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3">
+          <h3 className="text-lg font-semibold">
+            {mode === 'approve' ? 'Approve' : 'Edit cap for'}{' '}
+            {handle ? `@${handle}` : 'influencer'}
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {mode === 'approve'
+              ? 'Set the commission cap and the default customer-discount this influencer will see in their dashboard. They can pick any split that sums to ≤ cap when creating promos.'
+              : 'Adjust this influencer\'s commission cap or default split. Existing promos keep their original cap; only new promos use the updated values.'}
+          </p>
+        </div>
+
+        <div className="space-y-3 text-sm">
+          <div>
+            <label className="block text-xs font-medium mb-1">
+              Commission cap (%) — total of customer + influencer share
+            </label>
+            <input
+              type="number"
+              min={5}
+              max={100}
+              step={1}
+              value={cap}
+              onChange={(e) => {
+                const v = Math.floor(Number(e.target.value));
+                if (!Number.isFinite(v)) return;
+                setCap(v);
+                // If new cap is below current default, clamp the default
+                // down so the constraint always holds.
+                if (def > v) setDef(v);
+              }}
+              className="w-full rounded-lg border px-3 py-2"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Whole percent only. Min 5, max 100.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium mb-1">
+              Default customer discount (%) — pre-fills the influencer&apos;s &quot;Recommended&quot; button
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={cap}
+              step={1}
+              value={def}
+              onChange={(e) => {
+                const v = Math.floor(Number(e.target.value));
+                if (!Number.isFinite(v)) return;
+                setDef(Math.max(0, Math.min(cap, v)));
+              }}
+              className="w-full rounded-lg border px-3 py-2"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Must be between 0 and the cap ({cap}%). Influencer will receive {influencerShare}% by default.
+            </p>
+          </div>
+
+          <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs">
+            <div className="font-medium mb-0.5">Default split preview</div>
+            Customer {def}% + Influencer {influencerShare}% = {cap}% cap
+          </div>
+        </div>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={busy}>
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+            ) : (
+              <Check className="h-4 w-4 mr-1" />
+            )}
+            {mode === 'approve' ? 'Approve' : 'Save'}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

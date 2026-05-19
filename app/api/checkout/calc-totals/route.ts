@@ -18,7 +18,14 @@ import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
 
 type LineInput = { product_id: string; qty: number };
 
-const GLOBAL_CAP_PERCENT = 25;
+// Per-influencer commission cap lives on
+// influencer_profiles.commission_cap_pct (admin-managed). The previous
+// GLOBAL_CAP_PERCENT = 25 constant is gone; we look up the cap per
+// promo based on its influencer_id.
+//
+// NOTE: The `influence_caps` table (per-product overrides) is no
+// longer read here. Kept in the DB schema and will be re-wired later;
+// see CODEBASE_REFERENCE.md → "Deferred wiring".
 
 function isSaleActive(start?: string | null, end?: string | null) {
   const now = new Date();
@@ -120,24 +127,14 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
     }
   }
 
-  const { data: caps, error: cErr } = await sb
-    .from("influence_caps")
-    .select("product_id,cap_percent")
-    .in("product_id", productIds);
-
-  if (cErr) {
-    return NextResponse.json(
-      { ok: false, error: cErr.message },
-      { status: 500 }
-    );
-  }
-
-  const capMap = new Map(
-    (caps as any[]).map((c) => [c.product_id, Number(c.cap_percent)])
-  );
+  // Per-product caps from `influence_caps` are intentionally NOT
+  // queried right now — that's the deferred wiring noted at the top.
+  // The only cap that governs checkout math is the influencer's own
+  // commission_cap_pct, resolved per-promo below.
 
   const code = getPromoCodeFromCookie();
   let promo: any = null;
+  let influencerCap: number | null = null;
 
   if (code) {
     const { data: pd, error: perr } = await sb.rpc("get_promo_details", {
@@ -163,6 +160,20 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
         user_discount_percent: Number(row.user_discount_percent),
         commission_percent: Number(row.commission_percent),
       };
+
+      // Resolve this influencer's cap. If somehow missing (data
+      // corruption, manual SQL insert), we treat the promo as
+      // ineligible — safer than letting it run uncapped.
+      if (promo.influencer_id) {
+        const { data: prof } = await sb
+          .from("influencer_profiles")
+          .select("commission_cap_pct")
+          .eq("user_id", promo.influencer_id)
+          .maybeSingle();
+        if (prof && prof.commission_cap_pct != null) {
+          influencerCap = Number(prof.commission_cap_pct);
+        }
+      }
     }
   }
 
@@ -184,11 +195,14 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
 
     const eligible =
       !!promo &&
+      influencerCap != null &&
       !p.promo_exempt &&
       (promo.scope === "global" || promo.product_id === p.id);
 
     if (eligible) {
-      const cap = capMap.get(p.id) ?? GLOBAL_CAP_PERCENT;
+      // Only one cap source now: this influencer's per-account cap.
+      // No product fallback (deferred), no global constant fallback.
+      const cap = influencerCap!;
 
       effCommPct = Math.min(promo.commission_percent, cap);
       effUserPct = Math.max(

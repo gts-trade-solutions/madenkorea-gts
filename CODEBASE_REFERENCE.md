@@ -134,7 +134,9 @@ Promo and influencer attribution:
 - Promo code cookie helpers live in `lib/promo-cookie.ts`.
 - `/api/promo/apply` validates via RPC `get_promo_details` and stores the promo cookie.
 - `/api/promo/clear` clears the promo cookie.
-- `calc-totals` enforces a global cap of 25% across user discount plus influencer commission unless overridden by `influence_caps`.
+- `calc-totals` enforces a **per-influencer** commission cap stored on `influencer_profiles.commission_cap_pct` (whole percent, 5–100, admin-managed from `/admin/influencers`). The previous global 25% constant has been removed.
+- `influencer_profiles.default_user_discount_pct` (whole percent, 0..cap) is the admin-set default customer share — used by the dashboard's "Recommended" button.
+- **Deferred wiring:** the per-product `influence_caps` table still exists in the schema but is NOT consulted by `calc-totals` right now (decision: 2026-05-19, per-product caps will be re-wired later). When re-wired, the effective cap should become `min(influencer.commission_cap_pct, influence_caps.cap_percent)` so the influencer ceiling can never be bypassed by a permissive product row.
 
 ## K Plus Membership
 

@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 
-const CAP_PERCENT = 25;
+// Per-influencer cap lives on influencer_profiles.commission_cap_pct
+// (admin-managed via /admin/influencers). No global constant any more.
 
 async function withUser(req: NextRequest) {
   const cookieStore = cookies();
@@ -95,11 +96,43 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-if (u + c > CAP_PERCENT + 0.0001) {
+
+  // Look up this influencer's per-account cap. Admin sets this at
+  // approval time and can revise it from /admin/influencers. If the
+  // row is missing (caller isn't actually an approved influencer), we
+  // fail loudly rather than fall back to a constant — the previous
+  // hardcoded 25% was masking this case.
+  const { data: prof, error: profErr } = await sb
+    .from("influencer_profiles")
+    .select("commission_cap_pct")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (profErr) {
+    return NextResponse.json(
+      { ok: false, error: profErr.message },
+      { status: 500 }
+    );
+  }
+  if (!prof || prof.commission_cap_pct == null) {
+    // Stable error code — client maps to a translated string. Plain
+    // English `error` kept as a fallback for non-localised callers.
     return NextResponse.json(
       {
         ok: false,
-        error: `Customer% + You% must be ≤ ${CAP_PERCENT}`,
+        code: "SETTINGS_NOT_FINALIZED",
+        error: "Your commission settings haven't been finalized yet. Contact admin.",
+      },
+      { status: 400 }
+    );
+  }
+  const cap = Number(prof.commission_cap_pct);
+  if (u + c > cap + 0.0001) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "SPLIT_EXCEEDS_CAP",
+        cap,
+        error: `Customer% + You% must be ≤ ${cap}`,
       },
       { status: 400 }
     );
@@ -111,7 +144,7 @@ if (u + c > CAP_PERCENT + 0.0001) {
     product_id: null, // GLOBAL
     discount_percent: u,
     commission_percent: c,
-    cap_percent: CAP_PERCENT, // global cap
+    cap_percent: cap, // per-influencer cap snapshotted at creation
     active: true,
   };
 

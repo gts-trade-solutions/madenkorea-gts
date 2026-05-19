@@ -1194,7 +1194,9 @@
     "promoCustomerPctShort": "Customer %",
     "promoYouPctShort": "You %",
     "errFailedSave": "Failed to save changes",
-    "errFailedDelete": "Failed to delete"
+    "errFailedDelete": "Failed to delete",
+    "errSettingsNotFinalized": "Your commission settings have not been finalized yet. Please contact admin.",
+    "errSplitExceedsCap": "Customer % plus your commission % must be at most {cap}."
   },
   "emails": {
     "orderConfirm": {

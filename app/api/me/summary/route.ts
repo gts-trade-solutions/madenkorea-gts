@@ -131,11 +131,32 @@ export async function GET(req: NextRequest) {
   // Available = approved commissions – (pending payouts + paid payouts)
   const available = Math.max(0, approvedCommission - debited);
 
+  // ---------- 4) Per-influencer cap settings ----------
+  // commission_cap_pct drives the dashboard's Create-promo form
+  // limits; default_user_discount_pct seeds the "Recommended" button.
+  // Both admin-managed via /admin/influencers. Returned as numbers
+  // (smallint in DB), or null if the influencer's row hasn't been
+  // configured yet (which shouldn't happen post-migration, but we
+  // surface the absence so the UI can show a helpful banner).
+  const { data: prof } = await sb
+    .from("influencer_profiles")
+    .select("commission_cap_pct, default_user_discount_pct")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
   return NextResponse.json({
     ok: true,
     lifetime_commission: lifetime,       // total earned (all statuses)
     pending_total: pendingPayout,        // payout requests waiting (UI "Pending")
     paid_total: paidPayout,              // fully paid-out withdrawals
     available_to_withdraw: available,    // current wallet balance
+    commission_cap_pct:
+      prof?.commission_cap_pct != null
+        ? Number(prof.commission_cap_pct)
+        : null,
+    default_user_discount_pct:
+      prof?.default_user_discount_pct != null
+        ? Number(prof.default_user_discount_pct)
+        : null,
   });
 }

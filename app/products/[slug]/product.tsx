@@ -75,7 +75,6 @@ import { toast } from "sonner";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductStorySection } from "@/components/products/ProductStorySection";
 import { MobileBuyBar } from "@/components/products/MobileBuyBar";
-import { InternationalOrderModal } from "@/components/InternationalOrderModal";
 import type { StoryBlock } from "@/lib/types/productStory";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -355,10 +354,6 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
   const { formatPrice, isINR } = useCurrency();
   const [showShare, setShowShare] = useState(false);
   const [isBuyingNow, setIsBuyingNow] = useState(false);
-  // International order modal for the Buy Now flow. Cart-page Buy Now
-  // (via /cart) already routes to the cart's modal; this state covers
-  // the direct PDP "Buy Now" button which bypasses the cart entirely.
-  const [showIntlBuyNowModal, setShowIntlBuyNowModal] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState<Product | null>(null);
@@ -659,19 +654,66 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
     : 0;
   const activeVideoUrl = videoUrls[activeVideoIndex] ?? "";
 
-  // ── Mobile swipe between gallery images ─────────────────────────────
+  // ── Thumbnail strip auto-scroll ─────────────────────────────────────
+  // When the active slot changes (via swipe, arrow keys, etc.) we want
+  // the matching thumbnail to be visible in the horizontal strip below.
+  // Without this, swiping to image 5 leaves the strip still showing
+  // images 1–4 highlighted-but-offscreen.
+  const thumbStripRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const container = thumbStripRef.current;
+    if (!container) return;
+    const active = container.querySelector<HTMLElement>(
+      '[data-thumb-active="true"]'
+    );
+    if (!active) return;
+    // `inline: "nearest"` keeps the thumb visible with minimal jump —
+    // we don't yank it to the centre unless it's actually off-screen.
+    active.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [selectedImage]);
+
+  // ── Mobile swipe between gallery items ──────────────────────────────
   // Tracks the touchstart X/Y so the touchend handler can decide if the
-  // gesture was a horizontal swipe (image change) vs a vertical scroll
+  // gesture was a horizontal swipe (slot change) vs a vertical scroll
   // (let the page do its thing) vs a tap (let the zoom click fire).
-  // Skip when the video slot is selected so video-control taps still
-  // work as expected. Threshold = 50px horizontal AND horizontal must
-  // dominate vertical motion (avoids fighting page scroll).
+  //
+  // Swipe spans the full gallery — images AND videos — so a user can
+  // flip from the last image to the first video without reaching for
+  // the thumbnail strip. Threshold = 50px horizontal AND horizontal
+  // must dominate vertical motion (avoids fighting page scroll).
+  //
+  // We skip when the touch originated inside the <video> element so
+  // the native controls (play/pause/scrubber) work normally — the
+  // alternative was swallowing scrubber drags and breaking playback.
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const SWIPE_THRESHOLD = 50;
 
   const handleGalleryTouchStart = (e: React.TouchEvent) => {
-    if (isVideoSelected || imageUrls.length < 2) return;
+    if (galleryCount < 2) return;
+    const target = e.target as HTMLElement | null;
+    // When the touch lands inside a <video>, only the bottom strip is
+    // reserved for the native controls (play/pause/scrubber/volume).
+    // The rest of the video frame is swipeable just like the image
+    // tiles. Without this carve-out the user could never swipe OUT
+    // of a video slot, which was the previous bug.
     const t = e.touches[0];
+    if (target && (target.tagName === "VIDEO" || target.closest("video"))) {
+      const video = (target.tagName === "VIDEO"
+        ? target
+        : target.closest("video")) as HTMLElement;
+      const rect = video.getBoundingClientRect();
+      // Bottom 60px (or 30% of height — whichever is smaller) ≈ the
+      // native control bar across major browsers. Touches there let
+      // the browser's scrubber handle the event.
+      const controlsReserve = Math.min(60, rect.height * 0.3);
+      if (t.clientY > rect.bottom - controlsReserve) {
+        return;
+      }
+    }
     touchStartRef.current = { x: t.clientX, y: t.clientY };
   };
   const handleGalleryTouchEnd = (e: React.TouchEvent) => {
@@ -682,13 +724,12 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
     touchStartRef.current = null;
     if (Math.abs(dx) < SWIPE_THRESHOLD) return;
     if (Math.abs(dx) < Math.abs(dy)) return; // mostly vertical → scroll
-    // dx < 0  ⇒ swiped left  ⇒ show NEXT image
-    // dx > 0  ⇒ swiped right ⇒ show PREV image
+    // dx < 0  ⇒ swiped left  ⇒ NEXT slot
+    // dx > 0  ⇒ swiped right ⇒ PREV slot
     setSelectedImage((curr) => {
       const next = dx < 0 ? curr + 1 : curr - 1;
-      // Clamp to [0, imageUrls.length - 1] — never swipe into the
-      // video slot (it has its own controls + would be jarring).
-      return Math.max(0, Math.min(imageUrls.length - 1, next));
+      // Clamp to [0, galleryCount - 1] — covers images + videos.
+      return Math.max(0, Math.min(galleryCount - 1, next));
     });
     // Prevent the click-to-zoom from firing on this gesture.
     e.preventDefault();
@@ -765,15 +806,11 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
   const handleBuyNow = async () => {
     if (!product || isBuyingNow || isOutOfStock) return;
 
-    // International visitors can't use the Razorpay/Indian checkout
-    // flow. Pop the order-request modal directly from the PDP with
-    // just this product as the cart snapshot — same pattern as the
-    // /cart route, scoped to a single line item.
-    if (!isINR) {
-      setShowIntlBuyNowModal(true);
-      return;
-    }
-
+    // Single Buy Now path for all visitors. /checkout calls
+    // /api/razorpay/create which handles INR and the supported
+    // international currencies (USD/EUR/GBP/PLN/VND/...) uniformly.
+    // The legacy `InternationalOrderModal` "request a quote" flow is
+    // dormant — see ISSUE_REGISTER for the deprecation note.
     try {
       setIsBuyingNow(true);
       // If the item is already in the cart, don't add more — the
@@ -1429,12 +1466,16 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                   // second row at 5+ items. A subtle right-edge fade
                   // hints there's more to scroll.
                   <div className="relative">
-                    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30">
+                    <div
+                      ref={thumbStripRef}
+                      className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30"
+                    >
                       {/* image thumbs */}
                       {imageUrls.map((src, idx) => (
                         <button
                           key={idx}
                           onClick={() => setSelectedImage(idx)}
+                          data-thumb-active={selectedImage === idx}
                           className={`relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 ${
                             selectedImage === idx
                               ? "border-primary"
@@ -1461,6 +1502,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                           <button
                             key={`video-${src}`}
                             onClick={() => setSelectedImage(slotIndex)}
+                            data-thumb-active={active}
                             className={`relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 ${
                               active ? "border-primary" : "border-transparent"
                             }`}
@@ -2289,22 +2331,15 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
           // over shadcn's defaults regardless of class merge order.
           className="!fixed !inset-0 !translate-x-0 !translate-y-0 !w-auto !max-w-none !h-auto !max-h-none !rounded-none overflow-hidden sm:!inset-auto sm:!top-[50%] sm:!left-[50%] sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:!w-[90vmin] sm:!max-w-[90vmin] sm:!h-[90vmin] sm:!max-h-[90vmin] sm:!rounded-lg p-0 grid grid-rows-[auto_1fr_auto] gap-0"
           onKeyDown={(e) => {
-            if (imageUrls.length < 2) return;
-            // Clamp to image-only navigation; the video tile (if any)
-            // sits past the end of imageUrls and we don't show it in
-            // the lightbox.
+            if (galleryCount < 2) return;
+            // Navigation covers both image and video slots — same
+            // unified gallery the swipe handler uses.
             if (e.key === "ArrowRight") {
               e.preventDefault();
-              setSelectedImage((i) =>
-                Math.min(imageUrls.length - 1, i + 1) === i
-                  ? 0
-                  : Math.min(imageUrls.length - 1, i + 1)
-              );
+              setSelectedImage((i) => (i >= galleryCount - 1 ? 0 : i + 1));
             } else if (e.key === "ArrowLeft") {
               e.preventDefault();
-              setSelectedImage((i) =>
-                Math.max(0, i - 1) === i ? imageUrls.length - 1 : i - 1
-              );
+              setSelectedImage((i) => (i <= 0 ? galleryCount - 1 : i - 1));
             }
           }}
         >
@@ -2312,24 +2347,30 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
             <DialogTitle className="truncate min-w-0 flex-1">
               {product?.name || t("productImageFallback")}
             </DialogTitle>
-            {imageUrls.length > 1 && (
+            {galleryCount > 1 && (
               <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                {Math.min(selectedImage, imageUrls.length - 1) + 1} /{" "}
-                {imageUrls.length}
+                {Math.min(selectedImage, galleryCount - 1) + 1} /{" "}
+                {galleryCount}
               </span>
             )}
           </DialogHeader>
 
-          {/* Image area — fills the middle row (1fr) of the dialog grid,
-              so it grows to occupy all the screen except the header and
-              thumbnail strip. `overflow-hidden` + `max-w-full` clamp
-              any inner content (the rendered image, lazy thumbnails,
-              etc.) so they cannot push the cell wider than the dialog,
-              regardless of the source image's natural dimensions or
-              load state. Click on the image itself does nothing; close
-              is via Esc, the X button, or clicking the backdrop. */}
+          {/* Media area — fills the middle row (1fr) of the dialog grid.
+              Images render in the existing Image stack; videos render
+              with native controls so playback works inside the modal.
+              `overflow-hidden` + `max-w-full` clamp any inner content
+              so it cannot push the cell wider than the dialog. */}
           <div className="relative bg-muted/30 min-h-0 min-w-0 max-w-full overflow-hidden">
-            {imageUrls[selectedImage] ? (
+            {isVideoSelected && activeVideoUrl ? (
+              <video
+                key={activeVideoUrl}
+                src={activeVideoUrl}
+                controls
+                autoPlay
+                playsInline
+                className="absolute inset-0 w-full h-full object-contain bg-black"
+              />
+            ) : imageUrls[selectedImage] ? (
               <Image
                 src={imageUrls[selectedImage]}
                 alt={product?.name || t("productImageAlt")}
@@ -2342,14 +2383,14 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
               <div className="w-full h-full bg-muted" />
             )}
 
-            {imageUrls.length > 1 && (
+            {galleryCount > 1 && (
               <>
                 <button
                   type="button"
                   aria-label={t("prevImage")}
                   onClick={() =>
                     setSelectedImage((i) =>
-                      i <= 0 ? imageUrls.length - 1 : i - 1
+                      i <= 0 ? galleryCount - 1 : i - 1
                     )
                   }
                   className="absolute left-2 top-1/2 -translate-y-1/2 z-10 rounded-full bg-background/90 hover:bg-background shadow-md p-2 md:p-3 transition-colors"
@@ -2361,7 +2402,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                   aria-label={t("nextImage")}
                   onClick={() =>
                     setSelectedImage((i) =>
-                      i >= imageUrls.length - 1 ? 0 : i + 1
+                      i >= galleryCount - 1 ? 0 : i + 1
                     )
                   }
                   className="absolute right-2 top-1/2 -translate-y-1/2 z-10 rounded-full bg-background/90 hover:bg-background shadow-md p-2 md:p-3 transition-colors"
@@ -2372,7 +2413,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
             )}
           </div>
 
-          {imageUrls.length > 1 && (
+          {galleryCount > 1 && (
             <div className="p-3 border-t bg-background flex gap-2 shrink-0 overflow-x-auto">
               {imageUrls.map((src, idx) => (
                 <button
@@ -2395,6 +2436,39 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                   />
                 </button>
               ))}
+
+              {/* Video thumbs (one per video). Selecting slot index
+                  = imageUrls.length + i jumps the lightbox to the
+                  i-th video. */}
+              {videoUrls.map((src, i) => {
+                const slotIndex = imageUrls.length + i;
+                const active = selectedImage === slotIndex;
+                return (
+                  <button
+                    key={`video-${src}`}
+                    type="button"
+                    onClick={() => setSelectedImage(slotIndex)}
+                    aria-label={t("productVideoAria")}
+                    aria-current={active ? "true" : undefined}
+                    className={`relative shrink-0 w-16 h-16 md:w-20 md:h-20 rounded border-2 overflow-hidden transition-colors ${
+                      active
+                        ? "border-primary"
+                        : "border-transparent hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    <video
+                      src={src}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/30 grid place-items-center">
+                      <PlayCircle className="h-6 w-6 text-white drop-shadow" />
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </DialogContent>
@@ -2506,30 +2580,6 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
         />
       )}
 
-      {/* International order modal for the PDP Buy Now flow. The cart
-          page mounts its own instance for the cart route; this one
-          handles direct PDP Buy Now by passing the current product as
-          a single-line cart snapshot. */}
-      {product && effectivePrice != null && (
-        <InternationalOrderModal
-          open={showIntlBuyNowModal}
-          onOpenChange={setShowIntlBuyNowModal}
-          cart={[
-            {
-              product_id: product.id,
-              name: product.name,
-              sku: null,
-              // Buy Now defaults to 1 unit. If the user wants more
-              // units they can add to cart first; PDP doesn't expose
-              // a pre-purchase quantity for the international flow.
-              quantity: 1,
-              unit_price_inr: effectivePrice,
-              hero_image_url: imageUrls[0] ?? null,
-            },
-          ]}
-          subtotalInr={effectivePrice}
-        />
-      )}
     </CustomerLayout>
   );
 }
