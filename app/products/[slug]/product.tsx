@@ -2191,7 +2191,12 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                           )}
 
                           <div className="mt-3 flex items-center gap-3">
-                            {userId === r.user_id && (
+                            {/* Require a logged-in userId before
+                                comparing — otherwise a null userId
+                                matches the null `user_id` rows that
+                                exist on legacy/guest reviews and
+                                falsely exposes Edit/Delete. */}
+                            {!!userId && userId === r.user_id && (
                               <>
                                 <Button
                                   variant="outline"

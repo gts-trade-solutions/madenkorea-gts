@@ -94,14 +94,18 @@ export function EditorialSection({
         {/* Scrollable row. Slot widths via the --slides CSS variable so the
             same markup renders 2-up on phones, 3-up on small tablets, 4 on
             desktop, 5 on wide desktops. Native scroll-snap keeps cards
-            aligned without JS. */}
+            aligned without JS.
+            Mobile uses 2.2 (not 2) so a sliver of the third card peeks
+            past the right edge — visual affordance that the row is
+            swipeable. The snap is still per-card, so every swipe
+            advances exactly one product. */}
         <div
           ref={scrollRef}
           className="
             flex overflow-x-auto scrollbar-hide
             snap-x snap-mandatory [scroll-snap-stop:always]
             [--slide-gap:0.75rem] gap-[var(--slide-gap)]
-            [--slides:2] sm:[--slides:3] md:[--slides:4] lg:[--slides:5]
+            [--slides:2.2] sm:[--slides:3] md:[--slides:4] lg:[--slides:5]
             [scrollbar-width:none] [-ms-overflow-style:none]
             pb-1
           "
@@ -113,7 +117,7 @@ export function EditorialSection({
               data-card="true"
               className="
                 shrink-0 snap-start
-                basis-[calc((100%-(var(--slide-gap)*(var(--slides)-1)))/var(--slides))]
+                basis-[calc((100%_-_(var(--slide-gap)_*_(var(--slides)_-_1)))_/_var(--slides))]
                 max-w-full
               "
             >
