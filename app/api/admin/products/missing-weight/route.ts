@@ -35,7 +35,7 @@ async function getAdminOr401() {
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  if (prof?.role !== "admin")
+  if ((prof?.role !== "admin" && prof?.role !== "super_admin"))
     return { error: json({ ok: false, error: "FORBIDDEN" }, 403) };
 
   return { error: null };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import {
   Card,
@@ -30,12 +30,27 @@ import {
   Inbox,
   Languages,
   Mail,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, ready, isAdmin, logout } = useAuth();
+
+  // Sub-pages that bounce here pass their original path as `?from=`
+  // so we can hand it through to the login screen as `?redirect=`.
+  // Without this the user lands on /account after sign-in (the login
+  // page's default) instead of the admin page they actually wanted.
+  // Clamp to safe in-app paths only — never honor a `from` that starts
+  // with `//` or `http` to avoid open-redirect abuse.
+  const rawFrom = searchParams.get("from") || "/admin";
+  const safeFrom =
+    rawFrom.startsWith("/") && !rawFrom.startsWith("//")
+      ? rawFrom
+      : "/admin";
+  const loginUrl = `/auth/login?redirect=${encodeURIComponent(safeFrom)}`;
 
   if (!ready) {
     return (
@@ -50,17 +65,19 @@ export default function AdminDashboard() {
       <div className="flex min-h-screen items-center justify-center p-4">
         <Card className="max-w-md">
           <CardHeader>
-            <CardTitle>Access Denied</CardTitle>
+            <CardTitle>{user ? "Access Denied" : "Sign in required"}</CardTitle>
             <CardDescription>
-              You need admin privileges to access this page.
+              {user
+                ? "You need admin privileges to access this page."
+                : "Sign in with an admin account to continue."}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button
-              onClick={() => router.push("/auth/login")}
+              onClick={() => router.push(loginUrl)}
               className="w-full"
             >
-              Sign in as Admin
+              {user ? "Sign in as Admin" : "Sign in"}
             </Button>
           </CardContent>
         </Card>
@@ -214,6 +231,29 @@ export default function AdminDashboard() {
                 onClick={() => router.push("/admin/vendors")}
               >
                 Manage Vendors
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Users + admin access */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <ShieldCheck className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>Users</CardTitle>
+              <CardDescription>Grant or revoke admin access</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Browse every account, search by email or name, and promote
+                trusted users to admin. Super-admin accounts are protected
+                from demotion.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/users")}
+              >
+                Manage Users
               </Button>
             </CardContent>
           </Card>

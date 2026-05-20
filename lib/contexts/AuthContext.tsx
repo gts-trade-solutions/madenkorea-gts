@@ -7,7 +7,7 @@ import { isSupportedLocale, type SupportedLocale } from "@/lib/locales";
 import { COUNTRY_PROFILES, isSupportedCountry, type CountryCode } from "@/lib/countries";
 import { isSupportedCurrency } from "@/lib/currency";
 
-type UserRole = "customer" | "admin";
+type UserRole = "customer" | "admin" | "super_admin";
 
 type SessionUser = {
   id: string;
@@ -262,7 +262,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await loadFromSession();
   };
 
-  const hasRole = (role: UserRole) => user?.role === role;
+  // Super admin is a strict superset of admin — every check gated on
+  // `admin` should also pass for `super_admin` (otherwise the super
+  // admin loses access to their own protection-from-demotion page).
+  const hasRole = (role: UserRole) => {
+    if (!user?.role) return false;
+    if (role === "admin") {
+      return user.role === "admin" || user.role === "super_admin";
+    }
+    return user.role === role;
+  };
   const isAdmin = hasRole("admin");
 
   const value = useMemo(

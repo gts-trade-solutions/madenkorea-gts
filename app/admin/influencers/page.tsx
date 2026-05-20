@@ -124,21 +124,27 @@ export default function AdminInfluencersPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Pass the deep-link path as ?from= so the login screen returns
+      // here after sign-in, instead of bouncing to /account.
+      const bounceUrl =
+        typeof window !== 'undefined'
+          ? `/admin?from=${encodeURIComponent(window.location.pathname + window.location.search)}`
+          : '/admin';
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) {
-        router.replace('/admin');
+        router.replace(bounceUrl);
         return;
       }
       const { data: adminFlag, error } = await supabase.rpc('is_admin');
       if (error) {
         toast.error(error.message);
-        router.replace('/admin');
+        router.replace(bounceUrl);
         return;
       }
       if (!adminFlag) {
-        router.replace('/admin');
+        router.replace(bounceUrl);
         return;
       }
       if (cancelled) return;

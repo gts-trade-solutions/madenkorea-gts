@@ -402,7 +402,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
         .eq("id", uid)
         .maybeSingle();
       if (!mounted) return;
-      setIsAdmin(profile?.role === "admin");
+      setIsAdmin(profile?.role === "admin" || profile?.role === "super_admin");
     });
     return () => {
       mounted = false;

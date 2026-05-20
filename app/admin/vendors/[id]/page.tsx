@@ -76,13 +76,19 @@ export default function VendorDetailPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+      // Pass the deep-link path as ?from= so /admin can hand it to the
+      // login screen, and the user lands back here after signing in.
+      const bounceUrl =
+        typeof window !== "undefined"
+          ? `/admin?from=${encodeURIComponent(window.location.pathname + window.location.search)}`
+          : "/admin";
       if (!user) {
-        router.replace("/admin");
+        router.replace(bounceUrl);
         return;
       }
       const { data: adminFlag } = await supabase.rpc("is_admin");
       if (!adminFlag) {
-        router.replace("/admin");
+        router.replace(bounceUrl);
         return;
       }
       if (cancelled) return;

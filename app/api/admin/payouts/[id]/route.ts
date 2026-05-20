@@ -25,7 +25,7 @@ async function getAdminOr401() {
   if (!user) return { supabase, user: null, error: json({ ok:false, error:"UNAUTH" }, 401) };
 
   const { data: prof } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (prof?.role !== "admin") return { supabase, user: null, error: json({ ok:false, error:"FORBIDDEN" }, 403) };
+  if ((prof?.role !== "admin" && prof?.role !== "super_admin")) return { supabase, user: null, error: json({ ok:false, error:"FORBIDDEN" }, 403) };
 
   return { supabase, user, error: null };
 }

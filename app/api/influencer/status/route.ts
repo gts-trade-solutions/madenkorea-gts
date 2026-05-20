@@ -33,7 +33,7 @@ export async function GET() {
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  if (prof?.role === "admin")
+  if (prof?.role === "admin" || prof?.role === "super_admin")
     return json({ ok: true, status: "admin", requested_at: null });
 
   const { data: infl } = await supabase

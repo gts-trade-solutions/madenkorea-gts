@@ -64,7 +64,7 @@ async function isAuthorized(req: NextRequest): Promise<boolean> {
       .eq("id", userId)
       .maybeSingle();
 
-    return profile?.role === "admin";
+    return profile?.role === "admin" || profile?.role === "super_admin";
   } catch {
     return false;
   }

@@ -109,7 +109,7 @@ export default function InternationalShippingPage() {
   useEffect(() => {
     if (!ready) return;
     if (!hasRole("admin")) {
-      router.push("/admin");
+      router.push(typeof window !== "undefined" ? `/admin?from=${encodeURIComponent(window.location.pathname + window.location.search)}` : "/admin");
       return;
     }
 

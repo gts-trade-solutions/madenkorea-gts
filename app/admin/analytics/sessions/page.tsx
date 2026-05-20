@@ -146,7 +146,7 @@ function SessionsListInner() {
 
   useEffect(() => {
     if (!ready) return;
-    if (!hasRole("admin")) router.push("/admin");
+    if (!hasRole("admin")) router.push(typeof window !== "undefined" ? `/admin?from=${encodeURIComponent(window.location.pathname + window.location.search)}` : "/admin");
   }, [ready, hasRole, router]);
 
   useEffect(() => {

@@ -87,7 +87,7 @@ export default function AdminOrderDetailPage() {
   // Redirect non-admins safely (inside an effect)
   useEffect(() => {
     if (user && !isAdmin) {
-      router.push("/admin");
+      router.push(typeof window !== "undefined" ? `/admin?from=${encodeURIComponent(window.location.pathname + window.location.search)}` : "/admin");
     }
   }, [user, isAdmin, router]);
 

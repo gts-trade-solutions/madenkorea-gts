@@ -29,7 +29,7 @@ export default function ShippingZonesPage() {
 
   useEffect(() => {
     if (!hasRole("admin")) {
-      router.push("/admin");
+      router.push(typeof window !== "undefined" ? `/admin?from=${encodeURIComponent(window.location.pathname + window.location.search)}` : "/admin");
       return;
     }
     (async () => {

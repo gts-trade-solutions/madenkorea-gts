@@ -37,10 +37,16 @@ export default function AdminVendorsPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Carry the original path through to login so an unauth visitor
+      // who deep-links here lands back here after signing in.
+      const bounceUrl =
+        typeof window !== 'undefined'
+          ? `/admin?from=${encodeURIComponent(window.location.pathname + window.location.search)}`
+          : '/admin';
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.replace('/admin'); return; }
+      if (!user) { router.replace(bounceUrl); return; }
       const { data: adminFlag } = await supabase.rpc('is_admin');
-      if (!adminFlag) { router.replace('/admin'); return; }
+      if (!adminFlag) { router.replace(bounceUrl); return; }
       if (cancelled) return;
       setIsAdmin(true);
       setReady(true);

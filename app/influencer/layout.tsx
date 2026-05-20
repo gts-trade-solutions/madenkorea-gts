@@ -37,7 +37,7 @@ export default async function InfluencerLayout({ children }: { children: ReactNo
     .eq("id", user.id)
     .maybeSingle();
 
-  const isAdmin = prof?.role === "admin";
+  const isAdmin = prof?.role === "admin" || prof?.role === "super_admin";
 
   // If not admin, require active influencer profile
   let inflHandle: string | null = null;

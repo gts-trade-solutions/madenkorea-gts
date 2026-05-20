@@ -74,7 +74,7 @@ export default function NotificationEmailsPage() {
     // we'd kick admins to /admin before their session lands.
     if (!ready) return;
     if (!hasRole("admin")) {
-      router.push("/admin");
+      router.push(typeof window !== "undefined" ? `/admin?from=${encodeURIComponent(window.location.pathname + window.location.search)}` : "/admin");
       return;
     }
     void load();
