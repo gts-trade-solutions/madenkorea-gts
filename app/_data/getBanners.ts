@@ -1,6 +1,5 @@
 // app/_data/getBanners.ts
 import { createClient } from '@supabase/supabase-js';
-import { unstable_cache } from 'next/cache';
 import type { Banner } from '@/types/banner';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -21,7 +20,7 @@ type BannerRow = {
   country: string;
 };
 
-// Underlying fetcher. Strict country targeting with India fallback:
+// Strict country targeting with India fallback:
 //   1. Query banners where country = <visitor country>
 //   2. If empty AND visitor's country isn't already 'IN', requery
 //      with country = 'IN'.
@@ -31,11 +30,16 @@ type BannerRow = {
 // the storefront shows the Indian (default-market) set instead of a
 // blank carousel.
 //
-// Wrapped below with unstable_cache so cache invalidation via the
-// 'banners' tag (the admin save handler revalidates) still works.
-// The cache key naturally includes the (scope, country) tuple
-// because unstable_cache hashes its arguments.
-async function fetchBanners(scope: string, country: string): Promise<Banner[]> {
+// NOT wrapped in unstable_cache. The home page already runs per
+// request (cookies() forces dynamic rendering), and on Netlify the
+// data cache's revalidateTag propagation was eventually-consistent
+// enough that new banners showed several minutes late in production
+// while updating instantly in localhost. This is a 1-row-per-country
+// query; serving it uncached is cheap and predictable.
+export async function getBanners(
+  scope: string = 'home',
+  country: string = FALLBACK_COUNTRY
+): Promise<Banner[]> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   async function query(targetCountry: string) {
@@ -94,9 +98,3 @@ async function fetchBanners(scope: string, country: string): Promise<Banner[]> {
   }));
 }
 
-export const getBanners = unstable_cache(
-  async (scope: string = 'home', country: string = FALLBACK_COUNTRY) =>
-    fetchBanners(scope, country),
-  ['banners-by-scope-country'],
-  { tags: ['banners'] }
-);

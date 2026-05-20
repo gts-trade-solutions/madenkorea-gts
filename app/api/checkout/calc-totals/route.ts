@@ -134,6 +134,17 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
   // The only cap that governs checkout math is the influencer's own
   // commission_cap_pct, resolved per-promo below.
 
+  // Country/currency resolution is needed BOTH for the shipping branch
+  // further down AND for the per-influencer region check inside the
+  // promo block — so lift it here once.
+  const cookieJar = cookies();
+  const rawCountry = cookieJar.get("mik_country")?.value;
+  const country = isSupportedCountry(rawCountry) ? rawCountry : DEFAULT_COUNTRY;
+  const rawCurrency = cookieJar.get("mik_currency")?.value;
+  const buyerCurrency: CurrencyCode =
+    isSupportedCurrency(rawCurrency) ? rawCurrency : "INR";
+  const isIntl = country !== "IN";
+
   const code = getPromoCodeFromCookie();
   let promo: any = null;
   let influencerCap: number | null = null;
@@ -163,17 +174,32 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
         commission_percent: Number(row.commission_percent),
       };
 
-      // Resolve this influencer's cap. If somehow missing (data
-      // corruption, manual SQL insert), we treat the promo as
-      // ineligible — safer than letting it run uncapped.
+      // Resolve this influencer's cap + region allow-list. If the cap
+      // is missing (data corruption, manual SQL insert) we treat the
+      // promo as ineligible — safer than letting it run uncapped.
+      //
+      // Region check is the second defence (the first is at
+      // /api/promo/apply): if the buyer switched country after applying
+      // the code and the new country isn't on the allow-list, we
+      // silently drop the promo so we don't charge a bogus discount.
+      // The cart still renders successfully — just without the promo.
       if (promo.influencer_id) {
         const { data: prof } = await sb
           .from("influencer_profiles")
-          .select("commission_cap_pct")
+          .select("commission_cap_pct, applicable_countries")
           .eq("user_id", promo.influencer_id)
           .maybeSingle();
         if (prof && prof.commission_cap_pct != null) {
           influencerCap = Number(prof.commission_cap_pct);
+        }
+        const regions = Array.isArray((prof as any)?.applicable_countries)
+          ? ((prof as any).applicable_countries as string[])
+          : [];
+        if (regions.length > 0 && !regions.includes(country)) {
+          // Drop the promo silently. The buyer keeps shopping, the
+          // cart just shows the un-discounted total.
+          promo = null;
+          influencerCap = null;
         }
       }
     }
@@ -263,21 +289,27 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
   //
   // Buyer currency comes from the `mik_currency` cookie; the amount
   // sent to Razorpay is INR × current FX rate, snapshotted on the
-  // order at create-time.
-
-  const cookieJar = cookies();
-  const rawCountry = cookieJar.get("mik_country")?.value;
-  const country = isSupportedCountry(rawCountry) ? rawCountry : DEFAULT_COUNTRY;
-  const rawCurrency = cookieJar.get("mik_currency")?.value;
-  const buyerCurrency: CurrencyCode =
-    isSupportedCurrency(rawCurrency) ? rawCurrency : "INR";
-
-  const isIntl = country !== "IN";
+  // order at create-time. (Country/currency vars are declared above
+  // because the promo block also needs them.)
 
   let shipping_fee_inr = 0;
   let shippingError:
     | { code: string; error: string; product_id?: string; maxKg?: number; effectiveKg?: number }
     | null = null;
+
+  // Slab metadata for the cart/checkout UX hint ("you can add 150g more
+  // in this tier", "next tier 2 kg adds +₹524"). Only set for
+  // international orders with a successful slab lookup.
+  let shippingSlab: {
+    effective_weight_g: number;
+    current_slab_label: string;
+    current_slab_cutoff_g: number;
+    remaining_in_slab_g: number;
+    is_max_slab: boolean;
+    next_slab_label: string | null;
+    next_slab_fee_inr: number | null;
+    next_slab_delta_inr: number | null;
+  } | null = null;
 
   if (!isIntl) {
     const shippingConfig = await getShippingConfig();
@@ -331,6 +363,16 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
           }
         } else {
           shipping_fee_inr = roundMoney(result.amountInr);
+          shippingSlab = {
+            effective_weight_g: result.effectiveG,
+            current_slab_label: result.slabLabel,
+            current_slab_cutoff_g: result.slabCutoffG,
+            remaining_in_slab_g: result.remainingInSlabG,
+            is_max_slab: result.nextSlab === null,
+            next_slab_label: result.nextSlab?.label ?? null,
+            next_slab_fee_inr: result.nextSlab?.amountInr ?? null,
+            next_slab_delta_inr: result.nextSlab?.deltaInr ?? null,
+          };
         }
       }
     }
@@ -375,6 +417,7 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
           influencer_id: promo.influencer_id,
         }
       : null,
+    shipping_slab: shippingSlab,
     lines: lineResults,
   });
 }

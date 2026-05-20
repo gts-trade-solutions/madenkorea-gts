@@ -75,6 +75,17 @@ type TotalsResponse = null | {
     line_discount: number;
     line_commission: number;
   }>;
+  // Slab-pricing metadata for international orders (null for India).
+  shipping_slab?: null | {
+    effective_weight_g: number;
+    current_slab_label: string;
+    current_slab_cutoff_g: number;
+    remaining_in_slab_g: number;
+    is_max_slab: boolean;
+    next_slab_label: string | null;
+    next_slab_fee_inr: number | null;
+    next_slab_delta_inr: number | null;
+  };
 };
 
 function storagePublicUrl(path?: string | null) {
@@ -96,6 +107,19 @@ function effectiveUnitPrice(p: ProductRow) {
   const saleOk =
     p.sale_price != null && isSaleActive(p.sale_starts_at, p.sale_ends_at);
   return saleOk && p.sale_price != null ? p.sale_price : (p.price ?? 0);
+}
+
+// "150g" for small remainders, "1.5 kg" for >= 1kg. Drives the
+// "you can add up to N more" hint under the international shipping
+// line. Avoids switching units when crossing 1kg makes the hint
+// suddenly less granular than the underlying slab cutoff.
+function formatWeight(grams: number): string {
+  if (!Number.isFinite(grams) || grams <= 0) return "0g";
+  if (grams < 1000) return `${Math.round(grams)}g`;
+  const kg = grams / 1000;
+  // Round to 1 decimal but drop a trailing .0
+  const fixed = kg.toFixed(1).replace(/\.0$/, "");
+  return `${fixed} kg`;
 }
 
 function formatINR(v?: number | null, currency?: string | null) {
@@ -452,7 +476,16 @@ async function clearPromo() {
           body: JSON.stringify({ code }),
         });
         const j = await res.json();
-        if (!res.ok || !j?.ok) throw new Error(j?.error || t("promoInvalidToast"));
+        if (!res.ok || !j?.ok) {
+          // Map stable server codes → translated strings; fall back to
+          // raw server text for anything we don't recognise. The region
+          // case is the most user-actionable: tell them the code isn't
+          // valid for their chosen country so they can switch.
+          if (j?.code === "PROMO_NOT_AVAILABLE_IN_REGION") {
+            throw new Error(t("promoNotAvailableInRegionToast"));
+          }
+          throw new Error(j?.error || t("promoInvalidToast"));
+        }
         toast.success(t("promoAppliedToast", { code: j?.promo?.code || code }));
         setPromoCode("");
         await recalcTotals();
@@ -483,9 +516,14 @@ async function clearPromo() {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground mb-6">{t("emptyBody")}</p>
-              <Button asChild>
-                <Link href="/">{t("continueShopping")}</Link>
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                <Button asChild>
+                  <Link href="/">{t("continueShopping")}</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/wishlist">{t("emptyWishlistCta")}</Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -725,6 +763,37 @@ async function clearPromo() {
                   <p className="text-xs text-muted-foreground">
                     {t("deliveryEstimate", { min: eta.min, max: eta.max })}
                   </p>
+                )}
+
+                {/* International slab hint — sits above the customs
+                    notice so the customer sees the actionable info
+                    ("add a bit more before the next tier") first. */}
+                {!isINR && totals?.shipping_slab && (
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    {totals.shipping_slab.remaining_in_slab_g > 0 &&
+                      !totals.shipping_slab.is_max_slab && (
+                        <p>
+                          {t("intlShippingTierCushion", {
+                            amount: formatWeight(
+                              totals.shipping_slab.remaining_in_slab_g
+                            ),
+                          })}
+                        </p>
+                      )}
+                    {totals.shipping_slab.is_max_slab ? (
+                      <p>{t("intlShippingMaxTier")}</p>
+                    ) : totals.shipping_slab.next_slab_label &&
+                      totals.shipping_slab.next_slab_delta_inr != null ? (
+                      <p>
+                        {t("intlShippingNextTier", {
+                          label: totals.shipping_slab.next_slab_label,
+                          delta: formatPrice(
+                            totals.shipping_slab.next_slab_delta_inr
+                          ),
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
                 )}
 
                 {/* India: existing threshold + K-Plus copy. International:

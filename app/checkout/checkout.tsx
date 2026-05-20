@@ -68,7 +68,27 @@ type CalcTotals = {
     product_id?: string | null;
     discount_percent?: number;
   };
+  // International slab-pricing metadata — null for India orders.
+  shipping_slab?: null | {
+    effective_weight_g: number;
+    current_slab_label: string;
+    current_slab_cutoff_g: number;
+    remaining_in_slab_g: number;
+    is_max_slab: boolean;
+    next_slab_label: string | null;
+    next_slab_fee_inr: number | null;
+    next_slab_delta_inr: number | null;
+  };
 };
+
+// Drives the "you can add ~N more before tier change" hint.
+function formatWeight(grams: number): string {
+  if (!Number.isFinite(grams) || grams <= 0) return "0g";
+  if (grams < 1000) return `${Math.round(grams)}g`;
+  const kg = grams / 1000;
+  const fixed = kg.toFixed(1).replace(/\.0$/, "");
+  return `${fixed} kg`;
+}
 
 function isSaleActive(start?: string | null, end?: string | null) {
   const now = new Date();
@@ -1144,6 +1164,37 @@ export default function CheckoutPage() {
                           </div>
                         );
                       })()}
+
+                      {/* International slab hint — cushion left in this
+                          tier + next-tier cost delta. Buyer currency
+                          comes from formatPrice. */}
+                      {!isINR && calc.shipping_slab && (
+                        <div className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-muted-foreground space-y-0.5">
+                          {calc.shipping_slab.remaining_in_slab_g > 0 &&
+                            !calc.shipping_slab.is_max_slab && (
+                              <p>
+                                {t("intlShippingTierCushion", {
+                                  amount: formatWeight(
+                                    calc.shipping_slab.remaining_in_slab_g
+                                  ),
+                                })}
+                              </p>
+                            )}
+                          {calc.shipping_slab.is_max_slab ? (
+                            <p>{t("intlShippingMaxTier")}</p>
+                          ) : calc.shipping_slab.next_slab_label &&
+                            calc.shipping_slab.next_slab_delta_inr != null ? (
+                            <p>
+                              {t("intlShippingNextTier", {
+                                label: calc.shipping_slab.next_slab_label,
+                                delta: formatPrice(
+                                  calc.shipping_slab.next_slab_delta_inr
+                                ),
+                              })}
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
 
                       {/* Delivery ETA. India narrows to the pincode's
                           zone once the pincode is valid; international

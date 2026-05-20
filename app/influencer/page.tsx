@@ -24,6 +24,7 @@ import {
   ChevronUp,
   AlertCircle,
 } from "lucide-react";
+import { COUNTRY_PROFILES } from "@/lib/countries";
 
 /* ---------- Types ---------- */
 type PromoRow = {
@@ -153,6 +154,9 @@ export default function InfluencerDashboardPage() {
   // loadingStats is true to avoid a flash of stale limits.
   const [cap, setCap] = useState<number>(FALLBACK_CAP);
   const [defaultUserPct, setDefaultUserPct] = useState<number>(FALLBACK_DEFAULT_USER);
+  // Region allow-list — empty = active in every supported country.
+  // Read-only here; admin manages it from /admin/influencers.
+  const [applicableCountries, setApplicableCountries] = useState<string[]>([]);
 
   // Wallet & payout modals
   const [walletConnected, setWalletConnected] = useState(false);
@@ -266,6 +270,12 @@ export default function InfluencerDashboardPage() {
         setStatPending(Number(j.pending_total || 0));
         setStatPaid(Number(j.paid_total || 0));
         setStatWallet(Number(j.available_to_withdraw || 0));
+        // Admin-set region allow-list. Empty = active everywhere (the
+        // default for every legacy influencer). The dashboard renders
+        // this read-only — admin manages it from /admin/influencers.
+        if (Array.isArray(j.applicable_countries)) {
+          setApplicableCountries(j.applicable_countries as string[]);
+        }
         // Cap + default split — admin-managed. If null (shouldn't
         // happen post-migration since all rows were backfilled), keep
         // the fallback values; the create-promo button stays
@@ -634,6 +644,47 @@ export default function InfluencerDashboardPage() {
             </p>
           )}
         </div>
+      </div>
+
+      {/* ===== ELIGIBLE REGIONS (read-only) =====
+          Admin-managed allow-list. Empty array = active in all
+          supported countries — render that as a single friendly badge
+          rather than a chip-strip of every country. Non-empty = render
+          one chip per country with its flag, so the influencer can
+          eyeball at a glance where their codes apply. */}
+      <div className="mt-4 rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="mb-2 text-sm font-semibold">
+          {t("regionsHeading")}
+        </div>
+        {applicableCountries.length === 0 ? (
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 text-xs">
+            <span>{t("regionsAll")}</span>
+          </div>
+        ) : (
+          <>
+            <p className="mb-2 text-[11px] text-neutral-600">
+              {t("regionsRestrictedNote", { count: applicableCountries.length })}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {applicableCountries.map((code) => {
+                const profile = (COUNTRY_PROFILES as any)[code];
+                if (!profile) return null;
+                return (
+                  <span
+                    key={code}
+                    className="inline-flex items-center gap-1.5 rounded-full border bg-neutral-50 px-2.5 py-1 text-xs"
+                  >
+                    <span aria-hidden>{profile.flag}</span>
+                    <span>{profile.name}</span>
+                  </span>
+                );
+              })}
+            </div>
+          </>
+        )}
+        <p className="mt-2 text-[11px] text-neutral-500">
+          {t("regionsAdminManaged")}
+        </p>
       </div>
 
       {/* ===== PROMOS: CREATE + LIST (INLINE) ===== */}

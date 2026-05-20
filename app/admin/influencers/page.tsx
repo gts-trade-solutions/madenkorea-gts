@@ -23,6 +23,10 @@ import {
   User,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  SUPPORTED_COUNTRIES,
+  COUNTRY_PROFILES,
+} from '@/lib/countries';
 
 type IRStatus = 'pending' | 'approved' | 'rejected';
 type IR = {
@@ -89,11 +93,14 @@ export default function AdminInfluencersPage() {
   //     approve_influencer RPC fires. Carries the request_id.
   //   mode='edit'    → fired from the Edit-cap button on approved rows
   //     so admin can revise the cap later via PATCH /api/admin/influencers/[user_id].
+  // Also carries the per-influencer region allow-list (empty = active
+  // in all supported countries).
   const [capModal, setCapModal] = useState<{
     mode: 'approve' | 'edit';
     request: IR;          // approved rows still carry the request row
     cap: number;          // initial value (cap %)
     def: number;          // initial value (default user discount %)
+    regions: string[];    // initial regions (empty = all)
   } | null>(null);
 
   // === Payouts state ===
@@ -229,15 +236,16 @@ export default function AdminInfluencersPage() {
 
   const setStatus = async (row: IR, status: IRStatus) => {
     if (status === 'approved') {
-      // Don't fire the RPC directly any more — open the cap-settings
-      // modal so admin enters cap % + default customer-discount %
-      // before approval. The modal calls approve_influencer with all
-      // three params when admin submits.
+      // Don't fire the RPC directly any more — open the settings
+      // modal so admin enters cap %, default customer-discount %, and
+      // the applicable-regions list before approval. The modal calls
+      // approve_influencer with all four params when admin submits.
       setCapModal({
         mode: 'approve',
         request: row,
         cap: 25,  // sensible starting point — admin can change
         def: 10,
+        regions: [], // empty = all supported countries
       });
       return;
     }
@@ -250,8 +258,42 @@ export default function AdminInfluencersPage() {
         return;
       }
       toast.success('Marked as rejected');
+      // Fire the SES notification best-effort. If it fails we still
+      // treat the rejection as complete — the admin can resend via
+      // another channel.
+      void notifyDecision(row.id, 'rejected');
       setRefreshKey((k) => k + 1);
       return;
+    }
+  };
+
+  // Best-effort SES notification. Resolves even if the email send
+  // fails so the admin flow isn't blocked. Surfaces a non-fatal
+  // warning toast so the admin knows when the mail didn't go out.
+  const notifyDecision = async (
+    requestId: string,
+    decision: 'approved' | 'rejected'
+  ) => {
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      const res = await fetch('/api/admin/influencers/notify-decision', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'content-type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ request_id: requestId, decision }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body?.ok === false) {
+        toast.warning(
+          `Email not sent: ${body?.error || 'unknown error'}`
+        );
+      }
+    } catch (e: any) {
+      toast.warning(`Email not sent: ${e?.message || 'network error'}`);
     }
   };
 
@@ -277,6 +319,9 @@ export default function AdminInfluencersPage() {
         request: row,
         cap: Number(body.influencer?.commission_cap_pct ?? 30),
         def: Number(body.influencer?.default_user_discount_pct ?? 15),
+        regions: Array.isArray(body.influencer?.applicable_countries)
+          ? (body.influencer.applicable_countries as string[])
+          : [],
       });
     } catch (e: any) {
       toast.error(e?.message || 'Failed to load influencer');
@@ -284,8 +329,15 @@ export default function AdminInfluencersPage() {
   };
 
   // Submit handler for both modal modes. Approve mode → RPC call.
-  // Edit mode → PATCH endpoint.
-  const submitCapModal = async (cap: number, def: number) => {
+  // Edit mode → PATCH endpoint. Regions is an array of ISO codes; an
+  // empty array means "active in all supported countries" — that's the
+  // default and lets us add new countries to the catalogue without
+  // re-touching every influencer row.
+  const submitCapModal = async (
+    cap: number,
+    def: number,
+    regions: string[]
+  ) => {
     if (!capModal) return;
     if (!Number.isInteger(cap) || cap < 5 || cap > 100) {
       toast.error('Cap must be a whole number between 5 and 100.');
@@ -301,12 +353,15 @@ export default function AdminInfluencersPage() {
         p_request_id: capModal.request.id,
         p_cap_pct: cap,
         p_default_discount_pct: def,
+        p_applicable_countries: regions,
       });
       if (error) {
         toast.error(error.message);
         return;
       }
       toast.success('Approved and profile created');
+      // Notify the new partner — best-effort, won't block the approval.
+      void notifyDecision(capModal.request.id, 'approved');
     } else {
       const { data: s } = await supabase.auth.getSession();
       const token = s?.session?.access_token;
@@ -322,6 +377,7 @@ export default function AdminInfluencersPage() {
           body: JSON.stringify({
             commission_cap_pct: cap,
             default_user_discount_pct: def,
+            applicable_countries: regions,
           }),
         }
       );
@@ -330,7 +386,7 @@ export default function AdminInfluencersPage() {
         toast.error(body.error || 'Failed to update');
         return;
       }
-      toast.success('Cap updated');
+      toast.success('Influencer settings updated');
     }
     setCapModal(null);
     setRefreshKey((k) => k + 1);
@@ -990,6 +1046,7 @@ export default function AdminInfluencersPage() {
           mode={capModal.mode}
           initialCap={capModal.cap}
           initialDefault={capModal.def}
+          initialRegions={capModal.regions}
           handle={capModal.request.handle}
           onClose={() => setCapModal(null)}
           onSubmit={submitCapModal}
@@ -1004,6 +1061,7 @@ function CapSettingsModal({
   mode,
   initialCap,
   initialDefault,
+  initialRegions,
   handle,
   onClose,
   onSubmit,
@@ -1011,12 +1069,18 @@ function CapSettingsModal({
   mode: 'approve' | 'edit';
   initialCap: number;
   initialDefault: number;
+  initialRegions: string[];
   handle: string | null;
   onClose: () => void;
-  onSubmit: (cap: number, def: number) => void | Promise<void>;
+  onSubmit: (cap: number, def: number, regions: string[]) => void | Promise<void>;
 }) {
+  // SUPPORTED_COUNTRIES is the 15-code master list (incl. India).
+  // Empty selection = applies in all countries — that's the cleanest
+  // convention because it requires zero maintenance when we add a new
+  // country to the catalogue.
   const [cap, setCap] = useState<number>(initialCap);
   const [def, setDef] = useState<number>(initialDefault);
+  const [regions, setRegions] = useState<string[]>(initialRegions);
   const [busy, setBusy] = useState(false);
 
   // Influencer-share is the auto-computed remainder. The form only
@@ -1024,10 +1088,18 @@ function CapSettingsModal({
   // share is fully determined by (cap - customer).
   const influencerShare = Math.max(0, cap - def);
 
+  const toggleCountry = (code: string) => {
+    setRegions((rs) =>
+      rs.includes(code) ? rs.filter((c) => c !== code) : [...rs, code]
+    );
+  };
+  const clearAllRegions = () => setRegions([]);
+  const selectAllRegions = () => setRegions([...SUPPORTED_COUNTRIES]);
+
   const handleSubmit = async () => {
     setBusy(true);
     try {
-      await onSubmit(cap, def);
+      await onSubmit(cap, def, regions);
     } finally {
       setBusy(false);
     }
@@ -1039,18 +1111,18 @@ function CapSettingsModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3">
           <h3 className="text-lg font-semibold">
-            {mode === 'approve' ? 'Approve' : 'Edit cap for'}{' '}
+            {mode === 'approve' ? 'Approve' : 'Edit settings for'}{' '}
             {handle ? `@${handle}` : 'influencer'}
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">
             {mode === 'approve'
-              ? 'Set the commission cap and the default customer-discount this influencer will see in their dashboard. They can pick any split that sums to ≤ cap when creating promos.'
-              : 'Adjust this influencer\'s commission cap or default split. Existing promos keep their original cap; only new promos use the updated values.'}
+              ? 'Set the commission cap, the default customer-discount, and the regions this influencer\'s promos apply in. They can pick any split that sums to ≤ cap when creating promos.'
+              : 'Adjust this influencer\'s cap, default split, or applicable regions. Existing promos keep their original cap; only new promos use the updated values.'}
           </p>
         </div>
 
@@ -1105,6 +1177,62 @@ function CapSettingsModal({
           <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs">
             <div className="font-medium mb-0.5">Default split preview</div>
             Customer {def}% + Influencer {influencerShare}% = {cap}% cap
+          </div>
+
+          {/* Applicable regions — empty selection = active in every
+              supported country (sensible default). Non-empty = the
+              promo only applies for buyers whose mik_country is in the
+              picked set. India is included in the list so the admin
+              can opt influencers in or out of the domestic market too. */}
+          <div className="pt-2">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium">
+                Applicable regions
+              </label>
+              <div className="flex items-center gap-2 text-[11px]">
+                <button
+                  type="button"
+                  onClick={selectAllRegions}
+                  className="text-muted-foreground underline-offset-2 hover:underline"
+                >
+                  Select all
+                </button>
+                <span className="text-muted-foreground">·</span>
+                <button
+                  type="button"
+                  onClick={clearAllRegions}
+                  className="text-muted-foreground underline-offset-2 hover:underline"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              {regions.length === 0
+                ? 'Empty selection = promos work in all supported countries (default).'
+                : `Promos will only apply for buyers in the ${regions.length} country${regions.length === 1 ? '' : 's'} below.`}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {SUPPORTED_COUNTRIES.map((code) => {
+                const profile = COUNTRY_PROFILES[code];
+                const selected = regions.includes(code);
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => toggleCountry(code)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                      selected
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <span aria-hidden>{profile.flag}</span>
+                    <span>{profile.name}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 

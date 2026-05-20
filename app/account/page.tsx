@@ -141,7 +141,7 @@ export default function AccountPage() {
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={() => router.push("/account/wishlist")}
+                onClick={() => router.push("/wishlist")}
               >
                 {t("viewWishlistBtn")}
               </Button>

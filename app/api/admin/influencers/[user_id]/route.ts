@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@supabase/supabase-js";
+import { isSupportedCountry } from "@/lib/countries";
 
 // Admin-only per-influencer settings editor. Currently exposes the
 // commission cap + default user-discount split — both whole-percent
@@ -81,7 +82,7 @@ export async function GET(
   const { data, error: dbErr } = await sb
     .from("influencer_profiles")
     .select(
-      "user_id, handle, active, commission_cap_pct, default_user_discount_pct"
+      "user_id, handle, active, commission_cap_pct, default_user_discount_pct, applicable_countries"
     )
     .eq("user_id", params.user_id)
     .maybeSingle();
@@ -102,16 +103,36 @@ export async function PATCH(
   const v = validatePair(body.commission_cap_pct, body.default_user_discount_pct);
   if (!v.ok) return json({ ok: false, error: v.error }, 400);
 
+  // applicable_countries: optional. When present must be an array of
+  // ISO codes from our supported set — drop anything that doesn't
+  // validate so a typo in one entry doesn't reject the whole payload.
+  // Empty array stays empty = applies in all supported countries.
+  let regions: string[] | undefined;
+  if (Array.isArray(body.applicable_countries)) {
+    const cleaned = body.applicable_countries
+      .map((c: any) => String(c || "").toUpperCase().trim())
+      .filter((c: string) => isSupportedCountry(c));
+    // Dedup
+    regions = Array.from(new Set(cleaned));
+  }
+
+  const updatePayload: Record<string, any> = {
+    commission_cap_pct: v.cap,
+    default_user_discount_pct: v.def,
+    updated_at: new Date().toISOString(),
+  };
+  if (regions !== undefined) {
+    updatePayload.applicable_countries = regions;
+  }
+
   const sb = admin();
   const { data, error: upErr } = await sb
     .from("influencer_profiles")
-    .update({
-      commission_cap_pct: v.cap,
-      default_user_discount_pct: v.def,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("user_id", params.user_id)
-    .select("user_id, commission_cap_pct, default_user_discount_pct")
+    .select(
+      "user_id, commission_cap_pct, default_user_discount_pct, applicable_countries"
+    )
     .maybeSingle();
   if (upErr) return json({ ok: false, error: upErr.message }, 500);
   if (!data) return json({ ok: false, error: "NOT_FOUND" }, 404);

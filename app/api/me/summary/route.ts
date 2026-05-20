@@ -140,9 +140,18 @@ export async function GET(req: NextRequest) {
   // surface the absence so the UI can show a helpful banner).
   const { data: prof } = await sb
     .from("influencer_profiles")
-    .select("commission_cap_pct, default_user_discount_pct")
+    .select("commission_cap_pct, default_user_discount_pct, applicable_countries")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  // Region allow-list — empty array (or null) signals "active in every
+  // supported country" so the dashboard can render the friendly
+  // "all countries" badge instead of an empty chip strip.
+  const applicableCountries: string[] = Array.isArray(
+    (prof as any)?.applicable_countries
+  )
+    ? ((prof as any).applicable_countries as string[])
+    : [];
 
   return NextResponse.json({
     ok: true,
@@ -158,5 +167,6 @@ export async function GET(req: NextRequest) {
       prof?.default_user_discount_pct != null
         ? Number(prof.default_user_discount_pct)
         : null,
+    applicable_countries: applicableCountries,
   });
 }

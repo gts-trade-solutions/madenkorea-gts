@@ -267,12 +267,21 @@ function readExistingLocale(outPath) {
   }
 }
 
-// Canonical JSON stringify + sha1. Sorting keys guarantees stable
-// hashes regardless of source-file key order — so cosmetic
-// reordering of en-IN.json doesn't trigger spurious re-translations.
+// Canonical JSON stringify + sha1. Recursively sorts keys at every
+// depth so cosmetic reordering doesn't trigger spurious re-translations
+// but ANY value change does. The previous implementation passed a
+// top-level key array as `JSON.stringify`'s replacer argument, which
+// produced canonical forms like `{"passwordReset":{}}` — same hash
+// regardless of inner text — silently skipping retranslation when only
+// inner copy changed.
+function stableStringify(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
+  const keys = Object.keys(v).sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + stableStringify(v[k])).join(",") + "}";
+}
 function namespaceHash(value) {
-  const canonical = JSON.stringify(value, Object.keys(value ?? {}).sort());
-  return createHash("sha1").update(canonical).digest("hex");
+  return createHash("sha1").update(stableStringify(value)).digest("hex");
 }
 
 const STATE_PATH = join(REPO_ROOT, "messages", ".translation-state.json");

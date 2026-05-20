@@ -32,10 +32,11 @@
     "navKPlus": "K-Plus",
     "comingSoon": "Coming soon",
     "shopCategory": "Shop {name}",
-    "exploreBrand": "Explore {name}"
+    "exploreBrand": "Explore {name}",
+    "wishlist": "Wishlist"
   },
   "footer": {
-    "tagline": "Authentic Korean beauty and lifestyle products, curated and delivered worldwide.",
+    "tagline": "Authentic Korean beauty and lifestyle products, delivered worldwide.",
     "resellerDisclaimer": "We are solely a reseller of Korean beauty products and have no involvement in their formulation or manufacturing.",
     "helpHeading": "Help",
     "policiesHeading": "Policies",
@@ -110,7 +111,12 @@
     "signInToastBody": "Your cart will be preserved.",
     "signInToastAction": "Sign in",
     "calcShippingCapTitle": "Your cart is too heavy to ship.",
-    "calcShippingCapBody": "Your order weighs roughly {actualKg} kg after packaging, which is above our current {maxKg} kg international shipping cap. Please remove a few items, or email info@madenkorea.com for a manual quote."
+    "calcShippingCapBody": "Your order weighs roughly {actualKg} kg after packaging, which is above our current {maxKg} kg international shipping cap. Please remove a few items, or email info@madenkorea.com for a manual quote.",
+    "intlShippingTierCushion": "You can add about {amount} more in this shipping tier.",
+    "intlShippingNextTier": "Next tier {label}: +{delta}.",
+    "intlShippingMaxTier": "You are in the largest international shipping tier.",
+    "emptyWishlistCta": "View my wishlist",
+    "promoNotAvailableInRegionToast": "This promo code is not available in your selected country. Try switching countries from the header if you are eligible."
   },
   "auth": {
     "signIn": {
@@ -408,15 +414,15 @@
   },
   "bundlesPage": {
     "title": "Bundles",
-    "subtitle": "Curated K-beauty sets at better-together prices.",
+    "subtitle": "Hand-picked sets that pair our favorite products at a sharper price.",
     "loading": "Loading bundles…",
-    "empty": "No bundles available right now."
+    "empty": "We're putting together our next bundle. Check back soon."
   },
   "shop199Page": {
     "title": "Shop@199",
-    "subtitle": "Affordable K-beauty picks for under $199.",
+    "subtitle": "Grab the glow before the deals are gone",
     "loading": "Loading…",
-    "empty": "No products available at this price point right now."
+    "empty": "No deals under $199 right now."
   },
   "aboutPage": {
     "heroEyebrow": "About us",
@@ -429,8 +435,8 @@
     "valuesTitle": "Four things, every order",
     "valuePremiumTitle": "Premium quality",
     "valuePremiumBody": "Carefully curated and sourced from trusted Korean brands. We don't stock anything we wouldn't put on our own face.",
-    "valueReachTitle": "Wide reach",
-    "valueReachBody": "Reliable doorstep delivery across regions, with transparent ETAs at the postcode level.",
+    "valueReachTitle": "Global reach",
+    "valueReachBody": "Reliable doorstep delivery across multiple regions, with transparent ETAs at the postcode level.",
     "valueCustomerTitle": "Customer-first",
     "valueCustomerBody": "Hassle-free returns, real human support, and personalised K-beauty recommendations when you ask.",
     "valueAuthenticTitle": "100% authentic",
@@ -511,7 +517,7 @@
     "subtitle": "Short answers to the questions we get most often. If you can't find what you need, reach out and we'll help."
   },
   "servicesPage": {
-    "title": "Our services",
+    "title": "Our Services",
     "subtitle": "Beyond the storefront — what else we can help with."
   },
   "orderSuccess": {
@@ -708,7 +714,11 @@
     "dashboardProfileCardTitle": "Profile Settings",
     "dashboardProfileCardDesc": "Manage your account details",
     "editProfileBtn": "Edit Profile",
-    "recentlyViewedHeading": "Recently Viewed"
+    "recentlyViewedHeading": "Recently Viewed",
+    "wishlistAnonPrompt": "Sign in to save your wishlist across devices and add notes or priority to each item.",
+    "wishlistAnonSignInCta": "Sign in",
+    "wishlistRemoveConfirm": "Remove this item from your wishlist?",
+    "wishlistRemoveSelectedConfirm": "Remove {count} selected items from your wishlist?"
   },
   "membershipCard": {
     "label": "Membership",
@@ -757,8 +767,8 @@
     "intlShippingHeading": "International shipping",
     "intlShippingBody": "Submit an order request and our team will email you a shipping quote for your country within 24 hours.",
     "perkFreeShipping": "Free Shipping",
-    "perkFreeShippingSub": "On orders above {amount}",
-    "perkFreeShippingTip": "Free shipping on orders above {amount}. K Plus members get free shipping on every order.",
+    "perkFreeShippingSub": "On orders above ${amount}",
+    "perkFreeShippingTip": "Free shipping on orders over ${amount}. K Plus members get free shipping on every order.",
     "perkEasyReturns": "Easy Returns",
     "perkEasyReturnsSub": "7 days return policy",
     "perkEasyReturnsTip": "Raise a return within 7 days of delivery for a damaged, defective, or wrong item. Pickup is arranged from your address.",
@@ -903,10 +913,13 @@
     "saveAddressNewLabel": "Save this address to my account for next time",
     "saveAddressUpdateLabel": "Update this saved address with my changes",
     "makeDefaultLabel": "Make this my default address",
-    "phonePlaceholderIndia": "Phone number",
+    "phonePlaceholderIndia": "10-digit mobile",
     "phonePlaceholderIntl": "Include country code",
     "calcShippingCapTitle": "Your cart is too heavy to ship.",
-    "calcShippingCapBody": "Your order weighs roughly {actualKg} kg after packaging, which is above our current {maxKg} kg international shipping cap. Please remove a few items, or email info@madenkorea.com for a manual quote."
+    "calcShippingCapBody": "Your order weighs roughly {actualKg} kg after packaging, which is above our current {maxKg} kg international shipping cap. Please remove a few items, or email info@madenkorea.com for a manual quote.",
+    "intlShippingTierCushion": "You can add about {amount} more in this shipping tier.",
+    "intlShippingNextTier": "Next tier {label}: +{delta}.",
+    "intlShippingMaxTier": "You are in the largest international shipping tier."
   },
   "floatingWhatsapp": {
     "open": "Chat on WhatsApp",
@@ -1190,7 +1203,11 @@
     "errFailedSave": "Failed to save changes",
     "errFailedDelete": "Failed to delete",
     "errSettingsNotFinalized": "Your commission settings have not been finalized yet. Please contact admin.",
-    "errSplitExceedsCap": "Customer % plus your commission % must be at most {cap}."
+    "errSplitExceedsCap": "Customer % plus your commission % must be at most {cap}.",
+    "regionsHeading": "Where your promos work",
+    "regionsAll": "All supported countries",
+    "regionsRestrictedNote": "Your promo codes apply only for buyers in the {count} country or countries listed below.",
+    "regionsAdminManaged": "Region eligibility is set by admin. Contact them if you would like a change."
   },
   "emails": {
     "orderConfirm": {
@@ -1250,6 +1267,36 @@
       "rowEstimatedTotal": "Estimated total (INR)",
       "needHelpHeading": "Questions in the meantime?",
       "needHelpBody": "Reply to this email or reach us at the contact details below — we're happy to help.",
+      "signoff": "Team MadenKorea"
+    },
+    "influencerApproved": {
+      "subject": "Welcome to the MadenKorea K-Partnership program",
+      "pill": "Application approved",
+      "heading": "Hi {name}, you are in.",
+      "intro": "Congratulations — your K-Partnership application has been approved. Your influencer portal is live and ready to use.",
+      "handleLabel": "Your handle",
+      "ctaHeading": "Open your partner portal",
+      "ctaBody": "Sign in to create promo codes, share product links, and track your commissions and payouts.",
+      "ctaButton": "Go to my portal",
+      "tipsHeading": "A few quick tips to get going",
+      "tip1": "Create a memorable promo code so your audience remembers it (e.g. your handle).",
+      "tip2": "Use the share-link tool to generate trackable product links — every click and order is attributed to you.",
+      "tip3": "Connect your payout details in the Wallet section before requesting your first payout.",
+      "closing": "We are excited to have you on board. Reply to this email anytime if you need help.",
+      "signoff": "Team MadenKorea"
+    },
+    "influencerRejected": {
+      "subject": "Update on your MadenKorea K-Partnership application",
+      "pill": "Application update",
+      "heading": "Hi {name}, thank you for applying.",
+      "intro": "We appreciate the time you took to apply to the MadenKorea K-Partnership program. After reviewing your application, we are unable to approve it at this time.",
+      "reasonHeading": "Why this happens",
+      "reasonBody": "We approve creators on a rolling basis depending on category fit, audience overlap, and program capacity. Being declined today does not close the door — we encourage you to reapply once your content and reach have grown.",
+      "nextHeading": "What you can do next",
+      "next1": "Keep building consistent, original content in the K-beauty and wellness space.",
+      "next2": "Engage with our brand on social — comments and tags help us find you.",
+      "next3": "Reapply in a few months when your audience or niche fit has evolved.",
+      "closing": "Thank you for your interest in MadenKorea. We hope to see your next application.",
       "signoff": "Team MadenKorea"
     }
   }

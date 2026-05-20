@@ -11,12 +11,14 @@ import {
   Menu,
   X,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Heart,
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import { useCart } from "@/lib/contexts/CartContext";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useCurrency } from "@/lib/contexts/CurrencyContext";
+import { useWishlist } from "@/lib/contexts/WishlistContext";
 
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -80,6 +82,7 @@ let headerDictFetchPromise: Promise<HeaderDictCache> | null = null;
 export function Header() {
   const { totalItems } = useCart();
   const { isAuthenticated } = useAuth();
+  const { wishlistCount } = useWishlist();
   // `formatPrice` accepts an INR amount and renders it in the visitor's
   // active currency at the live FX rate. The ticker's product prices
   // are stored in INR in the DB, so this is a straight pass-through.
@@ -434,6 +437,19 @@ export function Header() {
                       <User className="mr-2 h-4 w-4" /> {t("account")}
                     </Link>
                   </Button>
+                  <Button asChild variant="outline" className="flex-1 relative">
+                    <Link href="/wishlist">
+                      <Heart className="mr-2 h-4 w-4" /> {t("wishlist")}
+                      {wishlistCount > 0 && (
+                        <Badge
+                          variant="destructive"
+                          className="ml-2 flex h-5 min-w-5 items-center justify-center px-1 text-xs"
+                        >
+                          {wishlistCount}
+                        </Badge>
+                      )}
+                    </Link>
+                  </Button>
                 </div>
 
                 <Separator />
@@ -683,7 +699,7 @@ export function Header() {
                     <NavigationMenuItem>
                       <Link
                         href="/k-plus"
-                        className="inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-sky-600 via-indigo-600 to-violet-600 px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white shadow-md shadow-indigo-500/25"
+                        className="inline-flex h-10 w-max items-center justify-center whitespace-nowrap rounded-full bg-gradient-to-r from-sky-600 via-indigo-600 to-violet-600 px-4 text-sm font-semibold uppercase tracking-[0.08em] text-white shadow-md shadow-indigo-500/25"
                       >
                         <Sparkles className="mr-2 h-4 w-4" />
                         {t("navKPlus")}
@@ -768,6 +784,27 @@ export function Header() {
               <Link href={isAuthenticated ? "/account" : "/auth/login"}>
                 <User className="h-5 w-5" />
                 <span className="sr-only">{t("account")}</span>
+              </Link>
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative hidden md:inline-flex"
+              asChild
+              aria-label={t("wishlist")}
+            >
+              <Link href="/wishlist">
+                <Heart className="h-5 w-5" />
+                {wishlistCount > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center p-0 text-xs"
+                  >
+                    {wishlistCount}
+                  </Badge>
+                )}
+                <span className="sr-only">{t("wishlist")}</span>
               </Link>
             </Button>
 

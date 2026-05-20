@@ -1117,10 +1117,11 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok || !payload?.ok) {
+        // Non-purchasers can now review, so PURCHASE_REQUIRED no longer
+        // fires from the API. ALREADY_REVIEWED still does — one review
+        // per user per product is enforced by the DB unique index.
         if (payload?.error === "ALREADY_REVIEWED")
           toast.error(t("reviewAlreadyToast"));
-        else if (payload?.error === "PURCHASE_REQUIRED")
-          toast.error(t("reviewPurchaseRequiredToast"));
         else toast.error(t("reviewSubmitFailToast"));
         return;
       }

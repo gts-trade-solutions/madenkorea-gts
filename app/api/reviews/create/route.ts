@@ -43,6 +43,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Decide the verified-purchase flag — we no longer gate review
+    // creation on it. Non-purchasers can leave a review; their row is
+    // simply written without the verified-purchase badge so the PDP
+    // can visually distinguish customer vs. non-customer feedback.
+    //
+    // Two cheap queries beat one big join here — we can short-circuit
+    // the second query if the user has zero eligible orders at all.
+    let isVerifiedPurchase = false;
+
     const { data: orders, error: orderErr } = await admin
       .from("orders")
       .select("id")
@@ -57,32 +66,22 @@ export async function POST(req: NextRequest) {
     }
 
     const orderIds = (orders ?? []).map((o: any) => o.id);
-    if (orderIds.length === 0) {
-      return NextResponse.json(
-        { ok: false, error: "PURCHASE_REQUIRED" },
-        { status: 403 }
-      );
-    }
+    if (orderIds.length > 0) {
+      const { data: purchased, error: purchaseErr } = await admin
+        .from("order_items")
+        .select("order_id")
+        .eq("product_id", productId)
+        .in("order_id", orderIds)
+        .limit(1);
 
-    const { data: purchased, error: purchaseErr } = await admin
-      .from("order_items")
-      .select("order_id")
-      .eq("product_id", productId)
-      .in("order_id", orderIds)
-      .limit(1);
+      if (purchaseErr) {
+        return NextResponse.json(
+          { ok: false, error: purchaseErr.message },
+          { status: 500 }
+        );
+      }
 
-    if (purchaseErr) {
-      return NextResponse.json(
-        { ok: false, error: purchaseErr.message },
-        { status: 500 }
-      );
-    }
-
-    if (!purchased || purchased.length === 0) {
-      return NextResponse.json(
-        { ok: false, error: "PURCHASE_REQUIRED" },
-        { status: 403 }
-      );
+      isVerifiedPurchase = !!(purchased && purchased.length > 0);
     }
 
     const { error: insertErr } = await admin.from("product_reviews").insert({
@@ -92,7 +91,7 @@ export async function POST(req: NextRequest) {
       title,
       body: bodyText,
       photos,
-      is_verified_purchase: true,
+      is_verified_purchase: isVerifiedPurchase,
       status: "pending",
       display_name: displayName,
       avatar_url: avatarUrl,

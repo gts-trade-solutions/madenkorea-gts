@@ -162,8 +162,40 @@ export function pickSlabKey(effectiveG: number): SlabColumn | null {
   return null;
 }
 
+/** Human-friendly label for each slab. Order matches SLAB_COLUMNS. */
+export const SLAB_LABELS: Record<SlabColumn, string> = {
+  slab_500g_inr: "0.5 kg",
+  slab_1kg_inr: "1 kg",
+  slab_2kg_inr: "2 kg",
+  slab_3kg_inr: "3 kg",
+  slab_5kg_inr: "5 kg",
+  slab_7kg_inr: "7 kg",
+  slab_10kg_inr: "10 kg",
+  slab_15kg_inr: "15 kg",
+  slab_20kg_inr: "20 kg",
+};
+
+export type NextSlabInfo = {
+  key: SlabColumn;
+  label: string;
+  cutoffG: number;
+  baseInr: number;
+  amountInr: number;            // buffer-applied next-slab fee
+  deltaInr: number;             // amountInr (next) − amountInr (current)
+};
+
 export type ComputeResult =
-  | { ok: true; amountInr: number; slab: SlabColumn; effectiveG: number; baseInr: number }
+  | {
+      ok: true;
+      amountInr: number;             // customer-facing INR (base × (1+buffer))
+      slab: SlabColumn;              // current slab key
+      slabLabel: string;             // e.g. "1 kg"
+      slabCutoffG: number;           // upper bound of current slab in grams
+      effectiveG: number;            // post-tare weight in grams
+      baseInr: number;               // un-buffered EMS cost for this slab
+      remainingInSlabG: number;      // grams left before bumping to next slab
+      nextSlab: NextSlabInfo | null; // null at 20kg slab
+    }
   | { ok: false; reason: "OVER_CAP"; effectiveG: number; maxG: number }
   | { ok: false; reason: "NO_RATES"; country: string };
 
@@ -188,12 +220,51 @@ export function computeIntlShippingInr(input: {
   }
   const slab = pickSlabKey(effectiveG);
   if (!slab) {
-    // Defensive: pickSlabKey only returns null above 20kg, which
-    // OVER_CAP already covers. Keep the guard so the type narrows.
     return { ok: false, reason: "OVER_CAP", effectiveG, maxG };
   }
+  const buffer = 1 + (settings.intl_buffer_pct || 0) / 100;
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  const slabIdx = SLAB_COLUMNS.indexOf(slab);
+  const slabCutoffG = SLAB_CUTOFFS_G[slabIdx];
   const baseInr = Number(rate[slab]);
-  const amountInr =
-    Math.round(baseInr * (1 + (settings.intl_buffer_pct || 0) / 100) * 100) / 100;
-  return { ok: true, amountInr, slab, effectiveG, baseInr };
+  const amountInr = round2(baseInr * buffer);
+
+  // "Cushion" — grams the customer can still add without bumping into
+  // the next tier. Clamps at zero (e.g. when the cart hits the boundary
+  // exactly, or the post-tare ratio temporarily inflates effectiveG
+  // past the cutoff due to rounding).
+  const remainingInSlabG = Math.max(0, slabCutoffG - effectiveG);
+
+  // Next slab — null if the customer is already on the 20kg tier.
+  // We DO still expose it for the 15kg → 20kg jump even when post-tare
+  // effective weight is brushing up against the 20kg cap, because the
+  // OVER_CAP branch above caught the truly-blocked case.
+  let nextSlab: NextSlabInfo | null = null;
+  const nextIdx = slabIdx + 1;
+  if (nextIdx < SLAB_COLUMNS.length) {
+    const nextKey = SLAB_COLUMNS[nextIdx];
+    const nextBase = Number(rate[nextKey]);
+    const nextAmount = round2(nextBase * buffer);
+    nextSlab = {
+      key: nextKey,
+      label: SLAB_LABELS[nextKey],
+      cutoffG: SLAB_CUTOFFS_G[nextIdx],
+      baseInr: nextBase,
+      amountInr: nextAmount,
+      deltaInr: round2(nextAmount - amountInr),
+    };
+  }
+
+  return {
+    ok: true,
+    amountInr,
+    slab,
+    slabLabel: SLAB_LABELS[slab],
+    slabCutoffG,
+    effectiveG,
+    baseInr,
+    remainingInSlabG,
+    nextSlab,
+  };
 }
