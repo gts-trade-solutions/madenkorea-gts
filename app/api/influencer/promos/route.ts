@@ -154,10 +154,27 @@ export async function POST(req: NextRequest) {
     .select("id, code")
     .single();
 
-  if (error)
+  if (error) {
+    // Postgres 23505 = unique_violation. The promo_codes_code_key
+    // index makes `code` globally unique across influencers, so two
+    // influencers can never own the same code — first-come, first-
+    // served on the string namespace. Surface a friendly error code
+    // so the dashboard can translate it instead of dumping the raw
+    // "duplicate key value violates unique constraint" text.
+    if ((error as any).code === "23505") {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "CODE_ALREADY_TAKEN",
+          error: "CODE_ALREADY_TAKEN",
+        },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { ok: false, error: error.message },
       { status: 400 }
     );
+  }
   return NextResponse.json({ ok: true, promo: data });
 }

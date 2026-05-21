@@ -443,6 +443,8 @@ export default function InfluencerDashboardPage() {
         message = t("errSettingsNotFinalized");
       } else if (j?.code === "SPLIT_EXCEEDS_CAP") {
         message = t("errSplitExceedsCap", { cap: Number(j?.cap ?? cap) });
+      } else if (j?.code === "CODE_ALREADY_TAKEN") {
+        message = t("errCodeAlreadyTaken");
       } else {
         message = j?.error || t("codeErrorCreateFailed");
       }
@@ -646,43 +648,74 @@ export default function InfluencerDashboardPage() {
         </div>
       </div>
 
-      {/* ===== ELIGIBLE REGIONS (read-only) =====
-          Admin-managed allow-list. Empty array = active in all
-          supported countries — render that as a single friendly badge
-          rather than a chip-strip of every country. Non-empty = render
-          one chip per country with its flag, so the influencer can
-          eyeball at a glance where their codes apply. */}
+      {/* ===== PROMO SETTINGS (read-only) =====
+          Single overview card surfacing the three admin-controlled
+          values the influencer needs to know before creating a promo:
+          their commission cap, the admin-set default customer share,
+          and the regions their promos work in. All three are read-only
+          here — admin manages them from /admin/influencers. */}
       <div className="mt-4 rounded-2xl border bg-white p-4 shadow-sm">
-        <div className="mb-2 text-sm font-semibold">
-          {t("regionsHeading")}
+        <div className="mb-3 text-sm font-semibold">
+          {t("promoSettingsHeading")}
         </div>
-        {applicableCountries.length === 0 ? (
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 text-xs">
-            <span>{t("regionsAll")}</span>
-          </div>
-        ) : (
-          <>
-            <p className="mb-2 text-[11px] text-neutral-600">
-              {t("regionsRestrictedNote", { count: applicableCountries.length })}
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {applicableCountries.map((code) => {
-                const profile = (COUNTRY_PROFILES as any)[code];
-                if (!profile) return null;
-                return (
-                  <span
-                    key={code}
-                    className="inline-flex items-center gap-1.5 rounded-full border bg-neutral-50 px-2.5 py-1 text-xs"
-                  >
-                    <span aria-hidden>{profile.flag}</span>
-                    <span>{profile.name}</span>
-                  </span>
-                );
-              })}
+
+        {/* Cap + default split numbers — surfaced as two stat blocks
+            so they're scannable at a glance. The influencer's earnings
+            ceiling per promo IS the cap minus the customer share. */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border bg-neutral-50 p-3">
+            <div className="text-[11px] uppercase tracking-wide text-neutral-500">
+              {t("promoSettingsCapLabel")}
             </div>
-          </>
-        )}
-        <p className="mt-2 text-[11px] text-neutral-500">
+            <div className="mt-1 text-xl font-bold tabular-nums">{cap}%</div>
+            <div className="mt-0.5 text-[11px] text-neutral-600">
+              {t("promoSettingsCapHelp")}
+            </div>
+          </div>
+          <div className="rounded-lg border bg-neutral-50 p-3">
+            <div className="text-[11px] uppercase tracking-wide text-neutral-500">
+              {t("promoSettingsDefaultSplitLabel")}
+            </div>
+            <div className="mt-1 text-xl font-bold tabular-nums">
+              {defaultUserPct}% / {Math.max(0, cap - defaultUserPct)}%
+            </div>
+            <div className="mt-0.5 text-[11px] text-neutral-600">
+              {t("promoSettingsDefaultSplitHelp")}
+            </div>
+          </div>
+          <div className="rounded-lg border bg-neutral-50 p-3 col-span-2 sm:col-span-1">
+            <div className="text-[11px] uppercase tracking-wide text-neutral-500">
+              {t("regionsHeading")}
+            </div>
+            <div className="mt-1 text-sm font-medium">
+              {applicableCountries.length === 0
+                ? t("regionsAll")
+                : t("promoSettingsRegionsCount", {
+                    count: applicableCountries.length,
+                  })}
+            </div>
+            {applicableCountries.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {applicableCountries.map((code) => {
+                  const profile = (COUNTRY_PROFILES as any)[code];
+                  if (!profile) return null;
+                  return (
+                    <span
+                      key={code}
+                      className="inline-flex items-center gap-1 rounded-full border bg-white px-1.5 py-0.5 text-[10px]"
+                      title={profile.name}
+                    >
+                      <span aria-hidden>{profile.flag}</span>
+                      <span>{code}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <p className="mt-3 text-[11px] text-neutral-500">
           {t("regionsAdminManaged")}
         </p>
       </div>

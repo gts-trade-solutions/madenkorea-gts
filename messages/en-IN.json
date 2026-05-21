@@ -33,7 +33,8 @@
     "comingSoon": "Coming soon",
     "shopCategory": "Shop {name}",
     "exploreBrand": "Explore {name}",
-    "wishlist": "Wishlist"
+    "wishlist": "Wishlist",
+    "adminPortal": "Admin"
   },
   "footer": {
     "tagline": "Authentic Korean beauty and lifestyle products, delivered across India and shipped to select countries worldwide.",
@@ -714,6 +715,9 @@
     "dashboardProfileCardTitle": "Profile Settings",
     "dashboardProfileCardDesc": "Manage your account details",
     "editProfileBtn": "Edit Profile",
+    "dashboardAdminCardTitle": "Admin Portal",
+    "dashboardAdminCardDesc": "Access the admin dashboard to manage the store",
+    "openAdminBtn": "Open Admin Portal",
     "recentlyViewedHeading": "Recently Viewed",
     "wishlistAnonPrompt": "Sign in to save your wishlist across devices and add notes or priority to each item.",
     "wishlistAnonSignInCta": "Sign in",
@@ -1060,7 +1064,7 @@
     "promoListLoading": "Loading…",
     "promoListEmptyTitle": "No promos yet",
     "promoListEmptyDesc": "Create a simple code your audience can remember.",
-    "promoListGlobalBadge": "Global",
+    "promoListGlobalBadge": "Cart-wide",
     "promoListActive": "Active",
     "promoListInactive": "Inactive",
     "promoListSplit": "Customer {user}% + You {comm}%",
@@ -1207,7 +1211,14 @@
     "regionsHeading": "Where your promos work",
     "regionsAll": "All supported countries",
     "regionsRestrictedNote": "Your promo codes apply only for buyers in the {count} country or countries listed below.",
-    "regionsAdminManaged": "Region eligibility is set by admin. Contact them if you would like a change."
+    "regionsAdminManaged": "Region eligibility is set by admin. Contact them if you would like a change.",
+    "promoSettingsHeading": "Promo settings",
+    "promoSettingsCapLabel": "Commission cap",
+    "promoSettingsCapHelp": "Maximum combined customer + your share per promo.",
+    "promoSettingsDefaultSplitLabel": "Default split",
+    "promoSettingsDefaultSplitHelp": "Used as the starting split when you create a new promo.",
+    "promoSettingsRegionsCount": "{count} country or countries",
+    "errCodeAlreadyTaken": "That promo code is already taken. Try a different one — codes are unique across all influencers."
   },
   "emails": {
     "orderConfirm": {

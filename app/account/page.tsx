@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import { ShoppingBag, Heart, User, LogOut, Eye } from "lucide-react";
+import { ShoppingBag, Heart, User, LogOut, Eye, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { ProductCard } from "@/components/ProductCard";
 import { supabase } from "@/lib/supabaseClient";
@@ -44,7 +44,8 @@ function storagePublicUrl(path?: string | null) {
 export default function AccountPage() {
   const router = useRouter();
   const t = useTranslations("account");
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, hasRole } = useAuth();
+  const isAdmin = isAuthenticated && hasRole("admin");
   const [fullName, setFullName] = useState<string>("");
   const [recentlyViewed, setRecentlyViewed] = useState<DbProduct[]>([]);
 
@@ -114,6 +115,24 @@ export default function AccountPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {isAdmin && (
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer border-primary/40 bg-primary/5">
+              <CardHeader>
+                <ShieldCheck className="h-8 w-8 mb-2 text-primary" />
+                <CardTitle>{t("dashboardAdminCardTitle")}</CardTitle>
+                <CardDescription>{t("dashboardAdminCardDesc")}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  className="w-full"
+                  onClick={() => router.push("/admin")}
+                >
+                  {t("openAdminBtn")}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader>
               <ShoppingBag className="h-8 w-8 mb-2 text-primary" />

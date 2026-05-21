@@ -302,10 +302,10 @@ Public/application routes:
 
 Influencer dashboard:
 
-- `/influencer`
+- `/influencer` — single source of truth for creating + listing promos (replaces the retired `/influencer/promos`).
 - `/influencer/links`
-- `/influencer/promos`
 - `/influencer/payouts`
+- `/influencer/promos` — permanent server-side redirect to `/influencer`; kept only for stale bookmarks.
 
 APIs:
 

@@ -75,8 +75,10 @@ export default async function InfluencerLayout({ children }: { children: ReactNo
           </div>
           <nav className="flex gap-4 text-sm">
             <Link className="hover:underline" href="/influencer">{t("navDashboard")}</Link>
-            <Link className="hover:underline" href="/influencer/promos">{t("navPromos")}</Link>
-            {/* <Link className="hover:underline" href="/influencer/payouts">Payouts</Link> */}
+            {/* /influencer/promos removed — duplicated the dashboard's
+                inline create-promo card with stale validation. The
+                dashboard is the single source of truth now. The route
+                itself stays as a permanent redirect so bookmarks work. */}
           </nav>
         </div>
       </header>
