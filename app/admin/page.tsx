@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { supabase } from "@/lib/supabaseClient";
 import {
   Card,
   CardContent,
@@ -34,10 +36,60 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+type DashboardMetrics = {
+  total_orders: number;
+  paid_orders: number;
+  revenue_inr: number;
+  published_products: number;
+  total_products: number;
+  approved_vendors: number;
+  total_vendors: number;
+};
+
+function formatInr(n: number) {
+  try {
+    return n.toLocaleString("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    });
+  } catch {
+    return `₹${Math.round(n).toLocaleString("en-IN")}`;
+  }
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, ready, isAdmin, logout } = useAuth();
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!ready || !isAdmin) return;
+    let cancelled = false;
+    (async () => {
+      setMetricsLoading(true);
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const token = s?.session?.access_token;
+        const res = await fetch("/api/admin/dashboard-metrics", {
+          credentials: "include",
+          cache: "no-store",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok && body.ok) {
+          setMetrics(body.metrics as DashboardMetrics);
+        }
+      } finally {
+        if (!cancelled) setMetricsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, isAdmin]);
 
   // Sub-pages that bounce here pass their original path as `?from=`
   // so we can hand it through to the login screen as `?redirect=`.
@@ -116,57 +168,57 @@ export default function AdminDashboard() {
 
         {/* METRICS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Orders
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">0</div>
-              <p className="text-xs text-muted-foreground mt-1">All time</p>
-            </CardContent>
-          </Card>
+          <MetricCard
+            label="Total Orders"
+            value={
+              metrics
+                ? metrics.total_orders.toLocaleString("en-IN")
+                : null
+            }
+            sub={
+              metrics
+                ? `${metrics.paid_orders.toLocaleString("en-IN")} paid`
+                : "All time"
+            }
+            loading={metricsLoading}
+          />
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Revenue
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">₹0</div>
-              <p className="text-xs text-muted-foreground mt-1">All time</p>
-            </CardContent>
-          </Card>
+          <MetricCard
+            label="Revenue"
+            value={metrics ? formatInr(metrics.revenue_inr) : null}
+            sub="Paid orders (INR)"
+            loading={metricsLoading}
+          />
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Products
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">6</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Active products
-              </p>
-            </CardContent>
-          </Card>
+          <MetricCard
+            label="Products"
+            value={
+              metrics
+                ? metrics.published_products.toLocaleString("en-IN")
+                : null
+            }
+            sub={
+              metrics
+                ? `of ${metrics.total_products.toLocaleString("en-IN")} total`
+                : "Published"
+            }
+            loading={metricsLoading}
+          />
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Vendors
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">3</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Approved vendors
-              </p>
-            </CardContent>
-          </Card>
+          <MetricCard
+            label="Vendors"
+            value={
+              metrics
+                ? metrics.approved_vendors.toLocaleString("en-IN")
+                : null
+            }
+            sub={
+              metrics
+                ? `of ${metrics.total_vendors.toLocaleString("en-IN")} total`
+                : "Approved"
+            }
+            loading={metricsLoading}
+          />
         </div>
 
         {/* ACTION CARDS */}
@@ -688,5 +740,38 @@ export default function AdminDashboard() {
         </div>
       </div>
     </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  sub,
+  loading,
+}: {
+  label: string;
+  value: string | null;
+  sub: string;
+  loading: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-medium text-muted-foreground">
+          {label}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {loading || value == null ? (
+          <div
+            aria-hidden="true"
+            className="h-9 w-24 animate-pulse rounded bg-muted"
+          />
+        ) : (
+          <div className="text-3xl font-bold">{value}</div>
+        )}
+        <p className="text-xs text-muted-foreground mt-1">{sub}</p>
+      </CardContent>
+    </Card>
   );
 }

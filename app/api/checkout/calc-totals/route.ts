@@ -17,6 +17,7 @@ import {
   computeIntlShippingInr,
 } from "@/lib/internationalShipping";
 import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+import { fetchCountryOffers, effectivePriceForCountry } from "@/lib/pricing";
 
 type LineInput = { product_id: string; qty: number };
 
@@ -29,24 +30,11 @@ type LineInput = { product_id: string; qty: number };
 // longer read here. Kept in the DB schema and will be re-wired later;
 // see CODEBASE_REFERENCE.md → "Deferred wiring".
 
-function isSaleActive(start?: string | null, end?: string | null) {
-  const now = new Date();
-  const s = start ? new Date(start) : null;
-  const e = end ? new Date(end) : null;
-  if (s && now < s) return false;
-  if (e && now > e) return false;
-  return true;
-}
-
-function effectiveUnitPrice(p: any) {
-  const saleOk =
-    p?.sale_price != null &&
-    isSaleActive(p?.sale_starts_at ?? null, p?.sale_ends_at ?? null);
-
-  return saleOk && p?.sale_price != null
-    ? Number(p.sale_price)
-    : Number(p.price ?? 0);
-}
+// Legacy isSaleActive/effectiveUnitPrice removed in favor of the
+// country-aware resolver in lib/pricing.ts. The new resolver checks
+// product_country_prices first (visitor's country offer wins), then
+// falls through to today's sale_price/price logic — so a country with
+// no offer set sees identical pricing to before this change.
 
 export async function POST(req: NextRequest) {
 const body = await req.json().catch(() => ({}));
@@ -145,6 +133,13 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
     isSupportedCurrency(rawCurrency) ? rawCurrency : "INR";
   const isIntl = country !== "IN";
 
+  // Fetch country-specific offer prices once for all products in the
+  // cart. Empty map (no offers configured for any of these products in
+  // this country) means the resolver falls through to legacy
+  // sale_price/price for each line — identical behavior to before
+  // country offers existed.
+  const countryOffers = await fetchCountryOffers(productIds, country, sb);
+
   const code = getPromoCodeFromCookie();
   let promo: any = null;
   let influencerCap: number | null = null;
@@ -214,7 +209,7 @@ const lines: LineInput[] = Array.isArray(body?.lines) ? body.lines : [];
     const p = prodMap.get(l.product_id)!;
     const qty = Number(l.qty);
 
-    const unit = effectiveUnitPrice(p);
+    const unit = effectivePriceForCountry(p, countryOffers);
     const lineSub = roundMoney(unit * qty);
     subtotal = roundMoney(subtotal + lineSub);
 

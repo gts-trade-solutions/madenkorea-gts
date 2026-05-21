@@ -9,6 +9,21 @@ import {
   mergeTranslations,
   PRODUCT_TRANSLATABLE_FIELDS,
 } from "@/lib/contentTranslations";
+import { augmentProductsWithCountryOffers } from "@/lib/pricing";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+
+// Client-side cookie read for the visitor's country. SSR pages use
+// `cookies().get(...)` directly; client surfaces (this one) parse
+// document.cookie. Falls back to the default country if missing or
+// unsupported.
+function readCountryFromCookie(): string {
+  if (typeof document === "undefined") return DEFAULT_COUNTRY;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("mik_country="));
+  const raw = match ? decodeURIComponent(match.split("=")[1] ?? "") : "";
+  return isSupportedCountry(raw) ? raw : DEFAULT_COUNTRY;
+}
 
 type Product = {
   id: string;
@@ -73,9 +88,17 @@ export default function BestSellerPage() {
           ) as Product[];
           const minTarget = 8;
 
+          const country = readCountryFromCookie();
           if (trending.length >= minTarget) {
-            setProducts(trending);
-            setUsedFallback(false);
+            const augmented = await augmentProductsWithCountryOffers(
+              trending,
+              country,
+              supabase
+            );
+            if (!cancelled) {
+              setProducts(augmented as Product[]);
+              setUsedFallback(false);
+            }
           } else {
             const existingIds = new Set(trending.map((p) => p.id));
             const { data: fallbackData } = await supabase
@@ -100,8 +123,16 @@ export default function BestSellerPage() {
               PRODUCT_TRANSLATABLE_FIELDS,
               "product_translations"
             ) as Product[]).filter((p) => !existingIds.has(p.id));
-            setProducts([...trending, ...fallback]);
-            setUsedFallback(fallback.length > 0);
+            const combined = [...trending, ...fallback];
+            const augmented = await augmentProductsWithCountryOffers(
+              combined,
+              country,
+              supabase
+            );
+            if (!cancelled) {
+              setProducts(augmented as Product[]);
+              setUsedFallback(fallback.length > 0);
+            }
           }
         }
         setLoading(false);

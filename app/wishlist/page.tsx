@@ -10,6 +10,17 @@ import { useAuth } from '@/lib/contexts/AuthContext';
 import { useCart } from '@/lib/contexts/CartContext';
 import { useWishlist } from '@/lib/contexts/WishlistContext';
 import { useCurrency } from '@/lib/contexts/CurrencyContext';
+import { fetchCountryOffers } from "@/lib/pricing";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+
+function readCountryFromCookie(): string {
+  if (typeof document === "undefined") return DEFAULT_COUNTRY;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("mik_country="));
+  const raw = match ? decodeURIComponent(match.split("=")[1] ?? "") : "";
+  return isSupportedCountry(raw) ? raw : DEFAULT_COUNTRY;
+}
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,6 +51,9 @@ type ProductRow = {
   hero_image_path?: string | null;
   is_bundle?: boolean | null;
   brands?: { name?: string | null } | null;
+  // Phase 1 country offer — when set, effectiveUnitPrice uses it
+  // instead of sale_price/price.
+  effective_price?: number | null;
 };
 
 // `id` is wishlist_items.id when authenticated. For anonymous users
@@ -72,6 +86,7 @@ function isSaleActive(start?: string | null, end?: string | null) {
 }
 
 function effectiveUnitPrice(p: ProductRow) {
+  if (p.effective_price != null) return Number(p.effective_price);
   const saleOk =
     p.sale_price != null && isSaleActive(p.sale_starts_at, p.sale_ends_at);
   return saleOk && p.sale_price != null ? p.sale_price : p.price ?? 0;
@@ -137,7 +152,25 @@ export default function WishlistPage() {
             hero_image_url: storagePublicUrl(r.product.hero_image_path),
           })) as WishlistRow[];
 
-        setRows(mapped);
+        // Phase 1 country offers — attach effective_price per product
+        // so list display + sorting + add-to-cart math reflects the
+        // visitor's country.
+        const productIds = mapped.map((r) => r.product.id);
+        const offers = await fetchCountryOffers(
+          productIds,
+          readCountryFromCookie(),
+          supabase
+        );
+        const withOffers = mapped.map((r) =>
+          offers[r.product.id] != null
+            ? {
+                ...r,
+                product: { ...r.product, effective_price: offers[r.product.id] },
+              }
+            : r
+        );
+
+        setRows(withOffers);
         setLoading(false);
         return;
       }
@@ -168,13 +201,23 @@ export default function WishlistPage() {
         return;
       }
 
+      // Phase 1 country offers for anon path. Same as auth path
+      // above — augments each product's effective_price.
+      const anonOffers = await fetchCountryOffers(
+        (data ?? []).map((p: any) => p.id),
+        readCountryFromCookie(),
+        supabase
+      );
       const synthRows: WishlistRow[] = (data ?? []).map((p: any) => ({
         id: p.id, // no DB row — fall back to product id
         product_id: p.id,
         note: null,
         priority: 3,
         created_at: new Date().toISOString(),
-        product: p as ProductRow,
+        product: {
+          ...p,
+          effective_price: anonOffers[p.id] ?? null,
+        } as ProductRow,
         hero_image_url: storagePublicUrl(p.hero_image_path),
       }));
 

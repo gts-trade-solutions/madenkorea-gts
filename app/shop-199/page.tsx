@@ -9,6 +9,17 @@ import {
   mergeTranslations,
   PRODUCT_TRANSLATABLE_FIELDS,
 } from "@/lib/contentTranslations";
+import { augmentProductsWithCountryOffers } from "@/lib/pricing";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+
+function readCountryFromCookie(): string {
+  if (typeof document === "undefined") return DEFAULT_COUNTRY;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("mik_country="));
+  const raw = match ? decodeURIComponent(match.split("=")[1] ?? "") : "";
+  return isSupportedCountry(raw) ? raw : DEFAULT_COUNTRY;
+}
 
 type Product = {
   id: string;
@@ -78,7 +89,17 @@ export default function Shop199Page() {
             PRODUCT_TRANSLATABLE_FIELDS,
             "product_translations"
           ) as Product[];
-          setProducts(translated);
+          // Phase 1 country offers — augment so the displayed price
+          // reflects the visitor's country offer when set. Membership
+          // of this list is still gated by the server-side sale_price
+          // filter (≤ 199); country offers below 199 with no
+          // sale_price won't appear here yet.
+          const augmented = await augmentProductsWithCountryOffers(
+            translated,
+            readCountryFromCookie(),
+            supabase
+          );
+          if (!cancelled) setProducts(augmented as Product[]);
         }
         setLoading(false);
       }

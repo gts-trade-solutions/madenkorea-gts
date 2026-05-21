@@ -25,6 +25,9 @@ type CompactProduct = {
   sale_ends_at?: string | null;
   hero_image_url?: string | null;
   hero_image_path?: string | null;
+  // Phase 1 country offers — when set by an upstream resolver, used
+  // verbatim. Otherwise fall back to legacy sale_price/price logic.
+  effective_price?: number | null;
 };
 
 const supabase = createClient(
@@ -70,7 +73,11 @@ export function CompactProductCard({ product }: { product: CompactProduct }) {
   );
 
   const effectivePrice =
-    saleActive && product.sale_price != null ? product.sale_price : product.price ?? null;
+    product.effective_price != null
+      ? product.effective_price
+      : saleActive && product.sale_price != null
+        ? product.sale_price
+        : product.price ?? null;
   // Strikethrough comparator: prefer compare_at_price; otherwise the
   // original price when there's an active sale at sale_price.
   const strikePrice =

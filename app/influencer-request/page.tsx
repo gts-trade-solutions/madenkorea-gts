@@ -29,7 +29,7 @@ type Status = "none" | "pending" | "rejected" | "influencer" | "admin";
 export default function PartnerProgramPage() {
   const router = useRouter();
   const t = useTranslations("influencerRequest");
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, ready: authReady } = useAuth();
 
   // status
   const [status, setStatus] = useState<Status>("none");
@@ -45,12 +45,19 @@ export default function PartnerProgramPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // ✅ 1) Gate the page exactly like /account (NO anon UI here)
+  // ✅ 1) Gate the page exactly like /account (NO anon UI here).
+  // Wait for the auth context to finish loading before deciding —
+  // otherwise the page renders blank for the first ~100ms while
+  // `isAuthenticated` is still false during session hydration, then
+  // flashes in fully once the session resolves. Gating on `authReady`
+  // also avoids firing a spurious redirect to /auth/login for users
+  // who are actually signed in.
   useEffect(() => {
+    if (!authReady) return;
     if (!isAuthenticated) {
       router.replace("/auth/login?redirect=/influencer-request");
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, authReady, router]);
 
   // ✅ 2) Attach browser session to server cookies ONCE (same idea as /auth/login + /auth/callback)
   const attachedOnce = useRef(false);
@@ -167,8 +174,12 @@ export default function PartnerProgramPage() {
     }
   }
 
-  // ✅ Match /account behavior: if not authed, render nothing (redirect is happening)
-  if (!isAuthenticated) return null;
+  // Only suppress render once we KNOW the user isn't authenticated.
+  // While `authReady` is false we still render the full page shell so
+  // the visible region doesn't flash from blank → content for signed-in
+  // users. The CTA and status-dependent sections show loading
+  // placeholders during this window.
+  if (authReady && !isAuthenticated) return null;
 
   // ========== LOGGED-IN VIEW (your existing UI) ==========
   return (
@@ -203,33 +214,42 @@ export default function PartnerProgramPage() {
                   </p>
 
                   <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                    {isApproved ? (
-                      <button
-                        onClick={() => router.push("/influencer")}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-400"
-                      >
-                        {t("ctaVisitPortal")} <ArrowRight className="h-4 w-4" />
-                      </button>
-                    ) : status === "pending" ? (
-                      <span className="inline-flex items-center justify-center rounded-xl bg-amber-300/90 px-4 py-3 text-sm font-semibold text-amber-900">
-                        {t("ctaPendingReview")}
-                      </span>
+                    {statusLoading ? (
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-[46px] w-44 animate-pulse rounded-xl bg-neutral-200/80"
+                      />
                     ) : (
-                      <button
-                        onClick={() => setOpen(true)}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-black/90"
-                      >
-                        {t("ctaBecomePartner")} <ArrowRight className="h-4 w-4" />
-                      </button>
-                    )}
+                      <>
+                        {isApproved ? (
+                          <button
+                            onClick={() => router.push("/influencer")}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-400"
+                          >
+                            {t("ctaVisitPortal")} <ArrowRight className="h-4 w-4" />
+                          </button>
+                        ) : status === "pending" ? (
+                          <span className="inline-flex items-center justify-center rounded-xl bg-amber-300/90 px-4 py-3 text-sm font-semibold text-amber-900">
+                            {t("ctaPendingReview")}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setOpen(true)}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-black/90"
+                          >
+                            {t("ctaBecomePartner")} <ArrowRight className="h-4 w-4" />
+                          </button>
+                        )}
 
-                    {!isApproved && (
-                      <button
-                        onClick={() => router.push("/")}
-                        className="rounded-xl border border-neutral-300 px-5 py-3 text-sm font-semibold hover:bg-white"
-                      >
-                        {t("ctaExploreCatalog")}
-                      </button>
+                        {!isApproved && (
+                          <button
+                            onClick={() => router.push("/")}
+                            className="rounded-xl border border-neutral-300 px-5 py-3 text-sm font-semibold hover:bg-white"
+                          >
+                            {t("ctaExploreCatalog")}
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

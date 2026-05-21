@@ -9,6 +9,17 @@ import {
   mergeTranslations,
   PRODUCT_TRANSLATABLE_FIELDS,
 } from "@/lib/contentTranslations";
+import { augmentProductsWithCountryOffers } from "@/lib/pricing";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+
+function readCountryFromCookie(): string {
+  if (typeof document === "undefined") return DEFAULT_COUNTRY;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("mik_country="));
+  const raw = match ? decodeURIComponent(match.split("=")[1] ?? "") : "";
+  return isSupportedCountry(raw) ? raw : DEFAULT_COUNTRY;
+}
 
 // A bundle is just a product with `is_bundle = true`. Same schema, same
 // pricing, same stock. This page is the "Bundles" landing surface — every
@@ -73,7 +84,12 @@ export default function BundlesPage() {
           PRODUCT_TRANSLATABLE_FIELDS,
           "product_translations"
         ) as Product[];
-        setProducts(translated);
+        const augmented = await augmentProductsWithCountryOffers(
+          translated,
+          readCountryFromCookie(),
+          supabase
+        );
+        if (!cancelled) setProducts(augmented as Product[]);
       }
       setLoading(false);
     }

@@ -13,9 +13,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, Upload } from "lucide-react";
+import { Plus, Trash2, Upload, Globe2 } from "lucide-react";
 import ProductStoryEditor from "@/components/admin/ProductStoryEditor";
 import { TranslationStatusBadge } from "@/components/admin/TranslationStatusBadge";
+import {
+  SUPPORTED_COUNTRIES,
+  COUNTRY_PROFILES,
+} from "@/lib/countries";
 
 /* ───────── helpers ───────── */
 function slugify(s: string) {
@@ -152,6 +156,28 @@ export function AdminProductEditor({ productId }: { productId: string }) {
   const [overwriteStorage, setOverwriteStorage] = useState(false);
   const [deleteMediaFromStorage, setDeleteMediaFromStorage] = useState(false);
 
+  // Country offers — per-country offer price. Lives on
+  // `product_country_prices`; resolver in lib/pricing.ts walks: country
+  // offer > legacy sale_price within window > legacy price. Empty input
+  // for a country means "no offer" — that country falls through to the
+  // legacy pricing on save. Active toggle lets admin keep a saved
+  // value but pause it.
+  type CountryOfferState = {
+    country_code: string;
+    offer_price: string; // string for input control; "" = no offer
+    is_active: boolean;
+  };
+  const [countryOffers, setCountryOffers] = useState<CountryOfferState[]>(
+    () =>
+      SUPPORTED_COUNTRIES.map((cc) => ({
+        country_code: cc,
+        offer_price: "",
+        is_active: true,
+      }))
+  );
+  const [bulkOfferPrice, setBulkOfferPrice] = useState<string>("");
+  const [loadingCountryOffers, setLoadingCountryOffers] = useState(true);
+
   /* load product + lookups */
   useEffect(() => {
     let cancelled = false;
@@ -234,6 +260,57 @@ export function AdminProductEditor({ productId }: { productId: string }) {
 
     return () => { cancelled = true; };
   }, [productId, router]);
+
+  // Load country offers in parallel to the main product load. Lives in
+  // its own effect so we can keep the main effect focused — and so we
+  // can refresh just the offers after a PUT without re-pulling the
+  // whole product/images/lookups payload.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingCountryOffers(true);
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const token = s?.session?.access_token;
+        const res = await fetch(
+          `/api/admin/products/${encodeURIComponent(productId)}/country-prices`,
+          {
+            credentials: "include",
+            cache: "no-store",
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          }
+        );
+        const body = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (res.ok && body.ok) {
+          const existing = new Map<string, { offer_price: number; is_active: boolean }>();
+          (body.offers ?? []).forEach((r: any) => {
+            existing.set(String(r.country_code).toUpperCase(), {
+              offer_price: Number(r.offer_price),
+              is_active: r.is_active !== false,
+            });
+          });
+          setCountryOffers(
+            SUPPORTED_COUNTRIES.map((cc) => {
+              const row = existing.get(cc);
+              return row
+                ? {
+                    country_code: cc,
+                    offer_price: String(row.offer_price),
+                    is_active: row.is_active,
+                  }
+                : { country_code: cc, offer_price: "", is_active: true };
+            })
+          );
+        }
+      } finally {
+        if (!cancelled) setLoadingCountryOffers(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [productId]);
 
   const addImageSlot = () => {
     setModel(m => {
@@ -414,6 +491,49 @@ export function AdminProductEditor({ productId }: { productId: string }) {
           .update({ video_path: key })
           .eq("id", model.id);
         if (setVidErr) throw new Error(setVidErr.message);
+      }
+
+      // Country offers — persist via dedicated admin endpoint. Runs
+      // BEFORE revalidation so the cache invalidation below picks up
+      // the new prices. Pre-validated client-side; the server re-checks
+      // against current MRP and rejects with VALIDATION_FAILED /
+      // OFFER_EXCEEDS_MRP if anything slipped through.
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const token = s?.session?.access_token;
+        const payloadOffers = countryOffers
+          .filter((r) => r.offer_price !== "" && Number(r.offer_price) > 0)
+          .map((r) => ({
+            country_code: r.country_code,
+            offer_price: Number(r.offer_price),
+            is_active: r.is_active,
+          }));
+        const res = await fetch(
+          `/api/admin/products/${encodeURIComponent(model.id)}/country-prices`,
+          {
+            method: "PUT",
+            credentials: "include",
+            headers: {
+              "content-type": "application/json",
+              ...(token ? { authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ offers: payloadOffers }),
+          }
+        );
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || body.ok === false) {
+          const issues: string[] = Array.isArray(body?.issues) ? body.issues : [];
+          throw new Error(
+            issues.length > 0
+              ? `Country offers: ${issues.join("; ")}`
+              : body?.error || "Failed to save country offers"
+          );
+        }
+      } catch (e: any) {
+        // Re-throw so the outer catch surfaces the toast and the user
+        // knows the offers didn't save — even though the main product
+        // row already updated. Manual re-save will reconcile.
+        throw new Error(e?.message || "Failed to save country offers");
       }
 
       // Invalidate Next.js caches so the public storefront reflects the
@@ -626,6 +746,149 @@ export function AdminProductEditor({ productId }: { productId: string }) {
               <Switch checked={model.is_published} onCheckedChange={(v) => setModel(m => m ? ({...m, is_published: v}) : m)} />
               <span>Published</span>
             </label>
+          </section>
+
+          {/* Country offers ─────────────────────────────────────────
+              Per-country offer price for this product. Resolver order:
+              country offer > legacy sale_price within window > legacy
+              price. A country with no offer set continues to see the
+              legacy fallback — no change. Saved on main product save.
+              MRP reference uses `compare_at_price` above; offers must
+              be > 0 and (if MRP set) < MRP. */}
+          <section className="rounded-md border bg-muted/20 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Globe2 className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Country offers (INR)</h3>
+              {loadingCountryOffers && (
+                <span className="text-xs text-muted-foreground">Loading…</span>
+              )}
+            </div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Set an offer price per country. Empty = no offer, customer in
+              that country sees the regular price.
+              {model.compare_at_price != null && (
+                <> Each offer must be less than the MRP (₹{model.compare_at_price}).</>
+              )}
+            </p>
+
+            <div className="mb-4 flex flex-wrap items-end gap-2">
+              <div>
+                <Label htmlFor="bulk-offer" className="text-xs">
+                  Apply to all enabled countries
+                </Label>
+                <Input
+                  id="bulk-offer"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={bulkOfferPrice}
+                  onChange={(e) => setBulkOfferPrice(e.target.value)}
+                  placeholder="e.g. 2400"
+                  className="w-40"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!bulkOfferPrice}
+                onClick={() => {
+                  const v = bulkOfferPrice.trim();
+                  if (!v) return;
+                  setCountryOffers((rows) =>
+                    rows.map((r) =>
+                      r.is_active ? { ...r, offer_price: v } : r
+                    )
+                  );
+                }}
+              >
+                Apply
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setCountryOffers((rows) =>
+                    rows.map((r) => ({ ...r, offer_price: "" }))
+                  );
+                  setBulkOfferPrice("");
+                }}
+              >
+                Clear all
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {countryOffers.map((row, idx) => {
+                const profile = COUNTRY_PROFILES[row.country_code as keyof typeof COUNTRY_PROFILES];
+                const priceNum = Number(row.offer_price);
+                const mrp = model.compare_at_price ?? null;
+                const overMrp =
+                  row.offer_price !== "" &&
+                  Number.isFinite(priceNum) &&
+                  mrp != null &&
+                  priceNum >= Number(mrp);
+                const notPositive =
+                  row.offer_price !== "" &&
+                  (!Number.isFinite(priceNum) || priceNum <= 0);
+                const hasError = overMrp || notPositive;
+                return (
+                  <div
+                    key={row.country_code}
+                    className={`flex items-center gap-2 rounded-md border bg-background p-2 ${
+                      hasError ? "border-red-300" : ""
+                    }`}
+                  >
+                    <span className="w-8 text-center text-lg" aria-hidden>
+                      {profile?.flag ?? "🏳️"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">
+                        {profile?.name ?? row.country_code}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {row.country_code}
+                      </div>
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={row.offer_price}
+                      placeholder="—"
+                      className="w-28"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setCountryOffers((rows) => {
+                          const next = rows.slice();
+                          next[idx] = { ...next[idx], offer_price: v };
+                          return next;
+                        });
+                      }}
+                    />
+                    <label className="flex items-center gap-1 text-xs">
+                      <Switch
+                        checked={row.is_active}
+                        onCheckedChange={(v) =>
+                          setCountryOffers((rows) => {
+                            const next = rows.slice();
+                            next[idx] = { ...next[idx], is_active: v };
+                            return next;
+                          })
+                        }
+                      />
+                      <span>Active</span>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              Saved when you click <strong>Save</strong> above. Cleared rows are
+              removed from the database.
+            </p>
           </section>
 
           {/* Badges */}

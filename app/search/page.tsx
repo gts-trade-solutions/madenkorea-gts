@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { getTranslations, getLocale } from 'next-intl/server';
 import { CustomerLayout } from '@/components/CustomerLayout';
 import { ProductCard } from '@/components/ProductCard';
 import { createClient } from '@supabase/supabase-js';
+import { isSupportedCountry, DEFAULT_COUNTRY } from '@/lib/countries';
+import { augmentProductsWithCountryOffers } from '@/lib/pricing';
 import {
   mergeTranslations,
   PRODUCT_TRANSLATABLE_FIELDS,
@@ -133,7 +136,23 @@ export default async function SearchPage({
   }
 
   const locale = await getLocale();
-  const searchResults = await searchProducts(trimmedQuery, locale);
+  const rawResults = await searchProducts(trimmedQuery, locale);
+
+  // Phase 1 country offers — attach effective_price for the visitor's
+  // country so search results display country-specific prices.
+  const cookieCountry = cookies().get('mik_country')?.value;
+  const country = isSupportedCountry(cookieCountry)
+    ? cookieCountry
+    : DEFAULT_COUNTRY;
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+  const searchResults = await augmentProductsWithCountryOffers(
+    rawResults,
+    country,
+    supabase
+  );
   const hasNoResults = searchResults.length === 0;
   const t = await getTranslations('searchPage');
 

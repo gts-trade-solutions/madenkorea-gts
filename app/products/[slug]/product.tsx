@@ -77,6 +77,23 @@ import { ProductStorySection } from "@/components/products/ProductStorySection";
 import { MobileBuyBar } from "@/components/products/MobileBuyBar";
 import type { StoryBlock } from "@/lib/types/productStory";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  fetchCountryOffers,
+  effectivePriceForCountry,
+  augmentProductsWithCountryOffers,
+} from "@/lib/pricing";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+
+// Read `mik_country` from document.cookie at call-time. Client-only;
+// SSR variant lives at `cookies().get(...)` in the server page.
+function readCountryFromCookie(): string {
+  if (typeof document === "undefined") return DEFAULT_COUNTRY;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("mik_country="));
+  const raw = match ? decodeURIComponent(match.split("=")[1] ?? "") : "";
+  return isSupportedCountry(raw) ? raw : DEFAULT_COUNTRY;
+}
 
 type Brand = { name?: string | null; slug?: string | null };
 // Vendor disclosure shape — legal_name + gstin + address are required by
@@ -583,6 +600,30 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
     };
   }, [slug]);
 
+  // Phase 1 country-specific offer for this product. Resolved after
+  // the main product fetch via a separate query keyed on the visitor's
+  // mik_country cookie. null = no country offer set → fall through to
+  // legacy sale_price/price.
+  const [countryOfferPrice, setCountryOfferPrice] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!product?.id) {
+        if (!cancelled) setCountryOfferPrice(null);
+        return;
+      }
+      const country = readCountryFromCookie();
+      const offers = await fetchCountryOffers([product.id], country, supabase);
+      if (cancelled) return;
+      setCountryOfferPrice(
+        offers[product.id] != null ? Number(offers[product.id]) : null
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [product?.id]);
+
   // Compute pricing
   const now = useMemo(() => new Date(), []);
   const saleActive =
@@ -595,11 +636,15 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
       : false;
 
   const effectivePrice = useMemo(
-    () =>
-      saleActive && product?.sale_price != null
+    () => {
+      // Country offer wins. Otherwise fall through to legacy
+      // sale_price-within-window or list price.
+      if (countryOfferPrice != null) return countryOfferPrice;
+      return saleActive && product?.sale_price != null
         ? product.sale_price
-        : product?.price ?? null,
-    [saleActive, product?.sale_price, product?.price]
+        : product?.price ?? null;
+    },
+    [countryOfferPrice, saleActive, product?.sale_price, product?.price]
   );
 
   const discount = useMemo(() => {
@@ -919,7 +964,18 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
         .limit(8);
 
       if (cancelled) return;
-      setRelated((data ?? []) as Product[]);
+
+      // Phase 1: augment related products with their country-specific
+      // effective prices so the related-products carousel shows the
+      // right price for the visitor's country.
+      const country = readCountryFromCookie();
+      const augmented = await augmentProductsWithCountryOffers(
+        (data ?? []) as Product[],
+        country,
+        supabase
+      );
+      if (cancelled) return;
+      setRelated(augmented as Product[]);
     }
     run();
     return () => {

@@ -18,6 +18,17 @@ import { toast } from "sonner";
 import { ProductCard } from "@/components/ProductCard";
 import { supabase } from "@/lib/supabaseClient";
 import AccountMembershipCard from "@/components/AccountMembershipCard";
+import { augmentProductsWithCountryOffers } from "@/lib/pricing";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+
+function readCountryFromCookie(): string {
+  if (typeof document === "undefined") return DEFAULT_COUNTRY;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("mik_country="));
+  const raw = match ? decodeURIComponent(match.split("=")[1] ?? "") : "";
+  return isSupportedCountry(raw) ? raw : DEFAULT_COUNTRY;
+}
 
 type DbProduct = {
   id: string;
@@ -83,8 +94,17 @@ export default function AccountPage() {
           ...p,
           hero_image_url: storagePublicUrl(p.hero_image_path) ?? undefined,
         })) as any[];
+
+        // Phase 1 country offers — recently-viewed shows the same
+        // country-aware prices as the rest of the storefront.
+        const augmented = await augmentProductsWithCountryOffers(
+          items,
+          readCountryFromCookie(),
+          supabase
+        );
+
         // keep the same order as viewed
-        const map = new Map(items.map((i) => [i.id, i]));
+        const map = new Map(augmented.map((i: any) => [i.id, i]));
         setRecentlyViewed(
           viewedIds.map((id) => map.get(id)).filter(Boolean) as any[]
         );

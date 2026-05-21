@@ -46,7 +46,9 @@ type Profile = {
   phone?: string | null;
   avatar_url?: string | null;
   created_at?: string | null;
-  email?: string | null; // reserved if you later join email in a view
+  // Email lives on auth.users, fetched via /api/admin/users/lookup
+  // and merged into this map after the profiles query resolves.
+  email?: string | null;
 };
 
 type PayoutRow = {
@@ -113,7 +115,7 @@ export default function AdminInfluencersPage() {
   const [pRefreshKey, setPRefreshKey] = useState(0);
   const [payouts, setPayouts] = useState<PayoutRow[]>([]);
   const [influencerMap, setInfluencerMap] = useState<
-    Record<string, { name: string; handle?: string | null }>
+    Record<string, { name: string; handle?: string | null; email?: string | null }>
   >({});
   const [noteEditing, setNoteEditing] = useState<{ id: string; note: string } | null>(
     null
@@ -178,21 +180,48 @@ export default function AdminInfluencersPage() {
 
       const ids = Array.from(new Set(reqs.map((r) => r.user_id)));
       if (ids.length) {
-        const { data: profs, error: profErr } = await supabase
-          .from('profiles')
-          // pull more profile fields so the modal can show richer info
-          .select('id, full_name, role, phone, avatar_url, created_at')
-          .in('id', ids);
+        // Profiles + email lookup run in parallel — emails come from
+        // auth.users which only the service-role admin endpoint can
+        // read. Without this the User column shows only name (often
+        // null) + a truncated uuid.
+        const [profResp, emailResp] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, full_name, role, phone, avatar_url, created_at')
+            .in('id', ids),
+          fetchUserMetaMap(ids),
+        ]);
 
-        if (profErr) {
+        if (profResp.error) {
           setLoading(false);
-          toast.error(profErr.message);
+          toast.error(profResp.error.message);
           return;
         }
 
         const map: Record<string, Profile> = {};
-        (profs ?? []).forEach((p) => {
-          map[p.id as string] = p as Profile;
+        (profResp.data ?? []).forEach((p) => {
+          const meta = emailResp[p.id as string];
+          map[p.id as string] = {
+            ...(p as Profile),
+            email: meta?.email ?? null,
+          };
+        });
+        // Some requests may not have a corresponding profiles row yet
+        // (rare, but seen on accounts that signed up before the
+        // profile trigger existed). Surface them anyway with whatever
+        // auth metadata we got.
+        ids.forEach((id) => {
+          if (!map[id] && emailResp[id]) {
+            map[id] = {
+              id,
+              full_name: emailResp[id].full_name ?? null,
+              role: (emailResp[id].role as Profile['role']) ?? 'customer',
+              phone: null,
+              avatar_url: null,
+              created_at: emailResp[id].created_at ?? null,
+              email: emailResp[id].email ?? null,
+            };
+          }
         });
         setProfiles(map);
       } else {
@@ -213,6 +242,7 @@ export default function AdminInfluencersPage() {
         (r.handle || '').toLowerCase().includes(q) ||
         (r.note || '').toLowerCase().includes(q) ||
         (p?.full_name || '').toLowerCase().includes(q) ||
+        (p?.email || '').toLowerCase().includes(q) ||
         (r.user_id || '').toLowerCase().includes(q)
       );
     });
@@ -418,24 +448,35 @@ export default function AdminInfluencersPage() {
       const rows = (data ?? []) as PayoutRow[];
       setPayouts(rows);
 
-      // 2) Hydrate influencer name/handle
+      // 2) Hydrate influencer name/handle/email in parallel. Email
+      //    needs the admin lookup endpoint (auth.users isn't readable
+      //    from the client); profiles + handles come from the regular
+      //    Supabase client.
       const ids = Array.from(new Set(rows.map((r) => r.influencer_id)));
-      const map: Record<string, { name: string; handle?: string | null }> = {};
+      const map: Record<string, { name: string; handle?: string | null; email?: string | null }> = {};
       if (ids.length) {
-        const { data: profs } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', ids);
-        (profs ?? []).forEach((p: any) => {
+        const [profResp, inflResp, emailResp] = await Promise.all([
+          supabase.from('profiles').select('id, full_name').in('id', ids),
+          supabase
+            .from('influencer_profiles')
+            .select('user_id, handle')
+            .in('user_id', ids),
+          fetchUserMetaMap(ids),
+        ]);
+
+        (profResp.data ?? []).forEach((p: any) => {
           map[p.id] = { name: p.full_name || '—' };
         });
-
-        const { data: infls } = await supabase
-          .from('influencer_profiles')
-          .select('user_id, handle')
-          .in('user_id', ids);
-        (infls ?? []).forEach((ip: any) => {
+        (inflResp.data ?? []).forEach((ip: any) => {
           map[ip.user_id] = { ...(map[ip.user_id] || { name: '—' }), handle: ip.handle };
+        });
+        ids.forEach((id) => {
+          const meta = emailResp[id];
+          if (!meta) return;
+          map[id] = {
+            ...(map[id] || { name: meta.full_name || '—' }),
+            email: meta.email ?? null,
+          };
         });
       }
       setInfluencerMap(map);
@@ -449,7 +490,7 @@ export default function AdminInfluencersPage() {
       if (pFilter !== 'all' && r.status !== pFilter) return false;
       if (!q) return true;
       const who = influencerMap[r.influencer_id];
-      const inString = `${who?.name || ''} ${who?.handle || ''} ${r.id} ${
+      const inString = `${who?.name || ''} ${who?.handle || ''} ${who?.email || ''} ${r.id} ${
         r.influencer_id
       } ${r.notes || ''}`.toLowerCase();
       return inString.includes(q);
@@ -609,7 +650,7 @@ export default function AdminInfluencersPage() {
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search handle, name, note, user id…"
+                    placeholder="Search handle, name, email, note, user id…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="pl-10"
@@ -673,8 +714,12 @@ export default function AdminInfluencersPage() {
                           <TableRow key={r.id}>
                             <TableCell className="font-medium">
                               <div>{p?.full_name || '—'}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {r.user_id.slice(0, 8)}…{r.user_id.slice(-4)}
+                              <div className="text-xs text-muted-foreground break-all">
+                                {p?.email || (
+                                  <span>
+                                    {r.user_id.slice(0, 8)}…{r.user_id.slice(-4)}
+                                  </span>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -756,7 +801,7 @@ export default function AdminInfluencersPage() {
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search name, handle, payout id, user id, note…"
+                    placeholder="Search name, handle, email, payout id, user id, note…"
                     value={pSearch}
                     onChange={(e) => setPSearch(e.target.value)}
                     className="pl-10"
@@ -821,10 +866,9 @@ export default function AdminInfluencersPage() {
                                 <Wallet className="h-4 w-4 text-muted-foreground" />
                                 <div>
                                   <div>{who?.name || '—'}</div>
-                                  <div className="text-xs text-muted-foreground">
-                                    @{who?.handle || '—'} •{' '}
-                                    {r.influencer_id.slice(0, 6)}…
-                                    {r.influencer_id.slice(-4)}
+                                  <div className="text-xs text-muted-foreground break-all">
+                                    @{who?.handle || '—'}
+                                    {who?.email ? ` • ${who.email}` : ''}
                                   </div>
                                 </div>
                               </div>
@@ -1000,6 +1044,13 @@ export default function AdminInfluencersPage() {
                     {viewing.profile?.role || '—'}
                   </p>
                 </div>
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Email</p>
+                <p className="font-medium break-all">
+                  {viewing.profile?.email || '—'}
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1261,6 +1312,39 @@ function CapSettingsModal({
 }
 
 /* ---------- Helpers ---------- */
+
+// Bulk-fetch auth.users metadata (email, role, full_name) for a set
+// of user ids via the admin-only lookup endpoint. Service-role is
+// required to read auth.users, so this can't be done with the
+// browser anon client. Returns an empty map on any error — callers
+// fall back to whatever profile data they already have.
+type UserMeta = {
+  email: string | null;
+  full_name: string | null;
+  role: string | null;
+  created_at: string | null;
+};
+async function fetchUserMetaMap(ids: string[]): Promise<Record<string, UserMeta>> {
+  if (ids.length === 0) return {};
+  try {
+    const { data: s } = await supabase.auth.getSession();
+    const token = s?.session?.access_token;
+    const res = await fetch(
+      `/api/admin/users/lookup?ids=${encodeURIComponent(ids.join(','))}`,
+      {
+        credentials: 'include',
+        cache: 'no-store',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      }
+    );
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) return {};
+    return (body.users ?? {}) as Record<string, UserMeta>;
+  } catch {
+    return {};
+  }
+}
+
 function toINR(n: number, currency?: string | null) {
   const code = (currency || 'INR').toUpperCase();
   try {

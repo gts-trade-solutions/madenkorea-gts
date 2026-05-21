@@ -18,6 +18,7 @@ import {
   PRODUCT_TRANSLATABLE_FIELDS,
 } from "@/lib/contentTranslations";
 import { getHomeVideoLimit } from "@/lib/storeSettings";
+import { augmentProductsWithCountryOffers } from "@/lib/pricing";
 import type { Metadata } from "next";
 
 const SITE_URL = "https://madenkorea.com";
@@ -117,6 +118,7 @@ type CardProduct = {
   sale_price?: number | null;
   sale_starts_at?: string | null;
   sale_ends_at?: string | null;
+  effective_price?: number | null; // Phase 1 country-aware offer
   is_featured?: boolean | null;
   is_trending?: boolean | null;
   new_until?: string | null;
@@ -133,6 +135,7 @@ type CardProduct = {
 async function fetchEditorial(
   kind: "featured" | "trending",
   locale: string,
+  country: string,
   limit = 8
 ): Promise<CardProduct[]> {
   const supabase = supabaseServer();
@@ -179,10 +182,19 @@ async function fetchEditorial(
     PRODUCT_TRANSLATABLE_FIELDS,
     "product_translations"
   );
-  return translated.map((p) => ({
+  const withImages = translated.map((p) => ({
     ...p,
     hero_image_url: storagePublicUrl(p.hero_image_path) ?? undefined,
   })) as CardProduct[];
+
+  // Phase 1 country offers — augment with country-specific
+  // effective_price so the card surfaces the right price for the
+  // visitor without each card doing its own lookup.
+  return await augmentProductsWithCountryOffers(
+    withImages,
+    country,
+    supabase
+  );
 }
 
 export default async function Home() {
@@ -206,8 +218,8 @@ export default async function Home() {
     getBanners("home", country),
     getBrandsForCarousel("site-assets"),
     getInfluencerVideos("home", 12),
-    fetchEditorial("trending", locale, 8),
-    fetchEditorial("featured", locale, 8),
+    fetchEditorial("trending", locale, country, 8),
+    fetchEditorial("featured", locale, country, 8),
     // Admin-configurable cap for the product-video carousel. Stored in
     // `store_settings.home_video_limit`, editable from
     // /admin/cms/product-video. Read in parallel with the rest of the

@@ -26,6 +26,14 @@ type ProductForCard = {
   sale_starts_at?: string | null;
   sale_ends_at?: string | null;
 
+  // Phase 1 (country offers): when the caller has resolved the
+  // visitor's country-specific offer price ahead of time, it sets
+  // this. The card uses it verbatim — no further sale_price/price
+  // resolution. When undefined the card falls back to the legacy
+  // sale_price-within-window-or-price logic (identical to pre-Phase
+  // 1 behavior). See lib/pricing.ts.
+  effective_price?: number | null;
+
   is_featured?: boolean | null;
   is_trending?: boolean | null;
   is_bundle?: boolean | null;
@@ -136,11 +144,16 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
   }, [product.sale_price, product.sale_starts_at, product.sale_ends_at]);
 
   const effectivePrice = useMemo(
-    () =>
-      saleActive && product.sale_price != null
+    () => {
+      // Country-aware override from upstream resolution (see
+      // lib/pricing.augmentProductsWithCountryOffers). Wins over the
+      // legacy sale_price/price resolution when set.
+      if (product.effective_price != null) return product.effective_price;
+      return saleActive && product.sale_price != null
         ? product.sale_price
-        : product.price ?? null,
-    [saleActive, product.sale_price, product.price]
+        : product.price ?? null;
+    },
+    [product.effective_price, saleActive, product.sale_price, product.price]
   );
 
   const discountPct = useMemo(() => {

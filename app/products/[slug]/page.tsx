@@ -3,12 +3,15 @@ export const revalidate = 300;
 
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 import { unstable_cache } from 'next/cache';
 import ProductPage from './product';
 import type { StoryBlock } from '@/lib/types/productStory';
 import { DELIVERY_THRESHOLD, DEFAULT_SHIPPING_FEE } from '@/lib/membership';
 import { BreadcrumbJsonLd, type BreadcrumbCrumb } from '@/components/BreadcrumbJsonLd';
+import { isSupportedCountry, DEFAULT_COUNTRY } from '@/lib/countries';
+import { fetchCountryOffers, effectivePriceForCountry } from '@/lib/pricing';
 
 const STORY_SELECT_COLUMNS =
   'id, product_id, position, block_type, size, mode, headline, body, text_position, text_color, text_bg, text_size, text_weight, caption_mode, caption_backdrop, split_direction, image_path, image_alt, image_focal_x, image_focal_y, image_fit, image_zoom, image_bg, caption, stats_items, before_image_path, after_image_path, comparison_caption, created_at, updated_at';
@@ -238,7 +241,32 @@ export default async function Page({
     prod.short_description ??
     (prod.description ? prod.description.slice(0, 160) : undefined);
   const currency = (prod.currency ?? 'INR').toUpperCase();
-  const finalPrice = prod.sale_price ?? prod.price;
+
+  // Phase 1 country offers — resolve the visitor's country-specific
+  // offer (if any) and use it as the canonical price for JSON-LD and
+  // the price snapshot we pass to <ProductPage />. Falls through to
+  // sale_price / price when the country has no offer set.
+  const cookieCountry = cookies().get('mik_country')?.value;
+  const countryForPricing = isSupportedCountry(cookieCountry)
+    ? cookieCountry
+    : DEFAULT_COUNTRY;
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+  const countryOffers = prod.id
+    ? await fetchCountryOffers([prod.id], countryForPricing, supabase)
+    : {};
+  const finalPrice = effectivePriceForCountry(
+    {
+      id: prod.id,
+      price: prod.price,
+      sale_price: prod.sale_price,
+      sale_starts_at: prod.sale_starts_at,
+      sale_ends_at: prod.sale_ends_at,
+    },
+    countryOffers
+  );
   const inStock = (prod.stock_qty ?? 0) > 0;
 
   // priceValidUntil — prefer the active sale_ends_at if it's in the

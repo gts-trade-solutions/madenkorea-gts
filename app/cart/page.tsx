@@ -31,6 +31,17 @@ import { useShippingConfig } from "@/lib/hooks/useShippingConfig";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import Image from "next/image";
+import { fetchCountryOffers } from "@/lib/pricing";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+
+function readCountryFromCookie(): string {
+  if (typeof document === "undefined") return DEFAULT_COUNTRY;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("mik_country="));
+  const raw = match ? decodeURIComponent(match.split("=")[1] ?? "") : "";
+  return isSupportedCountry(raw) ? raw : DEFAULT_COUNTRY;
+}
 
 type ProductRow = {
   id: string;
@@ -46,6 +57,10 @@ type ProductRow = {
   hero_image_path: string | null;
   brands?: { name?: string | null } | null;
   hero_image_url?: string | null;
+  // Phase 1 country offer override. Set by the cart's
+  // augmentation step; takes precedence over sale_price/price in
+  // the local effectiveUnitPrice resolver below.
+  effective_price?: number | null;
 };
 
 type CartLine = { product_id: string; qty: number };
@@ -104,6 +119,10 @@ function isSaleActive(start?: string | null, end?: string | null) {
 }
 
 function effectiveUnitPrice(p: ProductRow) {
+  // Country offer (Phase 1) wins over the legacy sale_price/price
+  // resolution. Augmentation in the cart's useEffect attaches
+  // effective_price for items the visitor's country has an offer on.
+  if (p.effective_price != null) return Number(p.effective_price);
   const saleOk =
     p.sale_price != null && isSaleActive(p.sale_starts_at, p.sale_ends_at);
   return saleOk && p.sale_price != null ? p.sale_price : (p.price ?? 0);
@@ -237,30 +256,41 @@ export default function CartPage() {
     };
   }, [isAuthenticated]);
 
+  // Phase 1 country-offer map for the cart. Keyed by product id ->
+  // offer_price (INR). Empty entry means no offer for that product in
+  // the visitor's country — falls through to legacy sale_price/price
+  // logic in `effectiveUnitPrice`.
+  const [cartCountryOffers, setCartCountryOffers] = useState<Record<string, number>>({});
+
   useEffect(() => {
     if (!cartReady) return;
     const ids = Array.from(new Set(items.map((i) => i.product_id)));
     if (ids.length === 0) {
       setGuestProducts({});
+      setCartCountryOffers({});
       return;
     }
 
     (async () => {
-      const { data, error } = await supabase
-        .from("products")
-        .select(
-          `
-          id, slug, name, price, currency,
-          is_published,
-          compare_at_price, sale_price, sale_starts_at, sale_ends_at,
-          hero_image_path, brands(name)
-        `,
-        )
-        .in("id", ids);
+      const [{ data, error }, offers] = await Promise.all([
+        supabase
+          .from("products")
+          .select(
+            `
+            id, slug, name, price, currency,
+            is_published,
+            compare_at_price, sale_price, sale_starts_at, sale_ends_at,
+            hero_image_path, brands(name)
+          `,
+          )
+          .in("id", ids),
+        fetchCountryOffers(ids, readCountryFromCookie(), supabase),
+      ]);
 
       if (error) {
         console.error(error);
         setGuestProducts({});
+        setCartCountryOffers({});
         return;
       }
 
@@ -273,20 +303,32 @@ export default function CartPage() {
       });
 
       setGuestProducts(map);
+      setCartCountryOffers(offers);
     })();
   }, [cartReady, items]);
 
   const rows = useMemo(() => {
     return items
       .map((it) => {
+        // Attach the visitor's country-offer override (if any). The
+        // effectiveUnitPrice resolver prefers `effective_price` over
+        // sale_price/price, so this single field controls the cart
+        // line price for both the server-cart and guest-cart paths.
+        const countryOffer = cartCountryOffers[it.product_id];
         const p: ProductRow | undefined = (it as any).product
           ? {
               ...(it as any).product,
               hero_image_url: storagePublicUrl(
                 (it as any).product.hero_image_path,
               ),
+              effective_price: countryOffer ?? null,
             }
-          : guestProducts[it.product_id];
+          : guestProducts[it.product_id]
+            ? {
+                ...guestProducts[it.product_id],
+                effective_price: countryOffer ?? null,
+              }
+            : undefined;
 
         if (!p) {
           return {
@@ -341,7 +383,7 @@ export default function CartPage() {
       mrp: number | null;
       unavailable: boolean;
     }[];
-  }, [items, guestProducts]);
+  }, [items, guestProducts, cartCountryOffers]);
 
   const unavailableCount = rows.filter((r) => r.unavailable).length;
   const availableRows = rows.filter((r) => !r.unavailable);

@@ -1,5 +1,6 @@
 ﻿// app/brands/[slug]/page.tsx
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 import { getTranslations, getLocale } from "next-intl/server";
@@ -7,6 +8,8 @@ import { CustomerLayout } from "@/components/CustomerLayout";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductFilters } from "@/components/ProductFilters";
 import { BreadcrumbJsonLd } from "@/components/BreadcrumbJsonLd";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+import { augmentProductsWithCountryOffers } from "@/lib/pricing";
 import {
   mergeTranslation,
   mergeTranslations,
@@ -162,17 +165,29 @@ export default async function BrandPage({
     PRODUCT_TRANSLATABLE_FIELDS,
     "product_translations"
   );
-  const items = translated.map((p) => ({
+  const withImages = translated.map((p) => ({
     ...p,
     hero_image_url: storagePublicUrl(p.hero_image_path) ?? undefined,
   })) as ProductRow[];
+
+  // Phase 1 country offers — see same comment in app/c/[slug]/page.tsx
+  const cookieCountry = cookies().get("mik_country")?.value;
+  const country = isSupportedCountry(cookieCountry)
+    ? cookieCountry
+    : DEFAULT_COUNTRY;
+  const items = await augmentProductsWithCountryOffers(
+    withImages,
+    country,
+    supabase
+  );
 
   const selectedSort = searchParams?.sort || "newest";
   const selectedPrice = searchParams?.price || "all";
   const inStockOnly = searchParams?.in_stock === "1";
 
   const filteredItems = items.filter((p) => {
-    const effectivePrice = p.sale_price ?? p.price ?? 0;
+    const effectivePrice =
+      (p as any).effective_price ?? p.sale_price ?? p.price ?? 0;
     const passPrice =
       selectedPrice === "all"
         ? true
@@ -188,8 +203,8 @@ export default async function BrandPage({
   });
 
   const sortedItems = filteredItems.slice().sort((a, b) => {
-    const aPrice = a.sale_price ?? a.price ?? 0;
-    const bPrice = b.sale_price ?? b.price ?? 0;
+    const aPrice = (a as any).effective_price ?? a.sale_price ?? a.price ?? 0;
+    const bPrice = (b as any).effective_price ?? b.sale_price ?? b.price ?? 0;
     if (selectedSort === "price_asc") return aPrice - bPrice;
     if (selectedSort === "price_desc") return bPrice - aPrice;
     if (selectedSort === "popular") {
