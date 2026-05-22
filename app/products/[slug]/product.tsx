@@ -769,6 +769,19 @@ export default function ProductPage({
   // the matching thumbnail to be visible in the horizontal strip below.
   // Without this, swiping to image 5 leaves the strip still showing
   // images 1–4 highlighted-but-offscreen.
+  //
+  // IMPORTANT: we do NOT use `element.scrollIntoView()` here.
+  // `scrollIntoView` walks up the scroll-ancestor chain and scrolls
+  // EVERY container (including the document/window) so the element
+  // ends up in view. On smaller laptops the active thumb is just
+  // below the viewport fold on first paint, which made the window
+  // auto-scroll a few hundred pixels right after the PDP loaded — a
+  // jarring "page jumped on me" effect. On large screens the thumb
+  // was already in view, so the bug was invisible.
+  //
+  // Instead we compute the strip's own scrollLeft directly. That
+  // moves the thumbs horizontally inside their own container without
+  // touching the window.
   const thumbStripRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const container = thumbStripRef.current;
@@ -777,13 +790,21 @@ export default function ProductPage({
       '[data-thumb-active="true"]'
     );
     if (!active) return;
-    // `inline: "nearest"` keeps the thumb visible with minimal jump —
-    // we don't yank it to the centre unless it's actually off-screen.
-    active.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest",
-      inline: "nearest",
-    });
+
+    // Skip if the thumb is already fully visible inside the strip —
+    // no scroll needed.
+    const activeLeft = active.offsetLeft;
+    const activeRight = activeLeft + active.offsetWidth;
+    const viewLeft = container.scrollLeft;
+    const viewRight = viewLeft + container.clientWidth;
+    if (activeLeft >= viewLeft && activeRight <= viewRight) return;
+
+    // Center the active thumb in the strip when it's off-screen.
+    const targetLeft = Math.max(
+      0,
+      activeLeft - (container.clientWidth - active.offsetWidth) / 2
+    );
+    container.scrollTo({ left: targetLeft, behavior: "smooth" });
   }, [selectedImage]);
 
   // ── Mobile swipe between gallery items ──────────────────────────────
@@ -1390,18 +1411,26 @@ export default function ProductPage({
     el.scrollBy({ left: dx, behavior: "smooth" });
   }
 
-  // When a tab is chosen, scroll it into view (center-ish)
+  // When a tab is chosen, center it in the tabs strip. Manual
+  // scrollLeft to avoid `scrollIntoView` walking up to the window
+  // (same reason as the thumb strip effect above).
   function onChangeTab(v: string) {
     setTabValue(v);
     const el = tabBtnRefs.current[v];
     const strip = tabsStripRef.current;
-    if (el && strip) {
-      el.scrollIntoView({
-        behavior: "smooth",
-        inline: "center",
-        block: "nearest",
-      });
-    }
+    if (!el || !strip) return;
+
+    const elLeft = el.offsetLeft;
+    const elRight = elLeft + el.offsetWidth;
+    const viewLeft = strip.scrollLeft;
+    const viewRight = viewLeft + strip.clientWidth;
+    if (elLeft >= viewLeft && elRight <= viewRight) return;
+
+    const targetLeft = Math.max(
+      0,
+      elLeft - (strip.clientWidth - el.offsetWidth) / 2
+    );
+    strip.scrollTo({ left: targetLeft, behavior: "smooth" });
   }
 
   return (
@@ -1451,7 +1480,7 @@ export default function ProductPage({
               {/* GALLERY */}
               <div>
                 <div
-                  className={`relative aspect-square mb-4 rounded-lg overflow-hidden group touch-pan-y select-none ${
+                  className={`relative aspect-square mb-4 rounded-lg overflow-hidden group touch-pan-y select-none mx-auto max-h-[calc(100vh-280px)] max-w-[calc(100vh-280px)] ${
                     !isVideoSelected ? "cursor-zoom-in" : ""
                   }`}
                   onClick={() => {
