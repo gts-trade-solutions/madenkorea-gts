@@ -30,6 +30,53 @@ const STORAGE_BUCKET = "site-assets";
 const PUBLIC_URL = (path: string) =>
   supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path).data.publicUrl;
 
+// Upload via XMLHttpRequest so we can stream the byte count back as
+// progress events. The supabase-js storage client uses `fetch`, which
+// doesn't expose upload progress in browsers. Hitting Supabase's REST
+// storage endpoint directly with the user's session token bypasses
+// that limitation while still going through the same RLS policies.
+function uploadWithProgress(opts: {
+  bucket: string;
+  path: string;
+  file: File;
+  accessToken: string;
+  upsert?: boolean;
+  onProgress?: (pct: number) => void;
+}): Promise<{ error?: string }> {
+  return new Promise((resolve) => {
+    const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/${opts.bucket}/${opts.path}`;
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.setRequestHeader("Authorization", `Bearer ${opts.accessToken}`);
+    xhr.setRequestHeader("apikey", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
+    xhr.setRequestHeader(
+      "Content-Type",
+      opts.file.type || "application/octet-stream"
+    );
+    xhr.setRequestHeader("Cache-Control", "max-age=31536000");
+    if (opts.upsert) xhr.setRequestHeader("x-upsert", "true");
+
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable || !opts.onProgress) return;
+      opts.onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve({});
+      } else {
+        let msg = `${xhr.status} ${xhr.statusText}`;
+        try {
+          const parsed = JSON.parse(xhr.responseText);
+          if (parsed?.message) msg = parsed.message;
+        } catch {}
+        resolve({ error: msg });
+      }
+    };
+    xhr.onerror = () => resolve({ error: "Network error during upload" });
+    xhr.send(opts.file);
+  });
+}
+
 export default function KPartnershipVideosAdminPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
@@ -40,6 +87,12 @@ export default function KPartnershipVideosAdminPage() {
   const [loading, setLoading] = useState(true);
   const [savingDefault, setSavingDefault] = useState(false);
   const [busyCountry, setBusyCountry] = useState<string | null>(null);
+  // 0..100 while uploading, null when idle. Lives per-country so two
+  // simultaneous uploads (which we don't gate but the UI allows) each
+  // show their own bar.
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>(
+    {}
+  );
 
   // Gate: admin only
   useEffect(() => {
@@ -101,29 +154,84 @@ export default function KPartnershipVideosAdminPage() {
     if (ready && isAdmin) void load();
   }, [ready, isAdmin]);
 
+  // Client-side size cap. The HTML5 player streams progressively but
+  // the original file still has to download fully on the first edge
+  // cache miss — anything bigger than ~100 MB starts to drag on mobile
+  // connections. Matches the comment originally on the server.
+  const MAX_BYTES = 100 * 1024 * 1024;
+
   const uploadFor = async (country: string, file: File) => {
+    if (file.size > MAX_BYTES) {
+      toast.error(
+        `File is ${(file.size / 1024 / 1024).toFixed(1)} MB — max is 100 MB.`
+      );
+      return;
+    }
     setBusyCountry(country);
+    setUploadProgress((p) => ({ ...p, [country]: 0 }));
     try {
+      // Resolve session token first — needed for the direct-to-storage
+      // XHR call below.
       const { data: s } = await supabase.auth.getSession();
       const token = s?.session?.access_token;
-      const fd = new FormData();
-      fd.append("country_code", country);
-      fd.append("file", file);
+      if (!token) {
+        toast.error("Session expired — please sign in again");
+        return;
+      }
+
+      const ext = (() => {
+        const m = (file.type || "").toLowerCase();
+        if (m.includes("webm")) return "webm";
+        if (m.includes("ogg")) return "ogg";
+        return "mp4";
+      })();
+      const path = `k-partnership/${country.toLowerCase()}.${ext}`;
+
+      // Step 1: upload directly to Supabase storage with XHR so the
+      // browser surfaces upload progress. RLS on storage.objects
+      // already permits authenticated INSERT to `site-assets`. Going
+      // direct also avoids the Netlify function's ~6 MB body cap that
+      // was producing the earlier 500.
+      const upRes = await uploadWithProgress({
+        bucket: STORAGE_BUCKET,
+        path,
+        file,
+        accessToken: token,
+        upsert: true,
+        onProgress: (pct) =>
+          setUploadProgress((p) => ({ ...p, [country]: pct })),
+      });
+      if (upRes.error) {
+        toast.error(upRes.error || "Storage upload failed");
+        return;
+      }
+
+      // Step 2: tell our admin API about the new path so it can
+      // upsert the table row. Body is JSON (tiny), well under any
+      // function limit.
       const res = await fetch("/api/admin/k-partnership-videos", {
         method: "POST",
         credentials: "include",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        body: fd,
+        headers: {
+          "content-type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ country_code: country, storage_path: path }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body.ok) {
-        toast.error(body?.error || "Upload failed");
+        toast.error(body?.error || "Failed to register video");
         return;
       }
       toast.success(`Uploaded ${COUNTRY_PROFILES[country as CountryCode]?.name}`);
       await load();
     } finally {
       setBusyCountry(null);
+      setUploadProgress((p) => {
+        const next = { ...p };
+        delete next[country];
+        return next;
+      });
     }
   };
 
@@ -242,10 +350,25 @@ export default function KPartnershipVideosAdminPage() {
         <Card>
           <CardHeader>
             <CardTitle>Videos by country</CardTitle>
-            <CardDescription>
-              One video per country, max 100 MB. MP4 / WebM recommended.
-              The customer-facing player uses the first frame as the
-              poster.
+            <CardDescription className="space-y-1">
+              <p>
+                One video per country. MP4 (H.264) preferred; WebM and Ogg
+                also work. The customer-facing player uses the first frame
+                as the poster image.
+              </p>
+              <p className="font-medium text-foreground/80">
+                Recommended size for smooth playback:{" "}
+                <span className="text-emerald-700">under 15 MB</span>{" "}
+                <span className="text-muted-foreground">
+                  (30-60s clip at 720p, ~2-3 Mbps bitrate)
+                </span>
+              </p>
+              <p>
+                Hard limit: <strong>100 MB</strong>. Larger files load
+                slowly on mobile connections even after the CDN warms up
+                — visitors will see a long initial buffer before playback
+                starts.
+              </p>
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -269,6 +392,7 @@ export default function KPartnershipVideosAdminPage() {
                       video={row}
                       isDefault={isDefault}
                       busy={busyCountry === code}
+                      progress={uploadProgress[code]}
                       onUpload={(file) => uploadFor(code, file)}
                       onRemove={() => removeFor(code)}
                     />
@@ -290,6 +414,7 @@ function CountryRow({
   video,
   isDefault,
   busy,
+  progress,
   onUpload,
   onRemove,
 }: {
@@ -299,10 +424,12 @@ function CountryRow({
   video?: VideoRow;
   isDefault: boolean;
   busy: boolean;
+  progress?: number;
   onUpload: (file: File) => void;
   onRemove: () => void;
 }) {
   const hasVideo = !!video?.storage_path;
+  const isUploading = busy && typeof progress === "number";
   return (
     <div className="rounded-lg border bg-background p-3 sm:p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -321,6 +448,24 @@ function CountryRow({
           </span>
         )}
       </div>
+
+      {/* Upload progress bar. Visible only while a transfer is
+          actually in flight. Once the byte stream finishes the bar
+          disappears and the preview repaints with the new file. */}
+      {isUploading && (
+        <div className="mb-3 space-y-1">
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>Uploading…</span>
+            <span className="tabular-nums">{progress}%</span>
+          </div>
+          <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full bg-primary transition-[width] duration-150 ease-linear"
+              style={{ width: `${Math.max(2, Math.min(100, progress))}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {hasVideo ? (
         <div className="space-y-3">

@@ -64,13 +64,6 @@ function admin() {
   );
 }
 
-function extFromMime(mime: string | null | undefined): string {
-  if (!mime) return "mp4";
-  if (mime.includes("webm")) return "webm";
-  if (mime.includes("ogg")) return "ogg";
-  return "mp4";
-}
-
 export async function GET() {
   const { error: authErr } = await getAdminOr401();
   if (authErr) return authErr;
@@ -102,52 +95,53 @@ export async function POST(req: NextRequest) {
   const { error: authErr } = await getAdminOr401();
   if (authErr) return authErr;
 
-  const form = await req.formData().catch(() => null);
-  if (!form) return json({ ok: false, error: "BAD_REQUEST" }, 400);
+  // The browser uploads the video file DIRECTLY to Supabase storage
+  // (using the admin's authenticated session — RLS already allows
+  // authenticated INSERT to `site-assets`). This route only registers
+  // the storage path in the `k_partnership_videos` table.
+  //
+  // Why not accept the file here? Netlify functions cap synchronous
+  // request bodies at ~6 MB. Video uploads commonly exceed that and
+  // were producing 500s. Routing the bytes through Supabase's own
+  // upload protocol avoids the function-body limit entirely.
+  const body = await req.json().catch(() => ({}));
+  const countryCode = String(body?.country_code ?? "").toUpperCase();
+  const storagePath = String(body?.storage_path ?? "").trim();
 
-  const countryCode = String(form.get("country_code") ?? "").toUpperCase();
-  const file = form.get("file");
   if (!isSupportedCountry(countryCode)) {
     return json({ ok: false, error: "UNSUPPORTED_COUNTRY" }, 400);
   }
-  if (!(file instanceof File) || file.size === 0) {
-    return json({ ok: false, error: "FILE_REQUIRED" }, 400);
-  }
-
-  // Cap upload size at 100 MB. The HTML5 player streams progressively
-  // but the original file still has to download fully on the first
-  // edge-cache miss — anything bigger than this gets slow on mobile.
-  const MAX_BYTES = 100 * 1024 * 1024;
-  if (file.size > MAX_BYTES) {
-    return json({ ok: false, error: "FILE_TOO_LARGE", maxBytes: MAX_BYTES }, 400);
+  if (!storagePath.startsWith(`${PATH_PREFIX}/`)) {
+    // Hard-constrain the path so a forged request can't redirect the
+    // row at an arbitrary file in the bucket.
+    return json({ ok: false, error: "BAD_STORAGE_PATH" }, 400);
   }
 
   const sb = admin();
-  const ext = extFromMime((file as File).type);
-  const path = `${PATH_PREFIX}/${countryCode.toLowerCase()}.${ext}`;
 
-  // Upload (upsert so re-uploads replace the prior file at the same
-  // path — no orphaned files to clean up).
-  const buffer = Buffer.from(await (file as File).arrayBuffer());
-  const { error: upErr } = await sb.storage
+  // Verify the file exists in storage before we point a DB row at
+  // it. Cheap stat — saves a future 404 for storefront visitors if
+  // the browser-side upload failed silently and the client called
+  // POST anyway.
+  const { data: list, error: listErr } = await sb.storage
     .from(BUCKET)
-    .upload(path, buffer, {
-      upsert: true,
-      cacheControl: "31536000",
-      contentType: (file as File).type || "video/mp4",
-    });
-  if (upErr) return json({ ok: false, error: upErr.message }, 500);
+    .list(PATH_PREFIX, { limit: 100, search: storagePath.split("/").pop() });
+  if (listErr) return json({ ok: false, error: listErr.message }, 500);
+  const expectedName = storagePath.replace(`${PATH_PREFIX}/`, "");
+  if (!(list ?? []).some((f) => f.name === expectedName)) {
+    return json({ ok: false, error: "FILE_NOT_FOUND_IN_STORAGE" }, 400);
+  }
 
-  // Upsert the table row pointing at the (now-stored) file.
+  // Upsert the table row pointing at the uploaded file.
   const { error: dbErr } = await sb
     .from("k_partnership_videos")
     .upsert(
-      { country_code: countryCode, storage_path: path, updated_at: new Date().toISOString() },
+      { country_code: countryCode, storage_path: storagePath, updated_at: new Date().toISOString() },
       { onConflict: "country_code" }
     );
   if (dbErr) return json({ ok: false, error: dbErr.message }, 500);
 
-  return json({ ok: true, country_code: countryCode, storage_path: path });
+  return json({ ok: true, country_code: countryCode, storage_path: storagePath });
 }
 
 export async function DELETE(req: NextRequest) {
