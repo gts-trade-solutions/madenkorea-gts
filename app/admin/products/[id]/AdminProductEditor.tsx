@@ -1106,7 +1106,9 @@ export function AdminProductEditor({ productId }: { productId: string }) {
                     onChange={(e) => setModel(m => m ? ({...m, video_file: e.target.files?.[0] || null, remove_video: false}) : m)}
                   />
                   {model.video_path && !model.video_file && (
-                    <div className="mt-1 text-xs text-muted-foreground">Existing: {model.video_path}</div>
+                    <div className="mt-1 text-xs text-muted-foreground break-all">
+                      Existing: {model.video_path}
+                    </div>
                   )}
                 </div>
                 <label className="flex items-center gap-3">
@@ -1115,6 +1117,37 @@ export function AdminProductEditor({ productId }: { productId: string }) {
                   <span>Remove existing video</span>
                 </label>
               </div>
+
+              {/* Preview block. Shows the file the admin just picked (via
+                  a local Blob URL) when present; otherwise plays the
+                  existing video already on the product. `object-contain`
+                  + bg-black preserves the video's native aspect ratio
+                  (portrait videos get side letterbox, landscape gets
+                  top/bottom letterbox) so the admin sees exactly what
+                  will render on the storefront. */}
+              {(model.video_file || (model.video_path && !model.remove_video)) && (
+                <div className="mt-3 max-w-md">
+                  <div className="text-xs text-muted-foreground mb-1">
+                    {model.video_file ? "Preview (new upload)" : "Preview (current)"}
+                  </div>
+                  <div className="relative aspect-video rounded-md overflow-hidden bg-black">
+                    <video
+                      key={model.video_file ? "new-upload" : model.video_path || "existing"}
+                      src={
+                        model.video_file
+                          ? URL.createObjectURL(model.video_file)
+                          : supabase.storage
+                              .from("product-media")
+                              .getPublicUrl(model.video_path || "").data.publicUrl
+                      }
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="absolute inset-0 w-full h-full object-contain"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 

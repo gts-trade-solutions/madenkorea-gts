@@ -1521,7 +1521,17 @@ export default function ProductPage({
                       controls
                       autoPlay
                       playsInline
-                      className="relative w-full h-full object-cover" /* fills without side black bars */
+                      // `object-contain` + bg-black preserves the
+                      // video's native aspect ratio. Most product
+                      // videos are vertical (9:16 phone shots); the
+                      // earlier `object-cover` was cropping them to
+                      // fit the square gallery, which is what the
+                      // user called "orientation not preserved." With
+                      // `contain`, portrait videos render fully inside
+                      // the square with vertical black letterboxes
+                      // on either side, and landscape videos render
+                      // fully with top/bottom letterboxes.
+                      className="relative w-full h-full object-contain bg-black"
                     />
                   ) : imageUrls.length > 0 ? (
                     // Stack ALL gallery images in the same container,

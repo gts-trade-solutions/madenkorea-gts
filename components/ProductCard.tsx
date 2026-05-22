@@ -249,7 +249,6 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
     <Link
       href={`/products/${product.slug}`}
       className="group flex h-full flex-col"
-      prefetch={false}
     >
       
         <div className="relative aspect-square overflow-hidden rounded-xl mb-3">

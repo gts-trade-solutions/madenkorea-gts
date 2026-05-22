@@ -91,7 +91,6 @@ export function CompactProductCard({ product }: { product: CompactProduct }) {
   return (
     <Link
       href={`/products/${product.slug}`}
-      prefetch={false}
       className="flex items-center gap-3 rounded-lg border bg-background p-2 hover:bg-muted/50 transition-colors min-w-0"
     >
       <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-muted">

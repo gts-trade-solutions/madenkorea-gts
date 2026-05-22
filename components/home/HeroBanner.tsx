@@ -131,7 +131,6 @@ export function HeroBanner({ banners }: HeroBannerProps) {
                 <Link
                   href={banner.link_url}
                   className="absolute inset-0 z-[1]"
-                  prefetch={false}
                   aria-label={banner.alt}
                   tabIndex={isActive ? 0 : -1}
                 />
