@@ -22,8 +22,21 @@ import {
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
 
 type Status = "none" | "pending" | "rejected" | "influencer" | "admin";
+
+// Read `mik_country` from document.cookie at call time. Client-side
+// helper so we can resolve the visitor's country for the
+// "How it works" video selection.
+function readCountryFromCookie(): string {
+  if (typeof document === "undefined") return DEFAULT_COUNTRY;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("mik_country="));
+  const raw = match ? decodeURIComponent(match.split("=")[1] ?? "") : "";
+  return isSupportedCountry(raw) ? raw : DEFAULT_COUNTRY;
+}
 
 // ✅ Same pattern as your /auth/login and /account pages (persist session in localStorage)
 export default function PartnerProgramPage() {
@@ -44,6 +57,61 @@ export default function PartnerProgramPage() {
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // How-It-Works video. Admin uploads one per country at
+  // /admin/cms/k-partnership-videos. Visitor's country wins; falls
+  // back to store_settings.k_partnership_default_country. If neither
+  // resolves, the video block isn't rendered at all (the existing
+  // step cards still show on their own).
+  const [howItWorksVideoUrl, setHowItWorksVideoUrl] = useState<string | null>(
+    null
+  );
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const country = readCountryFromCookie();
+
+      // 1) Try the visitor's country.
+      const { data: own } = await supabase
+        .from("k_partnership_videos")
+        .select("storage_path")
+        .eq("country_code", country)
+        .maybeSingle<{ storage_path: string }>();
+
+      let chosenPath: string | null = own?.storage_path ?? null;
+
+      // 2) Fall back to the admin-selected default country.
+      if (!chosenPath) {
+        const { data: settings } = await supabase
+          .from("store_settings")
+          .select("k_partnership_default_country")
+          .eq("id", 1)
+          .maybeSingle<{ k_partnership_default_country: string | null }>();
+        const fallback = settings?.k_partnership_default_country;
+        if (fallback) {
+          const { data: fallbackRow } = await supabase
+            .from("k_partnership_videos")
+            .select("storage_path")
+            .eq("country_code", fallback)
+            .maybeSingle<{ storage_path: string }>();
+          chosenPath = fallbackRow?.storage_path ?? null;
+        }
+      }
+
+      if (cancelled) return;
+      if (chosenPath) {
+        const { data } = supabase.storage
+          .from("site-assets")
+          .getPublicUrl(chosenPath);
+        setHowItWorksVideoUrl(data.publicUrl ?? null);
+      } else {
+        setHowItWorksVideoUrl(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ✅ 1) Gate the page exactly like /account (NO anon UI here).
   // Wait for the auth context to finish loading before deciding —
@@ -290,6 +358,29 @@ export default function PartnerProgramPage() {
         {/* A. Steps */}
         <section className="mx-auto max-w-6xl px-4">
           <h2 className="mb-3 text-lg font-semibold">{t("howItWorks")}</h2>
+
+          {/* Country-aware explainer video. Renders only when one is
+              configured — visitor's country wins, falling back to the
+              admin-selected default country. Click-to-play (no autoplay)
+              so we don't surprise users; first frame is the poster.
+              Responsive sizing: full-bleed on mobile, capped width on
+              tablet+ to keep the line length of the steps below readable
+              underneath. */}
+          {howItWorksVideoUrl && (
+            <div className="mb-6 mx-auto w-full max-w-3xl">
+              <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black shadow-md">
+                <video
+                  key={howItWorksVideoUrl}
+                  src={howItWorksVideoUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="absolute inset-0 w-full h-full object-contain"
+                />
+              </div>
+            </div>
+          )}
+
           <ol className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             <Step
               n={1}

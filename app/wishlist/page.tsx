@@ -228,7 +228,20 @@ export default function WishlistPage() {
     return () => {
       cancelled = true;
     };
-  }, [authReady, isAuthenticated, wishlistItems, t]);
+    // `wishlistItems` from the WishlistContext is intentionally NOT a
+    // dep here. The auth path queries `wishlist_items` directly and
+    // doesn't read wishlistItems at all; the anon path reads it once
+    // at mount. Including it caused a double-fetch on direct URL load
+    // / hard refresh, because WishlistContext's own effect updated
+    // wishlistItems shortly after the page's first fetch finished —
+    // a new array reference re-triggered this effect and re-queried
+    // the same data.
+    //
+    // In-app mutations (add/remove from this page) are handled by
+    // local setRows() calls below, so the page stays in sync without
+    // needing wishlistItems as a dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authReady, isAuthenticated, t]);
 
   const toggleSelect = (id: string, checked: boolean) => {
     setSelected((prev) => {

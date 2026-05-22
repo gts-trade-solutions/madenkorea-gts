@@ -154,6 +154,28 @@ export default function AdminCMSPage() {
           </Card>
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
+              <ImageIcon className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>K-Partnership Videos</CardTitle>
+              <CardDescription>
+                Per-country "How it works" videos
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Upload one video per country and pick a default for
+                countries without their own.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/admin/cms/k-partnership-videos")}
+              >
+                Manage Videos
+              </Button>
+            </CardContent>
+          </Card>
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
               <FileText className="h-8 w-8 mb-2 text-primary" />
               <CardTitle>Static Pages</CardTitle>
               <CardDescription>Edit informational pages</CardDescription>
