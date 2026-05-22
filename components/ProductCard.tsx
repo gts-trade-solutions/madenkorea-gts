@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/lib/contexts/CartContext";
 import { useWishlist } from "@/lib/contexts/WishlistContext";
 import { useCurrency } from "@/lib/contexts/CurrencyContext";
+import { supabaseImageLoader } from "@/lib/supabaseImageLoader";
 import { toast } from "sonner";
 
 type ProductForCard = {
@@ -251,18 +252,25 @@ export function ProductCard({ product, hideBadges = false }: ProductCardProps) {
       prefetch={false}
     >
       
-        <div className="relative aspect-square overflow-hidden rounded-xl bg-muted mb-3">
-          {imageUrl ? (
+        <div className="relative aspect-square overflow-hidden rounded-xl mb-3">
+          {/* Pulse skeleton behind the image. Always present; covered
+              by the loaded <Image>. Kept as a sibling (not a class on
+              the wrapper) so the pulse animation doesn't bleed into
+              the rendered image's opacity. */}
+          <div
+            className="absolute inset-0 bg-muted animate-pulse"
+            aria-hidden="true"
+          />
+          {imageUrl && (
             <Image
               src={imageUrl}
               alt={product.name}
               fill
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              className="relative object-cover transition-transform duration-300 group-hover:scale-105"
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               priority={false}
+              loader={supabaseImageLoader}
             />
-          ) : (
-            <div className="h-full w-full animate-pulse bg-muted" />
           )}
 
           {/* Badge stack. On mobile we keep the informational badges

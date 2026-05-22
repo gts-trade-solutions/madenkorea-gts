@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { useCurrency } from "@/lib/contexts/CurrencyContext";
+import { supabaseImageLoader } from "@/lib/supabaseImageLoader";
 
 // Compact horizontal product card used inside the VideoPlayerModal's
 // "Featured products" strip. Deliberately strips out the standard
@@ -101,6 +102,7 @@ export function CompactProductCard({ product }: { product: CompactProduct }) {
             fill
             className="object-cover"
             sizes="64px"
+            loader={supabaseImageLoader}
           />
         ) : (
           <div className="h-full w-full animate-pulse bg-muted" />

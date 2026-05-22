@@ -83,6 +83,7 @@ import {
   augmentProductsWithCountryOffers,
 } from "@/lib/pricing";
 import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+import { supabaseImageLoader } from "@/lib/supabaseImageLoader";
 
 // Read `mik_country` from document.cookie at call-time. Client-only;
 // SSR variant lives at `cookies().get(...)` in the server page.
@@ -352,10 +353,16 @@ function ProductInfoAccordionSection({
 }
 
 type ProductPageProps = {
+  initialProduct?: Product | null;
+  initialImages?: ProductImage[];
   initialStoryBlocks?: StoryBlock[];
 };
 
-export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {}) {
+export default function ProductPage({
+  initialProduct = null,
+  initialImages,
+  initialStoryBlocks,
+}: ProductPageProps = {}) {
   const router = useRouter();
   const params = useParams();
   const t = useTranslations("pdp");
@@ -372,9 +379,19 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
   const [showShare, setShowShare] = useState(false);
   const [isBuyingNow, setIsBuyingNow] = useState(false);
 
-  const [loading, setLoading] = useState(true);
-  const [product, setProduct] = useState<Product | null>(null);
-  const [images, setImages] = useState<ProductImage[]>([]);
+  // Initialize from the server-rendered product so the client doesn't
+  // need to refetch what SSR already hydrated. If for any reason the
+  // server prop is missing (legacy callers, edge case), the useEffect
+  // below falls back to fetching client-side.
+  const [loading, setLoading] = useState(initialProduct == null);
+  const [product, setProduct] = useState<Product | null>(initialProduct);
+  // Initialize gallery from the server prop so the browser parses
+  // `<img>` tags for every gallery image during HTML hydration and
+  // starts fetching them in parallel with the hero — instead of
+  // waiting for the bootstrap effect's DB round trip to populate
+  // them. Without this, gallery images don't even START loading
+  // until ~500-800ms after first paint.
+  const [images, setImages] = useState<ProductImage[]>(initialImages ?? []);
   // Multiple videos per product. Loaded alongside images from
   // `product_videos`. The legacy single video on `products.video_path`
   // is still rendered as a fallback when this list is empty so old
@@ -474,102 +491,167 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
     }
   }
 
-  // Fetch product + images
+  // Load images + videos + vendor disclosure. The product itself is
+  // hydrated from the `initialProduct` server prop (see ProductPageProps)
+  // so this effect does NOT refetch it — that was the biggest single
+  // round-trip on the PDP and just duplicated the server's cached fetch.
+  //
+  // Fallback: if `initialProduct` is null (shouldn't happen via the live
+  // page route, but a legacy or test caller might mount this component
+  // without it), fetch the product client-side as before.
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
-      setLoading(true);
-      const { data: prod, error: pErr } = await supabase
-        .from("products")
-        .select(
+      // ── Step 1: resolve the product. Server-hydrated path is the
+      // common case; the client fetch is the safety net.
+      let prod: Product = product as Product;
+      if (!prod) {
+        setLoading(true);
+        const { data: fetched, error: pErr } = await supabase
+          .from("products")
+          .select(
+            `
+            id, slug, name, short_description, description,
+            price, currency, compare_at_price, sale_price, sale_starts_at, sale_ends_at,
+            is_published, brand_id, category_id, hero_image_path, stock_qty,
+            volume_ml, net_weight_g, country_of_origin, new_until, is_featured, is_trending, is_bundle,
+            made_in_korea, is_vegetarian, cruelty_free, toxin_free, paraben_free,
+            ingredients_md, key_features_md, additional_details_md, box_contents_md, key_benefits,
+            video_path, vendor_id,
+            brands ( name, slug ),
+            product_translations!left ( locale, short_description, description, ingredients_md, additional_details_md, key_features_md, box_contents_md, faq, key_benefits, additional_details )
           `
-          id, slug, name, short_description, description,
-          price, currency, compare_at_price, sale_price, sale_starts_at, sale_ends_at,
-          is_published, brand_id, category_id, hero_image_path, stock_qty,
-          volume_ml, net_weight_g, country_of_origin, new_until, is_featured, is_trending, is_bundle,
-          made_in_korea, is_vegetarian, cruelty_free, toxin_free, paraben_free,
-          ingredients_md, key_features_md, additional_details_md, box_contents_md, key_benefits,
-          video_path, vendor_id,
-          brands ( name, slug ),
-          product_translations!left ( locale, short_description, description, ingredients_md, additional_details_md, key_features_md, box_contents_md, faq, key_benefits, additional_details )
-        `
-        )
-        .eq("slug", slug)
-        .eq("is_published", true)
-        .maybeSingle<Product>();
+          )
+          .eq("slug", slug)
+          .eq("is_published", true)
+          .maybeSingle<Product>();
 
-      if (cancelled) return;
-
-      if (pErr || !prod) {
-        console.error("Product fetch error:", pErr);
-        setLoading(false);
-        setProduct(null);
-        return;
+        if (cancelled) return;
+        if (pErr || !fetched) {
+          console.error("Product fetch error:", pErr);
+          setLoading(false);
+          setProduct(null);
+          return;
+        }
+        const merged = mergeTranslation(
+          fetched as any,
+          locale,
+          PRODUCT_TRANSLATABLE_FIELDS,
+          "product_translations"
+        );
+        Object.assign(fetched, merged);
+        prod = fetched;
       }
 
-      // Merge translated fields (description, ingredients, etc.) for
-      // the active locale. Product name + brand + price stay in their
-      // canonical English form by design. Falls back to source row
-      // when no translation exists yet for this locale.
-      const merged = mergeTranslation(
-        prod as any,
-        locale,
-        PRODUCT_TRANSLATABLE_FIELDS,
-        "product_translations"
-      );
-      Object.assign(prod, merged);
-
-      const { data: imgs, error: iErr } = await supabase
-        .from("product_images")
-        .select("storage_path, alt, sort_order")
-        .eq("product_id", prod.id)
-        .order("sort_order", { ascending: true });
+      // ── Step 2: fetch every other piece of PDP data in a single
+      // parallel fan-out. Pre-Phase-1 these lived in 4 separate
+      // useEffects that each waited for `product` to be set — i.e.
+      // sequential round trips. Now they all fire as soon as we have
+      // a product id (which we do immediately from the server prop),
+      // so the PDP becomes fully populated in one round-trip wall
+      // time instead of several.
+      //
+      //   • images                     ← skipped when initialImages is set
+      //   • videos                     ← per-product
+      //   • vendor disclosure          ← conditional on vendor_id
+      //   • country offer              ← visitor country
+      //   • related products + offers  ← brand-matched up to 8
+      //   • review stats               ← aggregate row
+      //
+      // Reviews list + helpful-votes stay in their own effect because
+      // they have non-trivial auth + sort + pagination interactions.
+      const country = readCountryFromCookie();
+      const hasInitialImages = (initialImages ?? []).length > 0;
+      const [
+        { data: imgs, error: iErr },
+        { data: vids, error: vErrV },
+        vendorDisclosure,
+        countryOffersMap,
+        relatedAugmented,
+        { data: reviewStatsRow },
+      ] = await Promise.all([
+        // Skip the images fetch when the server already gave us a
+        // populated gallery — saves a round trip on the warm path.
+        hasInitialImages
+          ? Promise.resolve({ data: initialImages ?? [], error: null as any })
+          : supabase
+              .from("product_images")
+              .select("storage_path, alt, sort_order")
+              .eq("product_id", prod.id)
+              .order("sort_order", { ascending: true }),
+        supabase
+          .from("product_videos")
+          .select("storage_path, thumbnail_path, alt, sort_order")
+          .eq("product_id", prod.id)
+          .order("sort_order", { ascending: true }),
+        prod.vendor_id
+          ? Promise.all([
+              supabase
+                .from("store_settings")
+                .select("marketplace_disclosure_enabled")
+                .eq("id", 1)
+                .maybeSingle<{ marketplace_disclosure_enabled: boolean }>(),
+              supabase
+                .from("vendors_public")
+                .select(
+                  "display_name, legal_name, gstin, email, phone, address_json"
+                )
+                .eq("id", prod.vendor_id)
+                .maybeSingle<Vendor>(),
+            ]).then(([{ data: cfg }, { data: v, error: vErr }]) => {
+              if (vErr) console.error("Vendor disclosure fetch error:", vErr);
+              return cfg?.marketplace_disclosure_enabled ? v ?? null : null;
+            })
+          : Promise.resolve(null),
+        fetchCountryOffers([prod.id], country, supabase),
+        (async () => {
+          const base = supabase
+            .from("products")
+            .select(
+              `
+            id, slug, name,
+            price, currency, compare_at_price, sale_price, sale_starts_at, sale_ends_at,
+            hero_image_path, stock_qty, is_published, is_bundle,
+            brands ( name )
+          `
+            )
+            .eq("is_published", true)
+            .neq("id", prod.id);
+          const brandFilter = prod.brand_id
+            ? base.eq("brand_id", prod.brand_id)
+            : base;
+          const { data } = await brandFilter
+            .order("created_at", { ascending: false })
+            .limit(8);
+          return augmentProductsWithCountryOffers(
+            (data ?? []) as Product[],
+            country,
+            supabase
+          );
+        })(),
+        supabase
+          .from("product_review_stats")
+          .select("*")
+          .eq("product_id", prod.id)
+          .maybeSingle<ReviewStats>(),
+      ]);
 
       if (iErr) console.error("Images fetch error:", iErr);
-      if (cancelled) return;
-
-      // Multi-video list (mirrors product_images). Failure is
-      // non-fatal — the page renders fine without videos, and the
-      // legacy `products.video_path` is still surfaced as a fallback
-      // if this table is empty for this product.
-      const { data: vids, error: vErrV } = await supabase
-        .from("product_videos")
-        .select("storage_path, thumbnail_path, alt, sort_order")
-        .eq("product_id", prod.id)
-        .order("sort_order", { ascending: true });
       if (vErrV) console.error("Videos fetch error:", vErrV);
       if (cancelled) return;
 
-      // Marketplace seller disclosure — gated on the admin toggle in
-      // store_settings.marketplace_disclosure_enabled. Off by default;
-      // admin enables once vendor records have accurate legal name /
-      // address / GSTIN. We read the flag alongside the vendor row.
-      let vendorInfo: Vendor | null = null;
-      if (prod.vendor_id) {
-        const [{ data: cfg }, { data: v, error: vErr }] = await Promise.all([
-          supabase
-            .from("store_settings")
-            .select("marketplace_disclosure_enabled")
-            .eq("id", 1)
-            .maybeSingle<{ marketplace_disclosure_enabled: boolean }>(),
-          supabase
-            .from("vendors_public")
-            .select(
-              "display_name, legal_name, gstin, email, phone, address_json"
-            )
-            .eq("id", prod.vendor_id)
-            .maybeSingle<Vendor>(),
-        ]);
-        if (vErr) console.error("Vendor disclosure fetch error:", vErr);
-        if (cancelled) return;
-        vendorInfo = cfg?.marketplace_disclosure_enabled ? v ?? null : null;
-      }
-
-      setProduct({ ...prod, vendors: vendorInfo });
+      setProduct({ ...prod, vendors: vendorDisclosure });
       setImages(imgs ?? []);
       setVideos((vids ?? []) as ProductVideo[]);
       setSelectedImage(0);
+      setCountryOfferPrice(
+        countryOffersMap[prod.id] != null
+          ? Number(countryOffersMap[prod.id])
+          : null
+      );
+      setRelated(relatedAugmented as Product[]);
+      setReviewStats(reviewStatsRow ?? null);
       setLoading(false);
 
       try {
@@ -600,29 +682,12 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
     };
   }, [slug]);
 
-  // Phase 1 country-specific offer for this product. Resolved after
-  // the main product fetch via a separate query keyed on the visitor's
-  // mik_country cookie. null = no country offer set → fall through to
-  // legacy sale_price/price.
+  // Country offer price for this product. Fetched in parallel with
+  // images/videos/etc inside the main bootstrap effect above — no
+  // separate effect needed. State setter is referenced by that effect's
+  // closure; the declaration must stay here so the hook order is
+  // stable across renders.
   const [countryOfferPrice, setCountryOfferPrice] = useState<number | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!product?.id) {
-        if (!cancelled) setCountryOfferPrice(null);
-        return;
-      }
-      const country = readCountryFromCookie();
-      const offers = await fetchCountryOffers([product.id], country, supabase);
-      if (cancelled) return;
-      setCountryOfferPrice(
-        offers[product.id] != null ? Number(offers[product.id]) : null
-      );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [product?.id]);
 
   // Compute pricing
   const now = useMemo(() => new Date(), []);
@@ -937,51 +1002,10 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
     }
   };
 
-  // Related products
+  // Related products list. Populated by the main bootstrap effect
+  // above (brand-matched, country-aware, up to 8). State setter stays
+  // declared at this position so the hook order remains stable.
   const [related, setRelated] = useState<Product[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    async function run() {
-      if (!product) return;
-      const base = supabase
-        .from("products")
-        .select(
-          `
-        id, slug, name,
-        price, currency, compare_at_price, sale_price, sale_starts_at, sale_ends_at,
-        hero_image_path, stock_qty, is_published, is_bundle,
-        brands ( name )
-      `
-        )
-        .eq("is_published", true)
-        .neq("id", product.id);
-
-      const brandFilter = product.brand_id
-        ? base.eq("brand_id", product.brand_id)
-        : base;
-      const { data } = await brandFilter
-        .order("created_at", { ascending: false })
-        .limit(8);
-
-      if (cancelled) return;
-
-      // Phase 1: augment related products with their country-specific
-      // effective prices so the related-products carousel shows the
-      // right price for the visitor's country.
-      const country = readCountryFromCookie();
-      const augmented = await augmentProductsWithCountryOffers(
-        (data ?? []) as Product[],
-        country,
-        supabase
-      );
-      if (cancelled) return;
-      setRelated(augmented as Product[]);
-    }
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [product]);
 
   // Build highlight pills
   const highlightItems = useMemo(() => {
@@ -1045,15 +1069,10 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
   const [helpfulVoted, setHelpfulVoted] = useState<Record<string, boolean>>({});
   const [showReviewDialog, setShowReviewDialog] = useState(false);
 
-  useEffect(() => {
-    if (!product?.id) return;
-    supabase
-      .from("product_review_stats")
-      .select("*")
-      .eq("product_id", product.id)
-      .maybeSingle<ReviewStats>()
-      .then(({ data }) => setReviewStats(data ?? null));
-  }, [product?.id]);
+  // Review STATS are loaded by the main bootstrap effect alongside the
+  // product/images/videos. The reviews LIST + helpful_votes stay in
+  // their own effect below because they have auth + sort + pagination
+  // interactions that the bootstrap shouldn't take on.
 
   async function fetchReviews(resetPage = false) {
     if (!product?.id) return;
@@ -1432,7 +1451,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
               {/* GALLERY */}
               <div>
                 <div
-                  className={`relative aspect-square mb-4 bg-muted rounded-lg overflow-hidden group touch-pan-y select-none ${
+                  className={`relative aspect-square mb-4 rounded-lg overflow-hidden group touch-pan-y select-none ${
                     !isVideoSelected ? "cursor-zoom-in" : ""
                   }`}
                   onClick={() => {
@@ -1455,6 +1474,17 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     !isVideoSelected ? t("expandImageAria") : undefined
                   }
                 >
+                  {/* Skeleton/pulse layer behind everything. Visible
+                      while the image hasn't loaded yet; gets covered
+                      by the rendered <Image> once decoded. Kept as a
+                      SEPARATE sibling rather than as a class on the
+                      outer container so the pulse animation doesn't
+                      bleed into the loaded image's opacity. */}
+                  <div
+                    className="absolute inset-0 bg-muted animate-pulse"
+                    aria-hidden="true"
+                  />
+
                   {isVideoSelected && activeVideoUrl ? (
                     <video
                       key={activeVideoUrl} /* force refresh when switching */
@@ -1462,7 +1492,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                       controls
                       autoPlay
                       playsInline
-                      className="w-full h-full object-cover" /* fills without side black bars */
+                      className="relative w-full h-full object-cover" /* fills without side black bars */
                     />
                   ) : imageUrls.length > 0 ? (
                     // Stack ALL gallery images in the same container,
@@ -1470,16 +1500,20 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     // variant up front (same network cost as preloading
                     // hidden Images, but layered guarantees the visible
                     // swap is a CSS opacity flip — instant and smooth.
-                    // The previous implementation only rendered the
-                    // selected image, so each thumbnail click triggered
-                    // a fresh fetch + decode while the old image stayed
-                    // visible, producing the "long delay" feel.
                     //
                     // Only the index-0 image carries `priority` so we
                     // don't blow the LCP budget on every gallery item.
+                    //
+                    // `key` is the index (not the URL) so React reuses
+                    // the same DOM node across product navigations.
+                    // Using src as the key caused a brief "no image
+                    // visible" flash when navigating between products
+                    // that happened to share an image URL, because
+                    // selectedImage from the previous product became
+                    // stale relative to the new index order.
                     imageUrls.map((src, idx) => (
                       <Image
-                        key={src}
+                        key={idx}
                         src={src}
                         alt={images[idx]?.alt || product.name}
                         fill
@@ -1490,11 +1524,10 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                         }`}
                         priority={idx === 0}
                         sizes="(max-width: 1024px) 100vw, 50vw"
+                        loader={supabaseImageLoader}
                       />
                     ))
-                  ) : (
-                    <div className="w-full h-full bg-muted" />
-                  )}
+                  ) : null}
 
                   {discount > 0 && (
                     <Badge
@@ -1527,13 +1560,16 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                       ref={thumbStripRef}
                       className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30"
                     >
-                      {/* image thumbs */}
+                      {/* image thumbs. `bg-muted` shows a gray slot
+                          while the thumb image is still decoding so
+                          the carousel doesn't look like it has empty
+                          gaps. */}
                       {imageUrls.map((src, idx) => (
                         <button
                           key={idx}
                           onClick={() => setSelectedImage(idx)}
                           data-thumb-active={selectedImage === idx}
-                          className={`relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 ${
+                          className={`relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 bg-muted ${
                             selectedImage === idx
                               ? "border-primary"
                               : "border-transparent"
@@ -1545,6 +1581,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                             fill
                             className="object-cover"
                             sizes="80px"
+                            loader={supabaseImageLoader}
                           />
                         </button>
                       ))}
@@ -2422,7 +2459,13 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
               with native controls so playback works inside the modal.
               `overflow-hidden` + `max-w-full` clamp any inner content
               so it cannot push the cell wider than the dialog. */}
-          <div className="relative bg-muted/30 min-h-0 min-w-0 max-w-full overflow-hidden">
+          <div className="relative min-h-0 min-w-0 max-w-full overflow-hidden">
+            {/* Pulse skeleton behind the media. Visible while the zoomed
+                image is decoding; covered once the <Image> renders. */}
+            <div
+              className="absolute inset-0 bg-muted/30 animate-pulse"
+              aria-hidden="true"
+            />
             {isVideoSelected && activeVideoUrl ? (
               <video
                 key={activeVideoUrl}
@@ -2440,10 +2483,9 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                 className="object-contain select-none"
                 sizes="(max-width: 640px) 100vw, 720px"
                 draggable={false}
+                loader={supabaseImageLoader}
               />
-            ) : (
-              <div className="w-full h-full bg-muted" />
-            )}
+            ) : null}
 
             {galleryCount > 1 && (
               <>
@@ -2484,7 +2526,7 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                   onClick={() => setSelectedImage(idx)}
                   aria-label={`View image ${idx + 1}`}
                   aria-current={selectedImage === idx ? "true" : undefined}
-                  className={`relative shrink-0 w-16 h-16 md:w-20 md:h-20 rounded border-2 overflow-hidden transition-colors ${
+                  className={`relative shrink-0 w-16 h-16 md:w-20 md:h-20 rounded border-2 overflow-hidden transition-colors bg-muted ${
                     selectedImage === idx
                       ? "border-primary"
                       : "border-transparent hover:border-muted-foreground/40"
@@ -2495,6 +2537,8 @@ export default function ProductPage({ initialStoryBlocks }: ProductPageProps = {
                     alt={t("thumbAlt", { index: idx + 1 })}
                     fill
                     className="object-cover"
+                    sizes="80px"
+                    loader={supabaseImageLoader}
                   />
                 </button>
               ))}

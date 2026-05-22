@@ -12,6 +12,11 @@ import { DELIVERY_THRESHOLD, DEFAULT_SHIPPING_FEE } from '@/lib/membership';
 import { BreadcrumbJsonLd, type BreadcrumbCrumb } from '@/components/BreadcrumbJsonLd';
 import { isSupportedCountry, DEFAULT_COUNTRY } from '@/lib/countries';
 import { fetchCountryOffers, effectivePriceForCountry } from '@/lib/pricing';
+import {
+  mergeTranslation,
+  PRODUCT_TRANSLATABLE_FIELDS,
+} from '@/lib/contentTranslations';
+import { getLocale } from 'next-intl/server';
 
 const STORY_SELECT_COLUMNS =
   'id, product_id, position, block_type, size, mode, headline, body, text_position, text_color, text_bg, text_size, text_weight, caption_mode, caption_backdrop, split_direction, image_path, image_alt, image_focal_x, image_focal_y, image_fit, image_zoom, image_bg, caption, stats_items, before_image_path, after_image_path, comparison_caption, created_at, updated_at';
@@ -72,6 +77,11 @@ function publicFromProductMedia(path?: string | null) {
 const SITE =
   (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://madenkorea.com').replace(/\/$/, '');
 
+// Full product row + product_translations join. Cached for 5 minutes,
+// invalidated by admin save (see /api/admin/products/revalidate).
+// The shape is intentionally a superset of every field the client
+// component reads — passing it as `initialProduct` to <ProductPage />
+// lets the client skip its own product re-fetch entirely.
 const getPublishedProductBySlug = unstable_cache(
   async (slug: string) => {
     const supabase = createClient(
@@ -84,9 +94,14 @@ const getPublishedProductBySlug = unstable_cache(
       .select(`
       id, slug, name, short_description, description,
       price, currency, sale_price, compare_at_price, sale_starts_at, sale_ends_at,
-      hero_image_path, stock_qty, sku,
-      volume_ml, net_weight_g, country_of_origin, made_in_korea,
-      brands ( name, slug )
+      is_published, brand_id, category_id, hero_image_path, stock_qty, sku,
+      volume_ml, net_weight_g, country_of_origin, new_until,
+      is_featured, is_trending, is_bundle,
+      made_in_korea, is_vegetarian, cruelty_free, toxin_free, paraben_free,
+      ingredients_md, key_features_md, additional_details_md, box_contents_md, key_benefits,
+      video_path, vendor_id,
+      brands ( name, slug ),
+      product_translations!left ( locale, short_description, description, ingredients_md, additional_details_md, key_features_md, box_contents_md, faq, key_benefits, additional_details )
     `)
       .eq('slug', slug)
       .eq('is_published', true)
@@ -97,27 +112,39 @@ const getPublishedProductBySlug = unstable_cache(
   ['published-product-by-slug'],
   // Tag with both a global "products" key and a per-slug key so the
   // admin save handler can invalidate just the affected product without
-  // wiping every product cache.
+  // wiping every product cache. Cache is locale-agnostic — we store the
+  // raw row + the full translations array and merge per-request below.
   { revalidate: 300, tags: ['products'] }
 );
 
-// Gallery images for the JSON-LD `image[]` array. Cached separately so
-// admin updates to gallery don't require full product re-fetch.
-const getProductImagePaths = unstable_cache(
-  async (productId: string): Promise<string[]> => {
+// Full product_images rows (storage_path + alt + sort_order). Cached
+// separately so admin updates to gallery don't require a full product
+// re-fetch. Used in two places:
+//   1. JSON-LD image[] array — only needs the paths
+//   2. Passed to <ProductPage initialImages={...} /> so the browser
+//      gets the gallery image URLs in the server HTML and can start
+//      loading them during hydration instead of waiting for a
+//      client-side fetch round trip
+type ProductImageRow = {
+  storage_path: string;
+  alt: string | null;
+  sort_order: number;
+};
+const getProductImages = unstable_cache(
+  async (productId: string): Promise<ProductImageRow[]> => {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
     const { data } = await supabase
       .from('product_images')
-      .select('storage_path')
+      .select('storage_path, alt, sort_order')
       .eq('product_id', productId)
       .order('sort_order', { ascending: true })
       .limit(8);
-    return (data ?? []).map((r) => r.storage_path).filter(Boolean) as string[];
+    return ((data ?? []).filter((r) => r.storage_path) as ProductImageRow[]);
   },
-  ['product-image-paths'],
+  ['product-images-full'],
   { revalidate: 300, tags: ['products'] }
 );
 
@@ -212,25 +239,36 @@ export default async function Page({
   const slug = params?.slug || params?.handle;
   if (!slug) notFound();
 
-  // Fetch again here so we can emit JSON-LD (keeps ProductPage untouched)
-  const prod = await getPublishedProductBySlug(slug);
+  const rawProd = await getPublishedProductBySlug(slug);
+  if (!rawProd) notFound();
 
-  if (!prod) notFound();
+  // Merge translated fields (description, ingredients, etc.) for the
+  // active locale BEFORE passing to the client component. The cached
+  // row stores all translations; the merge is per-request and cheap.
+  // Doing this server-side means the client component never has to
+  // refetch the product just to apply translations.
+  const locale = await getLocale();
+  const prod = mergeTranslation(
+    rawProd as any,
+    locale,
+    PRODUCT_TRANSLATABLE_FIELDS,
+    'product_translations'
+  ) as typeof rawProd;
 
   // Server-side fetch of Discover blocks so the section is SEO-visible
   // and doesn't trigger a separate client roundtrip after hydration.
   // Run alongside the gallery + review-stats fetches in parallel.
-  const [storyBlocks, galleryPaths, reviewStats] = await Promise.all([
+  const [storyBlocks, galleryImages, reviewStats] = await Promise.all([
     prod.id ? getStoryBlocksForProduct(prod.id) : Promise.resolve([] as StoryBlock[]),
-    prod.id ? getProductImagePaths(prod.id) : Promise.resolve([] as string[]),
+    prod.id ? getProductImages(prod.id) : Promise.resolve([] as ProductImageRow[]),
     prod.id ? getProductReviewStats(prod.id) : Promise.resolve(null),
   ]);
 
   // Combined image list: hero first (Google prefers landscape primary),
   // then gallery in admin sort order, deduped, fallback to default OG.
   const heroUrl = publicFromProductMedia(prod.hero_image_path);
-  const galleryUrls = galleryPaths
-    .map((p) => publicFromProductMedia(p))
+  const galleryUrls = galleryImages
+    .map((r) => publicFromProductMedia(r.storage_path))
     .filter((u): u is string => !!u);
   const allImages = Array.from(
     new Set([heroUrl, ...galleryUrls].filter((u): u is string => !!u))
@@ -403,7 +441,11 @@ export default async function Page({
 
   return (
     <>
-      <ProductPage initialStoryBlocks={storyBlocks} />
+      <ProductPage
+        initialProduct={prod as any}
+        initialImages={galleryImages}
+        initialStoryBlocks={storyBlocks}
+      />
       <script
         type="application/ld+json"
         // undefined fields are omitted by JSON.stringify
