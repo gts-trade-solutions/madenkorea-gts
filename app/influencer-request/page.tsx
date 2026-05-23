@@ -113,19 +113,17 @@ export default function PartnerProgramPage() {
     };
   }, []);
 
-  // ✅ 1) Gate the page exactly like /account (NO anon UI here).
-  // Wait for the auth context to finish loading before deciding —
-  // otherwise the page renders blank for the first ~100ms while
-  // `isAuthenticated` is still false during session hydration, then
-  // flashes in fully once the session resolves. Gating on `authReady`
-  // also avoids firing a spurious redirect to /auth/login for users
-  // who are actually signed in.
-  useEffect(() => {
-    if (!authReady) return;
-    if (!isAuthenticated) {
-      router.replace("/auth/login?redirect=/influencer-request");
-    }
-  }, [isAuthenticated, authReady, router]);
+  // The K-Partnership landing page is intentionally PUBLIC. Anonymous
+  // visitors should be able to read about what the program is, watch
+  // the explainer video, and skim the FAQ — they're only kicked to
+  // sign-in if they actually click "Become a Partner" (handled at the
+  // CTA, not at the page level). Earlier versions of this effect
+  // redirected unauthenticated users to /auth/login on page load,
+  // which made the program effectively invisible to anyone who wasn't
+  // already a customer.
+  //
+  // No effect needed here any more — auth state is read inline where
+  // it actually matters (status fetch + CTA click handlers below).
 
   // ✅ 2) Attach browser session to server cookies ONCE (same idea as /auth/login + /auth/callback)
   const attachedOnce = useRef(false);
@@ -160,9 +158,18 @@ export default function PartnerProgramPage() {
     return at;
   };
 
-  // ✅ 3) Load influencer status once logged in
+  // Load the user's K-Partnership status once we know who they are.
+  // For anon visitors we short-circuit to status="none" + finished
+  // loading so the CTA renders the default "Become a Partner" pill
+  // immediately instead of getting stuck on the loading placeholder.
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!authReady) return;
+
+    if (!isAuthenticated) {
+      setStatus("none");
+      setStatusLoading(false);
+      return;
+    }
 
     let cancelled = false;
     (async () => {
@@ -198,7 +205,7 @@ export default function PartnerProgramPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+  }, [isAuthenticated, authReady]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -242,14 +249,10 @@ export default function PartnerProgramPage() {
     }
   }
 
-  // Only suppress render once we KNOW the user isn't authenticated.
-  // While `authReady` is false we still render the full page shell so
-  // the visible region doesn't flash from blank → content for signed-in
-  // users. The CTA and status-dependent sections show loading
-  // placeholders during this window.
-  if (authReady && !isAuthenticated) return null;
-
-  // ========== LOGGED-IN VIEW (your existing UI) ==========
+  // Page renders for everyone — authed + anon. Auth-specific UI bits
+  // (status pill, "Visit Portal" CTA, edit-cap modal, etc.) are gated
+  // inside the JSX where they live, not at the page level. The
+  // "Become a Partner" CTA below redirects anon clicks to /auth/login.
   return (
     <>
       <Header />
@@ -302,7 +305,21 @@ export default function PartnerProgramPage() {
                           </span>
                         ) : (
                           <button
-                            onClick={() => setOpen(true)}
+                            onClick={() => {
+                              // Anon click → take them to sign-in
+                              // first, then return to this page.
+                              // After login the status fetch will run
+                              // and they'll see the same CTA again,
+                              // this time wiring to the application
+                              // modal because they're authed.
+                              if (!isAuthenticated) {
+                                router.push(
+                                  "/auth/login?redirect=/influencer-request"
+                                );
+                                return;
+                              }
+                              setOpen(true);
+                            }}
                             className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-black/90"
                           >
                             {t("ctaBecomePartner")} <ArrowRight className="h-4 w-4" />
@@ -575,8 +592,13 @@ export default function PartnerProgramPage() {
           </div>
         )}
 
-        {/* Inline form (fallback) */}
-        {!isApproved &&
+        {/* Inline form (fallback). Auth-only — anon visitors get one
+            CTA in the hero ("Become a Partner") which redirects to
+            sign-in; rendering a second long application form on the
+            same page would be both redundant and confusing because
+            its submit handler would also redirect to sign-in. */}
+        {isAuthenticated &&
+          !isApproved &&
           !statusLoading &&
           (status === "none" || status === "rejected") &&
           !open && (

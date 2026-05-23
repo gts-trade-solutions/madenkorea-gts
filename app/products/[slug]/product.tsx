@@ -1097,6 +1097,12 @@ export default function ProductPage({
   // Populated alongside the reviews fetch so the dropdown only shows
   // options that produce results.
   const [reviewCountries, setReviewCountries] = useState<string[]>([]);
+  // Filter-aware count of total reviews matching the current
+  // (product + status + country) selection. Drives the "Load more"
+  // visibility — `reviewStats.rating_count` is the unfiltered total
+  // and would leave the button visible after the filtered set is
+  // exhausted.
+  const [filteredReviewCount, setFilteredReviewCount] = useState(0);
   const [reviewPage, setReviewPage] = useState(1);
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [helpfulVoted, setHelpfulVoted] = useState<Record<string, boolean>>({});
@@ -1112,22 +1118,34 @@ export default function ProductPage({
     setLoadingReviews(true);
     const page = resetPage ? 1 : reviewPage;
 
-    // Side-fetch: collect every distinct country that has at least
-    // one published review for this product, so the filter dropdown
-    // can show only options that produce results. Only triggered when
-    // resetPage (i.e. the first page of a fresh load) to avoid extra
-    // round trips on "load more".
+    // Side-fetches on the first page of a fresh load:
+    //   1. Distinct review-countries for the filter dropdown.
+    //   2. Filter-aware total count so the "Load more" button hides
+    //      correctly once the FILTERED set is exhausted (not the
+    //      product's grand total).
     if (resetPage) {
-      const { data: countryRows } = await supabase
-        .from("product_reviews")
-        .select("country")
-        .eq("product_id", product.id)
-        .eq("status", "published")
-        .not("country", "is", null);
+      const [{ data: countryRows }, { count: filteredCount }] = await Promise.all([
+        supabase
+          .from("product_reviews")
+          .select("country")
+          .eq("product_id", product.id)
+          .eq("status", "published")
+          .not("country", "is", null),
+        (() => {
+          let cq = supabase
+            .from("product_reviews")
+            .select("id", { count: "exact", head: true })
+            .eq("product_id", product.id)
+            .eq("status", "published");
+          if (reviewCountryFilter) cq = cq.eq("country", reviewCountryFilter);
+          return cq;
+        })(),
+      ]);
       const uniq = Array.from(
         new Set((countryRows ?? []).map((r: any) => r.country).filter(Boolean))
       ) as string[];
       setReviewCountries(uniq.sort());
+      setFilteredReviewCount(filteredCount ?? 0);
     }
 
     let q = supabase
@@ -1160,15 +1178,18 @@ export default function ProductPage({
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     const { data } = await q.range(from, to);
-    let rows = (data ?? []) as Review[];
+    const newRows = (data ?? []) as Review[];
 
-    // Bubble the visitor's country to the top when no explicit filter
-    // is active. Stable sort within the same country bucket — i.e.
-    // helpful/recent/etc. ordering is preserved within each bucket.
+    // Merge first, then bubble. Bubbling per-page only would cluster
+    // visitor-country matches within their batch — visible after
+    // every "Load more" click. Sorting the merged list keeps the
+    // visitor's country reviews at the top globally regardless of
+    // how many pages have been loaded.
+    let merged = resetPage ? newRows : [...reviews, ...newRows];
     if (!reviewCountryFilter) {
       const visitorCountry = readCountryFromCookie();
       if (visitorCountry) {
-        rows = rows
+        merged = merged
           .map((r, i) => ({ r, i, match: r.country === visitorCountry }))
           .sort((a, b) =>
             a.match === b.match ? a.i - b.i : a.match ? -1 : 1
@@ -1177,12 +1198,15 @@ export default function ProductPage({
       }
     }
 
-    setReviews(resetPage ? rows : [...reviews, ...rows]);
+    setReviews(merged);
     setReviewPage(page);
 
-    // Fetch which of these reviews the user voted helpful
-    if (userId && rows.length > 0) {
-      const ids = rows.map((r) => r.id);
+    // Fetch which of THIS BATCH's reviews the user voted helpful.
+    // We use `newRows` (just the batch we just fetched) instead of
+    // the merged list because votes for older batches were already
+    // resolved in their own fetch call.
+    if (userId && newRows.length > 0) {
+      const ids = newRows.map((r) => r.id);
       const { data: votes } = await supabase
         .from("review_votes")
         .select("review_id, is_helpful")
@@ -1194,7 +1218,10 @@ export default function ProductPage({
       setHelpfulVoted(map);
     }
     if (userId) {
-      const mine = rows.find((r) => r.user_id === userId) as
+      // "My review" can be in any batch; check the merged list so a
+      // user whose review landed in a later page still sees the edit
+      // affordance on subsequent loads.
+      const mine = merged.find((r) => r.user_id === userId) as
         | ReviewWithPhotos
         | undefined;
       setMyReview(mine ?? null);
@@ -2241,35 +2268,36 @@ export default function ProductPage({
                           <option value="low">{t("reviewsSortLow")}</option>
                         </select>
 
-                        {/* Country filter — only rendered when there
-                            are at least two distinct review countries
-                            for this product. A single-country dropdown
-                            adds clutter for zero benefit. */}
-                        {reviewCountries.length > 1 && (
-                          <>
-                            <label className="text-sm text-muted-foreground ml-2">
-                              Country
-                            </label>
-                            <select
-                              value={reviewCountryFilter}
-                              onChange={(e) =>
-                                setReviewCountryFilter(e.target.value)
-                              }
-                              className="border rounded-md px-2 py-1 text-sm bg-background"
-                            >
-                              <option value="">All countries</option>
-                              {reviewCountries.map((cc) => {
-                                const profile = (COUNTRY_PROFILES as any)[cc];
-                                // <option> can't host SVGs — name only.
-                                return (
-                                  <option key={cc} value={cc}>
-                                    {profile?.name ?? cc}
-                                  </option>
-                                );
-                              })}
-                            </select>
-                          </>
-                        )}
+                        {/* Country filter. Always rendered (was
+                            previously gated on 2+ distinct countries
+                            existing for the product, which hid the
+                            control when the catalog only had reviews
+                            from one country — leaving the filter
+                            functionality un-discoverable). If the
+                            product has reviews from only one country,
+                            the dropdown still works; it just has one
+                            real option. */}
+                        <label className="text-sm text-muted-foreground ml-2">
+                          Country
+                        </label>
+                        <select
+                          value={reviewCountryFilter}
+                          onChange={(e) =>
+                            setReviewCountryFilter(e.target.value)
+                          }
+                          className="border rounded-md px-2 py-1 text-sm bg-background"
+                        >
+                          <option value="">All countries</option>
+                          {reviewCountries.map((cc) => {
+                            const profile = (COUNTRY_PROFILES as any)[cc];
+                            // <option> can't host SVGs — name only.
+                            return (
+                              <option key={cc} value={cc}>
+                                {profile?.name ?? cc}
+                              </option>
+                            );
+                          })}
+                        </select>
                         {myReview ? (
                           <Button
                             variant="outline"
@@ -2509,20 +2537,19 @@ export default function ProductPage({
                       )}
                     </div>
 
-                    {reviewStats &&
-                      reviews.length < reviewStats.rating_count && (
-                        <div className="text-center">
-                          <Button
-                            onClick={() => {
-                              setReviewPage((p) => p + 1);
-                              fetchReviews(false);
-                            }}
-                            disabled={loadingReviews}
-                          >
-                            {loadingReviews ? t("loading") : t("loadMore")}
-                          </Button>
-                        </div>
-                      )}
+                    {reviews.length < filteredReviewCount && (
+                      <div className="text-center">
+                        <Button
+                          onClick={() => {
+                            setReviewPage((p) => p + 1);
+                            fetchReviews(false);
+                          }}
+                          disabled={loadingReviews}
+                        >
+                          {loadingReviews ? t("loading") : t("loadMore")}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </ProductInfoAccordionSection>
               </div>
