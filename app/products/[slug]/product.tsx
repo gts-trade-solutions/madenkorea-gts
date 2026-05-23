@@ -1113,10 +1113,17 @@ export default function ProductPage({
   // their own effect below because they have auth + sort + pagination
   // interactions that the bootstrap shouldn't take on.
 
-  async function fetchReviews(resetPage = false) {
+  async function fetchReviews(resetPage = false, explicitPage?: number) {
     if (!product?.id) return;
     setLoadingReviews(true);
-    const page = resetPage ? 1 : reviewPage;
+    // `reviewPage` from the closure is the value at the LAST render,
+    // not the value after a queued setReviewPage(...) call. The
+    // "Load more" handler used to call `setReviewPage(p => p + 1)`
+    // and then `fetchReviews(false)` back-to-back — but the read of
+    // `reviewPage` here was stale, so every click fetched page 1
+    // again. Callers now pass the next page explicitly via
+    // `explicitPage` to break the race.
+    const page = resetPage ? 1 : (explicitPage ?? reviewPage);
 
     // Side-fetches on the first page of a fresh load:
     //   1. Distinct review-countries for the filter dropdown.
@@ -1148,54 +1155,94 @@ export default function ProductPage({
       setFilteredReviewCount(filteredCount ?? 0);
     }
 
-    let q = supabase
-      .from("product_reviews")
-      .select("*")
-      .eq("product_id", product.id)
-      .eq("status", "published");
+    // Helper: build a base query with the active product/status filter and
+    // the current sort applied. Used by both the single-query and
+    // two-bucket paths below.
+    const buildBaseQuery = () => {
+      let q = supabase
+        .from("product_reviews")
+        .select("*")
+        .eq("product_id", product.id)
+        .eq("status", "published");
+      if (reviewSort === "helpful")
+        q = q
+          .order("helpful_count", { ascending: false })
+          .order("created_at", { ascending: false });
+      else if (reviewSort === "recent")
+        q = q.order("created_at", { ascending: false });
+      else if (reviewSort === "high")
+        q = q
+          .order("rating", { ascending: false })
+          .order("created_at", { ascending: false });
+      else if (reviewSort === "low")
+        q = q
+          .order("rating", { ascending: true })
+          .order("created_at", { ascending: false });
+      return q;
+    };
 
-    // Country filter: strict match when set.
-    if (reviewCountryFilter) {
-      q = q.eq("country", reviewCountryFilter);
+    // Two-bucket fetch when no explicit country filter is set: pull all of
+    // the visitor's country reviews up-front, then paginate the "other"
+    // countries bucket. The earlier client-side bubble could only reorder
+    // reviews that were already in the fetched page — so when the
+    // visitor's country had fewer/older reviews than other countries, the
+    // bubble had nothing to lift and the visitor saw foreign reviews at
+    // the top. Splitting the fetch fixes that at the source.
+    const visitorCountry = !reviewCountryFilter ? readCountryFromCookie() : null;
+    // Cap on the visitor-country bucket. Realistic per-country review
+    // counts for a single product are well under this; if a product ever
+    // exceeds it we'd want a smarter cross-bucket pagination scheme.
+    const MY_COUNTRY_CAP = 200;
+
+    let newRows: Review[];
+    if (visitorCountry) {
+      if (resetPage) {
+        // Page 1: all of visitor's country (up to cap) + first pageSize of others.
+        const [myRes, otherRes] = await Promise.all([
+          buildBaseQuery()
+            .eq("country", visitorCountry)
+            .range(0, MY_COUNTRY_CAP - 1),
+          buildBaseQuery()
+            .neq("country", visitorCountry)
+            .range(0, pageSize - 1),
+        ]);
+        newRows = [
+          ...(((myRes.data ?? []) as Review[])),
+          ...(((otherRes.data ?? []) as Review[])),
+        ];
+      } else {
+        // Load more: only pull the next page of the "other" bucket. Page
+        // numbers map directly to the "other" bucket's offset because the
+        // entire my-country bucket was loaded on page 1.
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        const { data } = await buildBaseQuery()
+          .neq("country", visitorCountry)
+          .range(from, to);
+        newRows = (data ?? []) as Review[];
+      }
+    } else {
+      // Strict country filter selected (or no country context). Single-
+      // query pagination.
+      let q = buildBaseQuery();
+      if (reviewCountryFilter) q = q.eq("country", reviewCountryFilter);
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      const { data } = await q.range(from, to);
+      newRows = (data ?? []) as Review[];
     }
 
-    // sorting
-    if (reviewSort === "helpful")
-      q = q
-        .order("helpful_count", { ascending: false })
-        .order("created_at", { ascending: false });
-    if (reviewSort === "recent")
-      q = q.order("created_at", { ascending: false });
-    if (reviewSort === "high")
-      q = q
-        .order("rating", { ascending: false })
-        .order("created_at", { ascending: false });
-    if (reviewSort === "low")
-      q = q
-        .order("rating", { ascending: true })
-        .order("created_at", { ascending: false });
-
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    const { data } = await q.range(from, to);
-    const newRows = (data ?? []) as Review[];
-
-    // Merge first, then bubble. Bubbling per-page only would cluster
-    // visitor-country matches within their batch — visible after
-    // every "Load more" click. Sorting the merged list keeps the
-    // visitor's country reviews at the top globally regardless of
-    // how many pages have been loaded.
     let merged = resetPage ? newRows : [...reviews, ...newRows];
-    if (!reviewCountryFilter) {
-      const visitorCountry = readCountryFromCookie();
-      if (visitorCountry) {
-        merged = merged
-          .map((r, i) => ({ r, i, match: r.country === visitorCountry }))
-          .sort((a, b) =>
-            a.match === b.match ? a.i - b.i : a.match ? -1 : 1
-          )
-          .map((x) => x.r);
-      }
+    // Defensive de-dup by id. Protects against race conditions where
+    // two near-simultaneous "Load more" clicks or a stale page index
+    // could otherwise inject the same review twice into the list.
+    {
+      const seen = new Set<string>();
+      merged = merged.filter((r) => {
+        if (seen.has(r.id)) return false;
+        seen.add(r.id);
+        return true;
+      });
     }
 
     setReviews(merged);
@@ -2401,20 +2448,32 @@ export default function ProductPage({
                                       Snapshotted at review-create time
                                       so it never changes if the user
                                       later moves countries. */}
-                                  {r.country &&
-                                    (COUNTRY_PROFILES as any)[r.country] && (
-                                      <span
-                                        className="inline-flex items-center gap-1 text-xs text-muted-foreground"
-                                        title={
-                                          (COUNTRY_PROFILES as any)[r.country].name
-                                        }
-                                      >
-                                        <CountryFlag code={r.country} />
-                                        <span className="tabular-nums">
-                                          {r.country}
-                                        </span>
+                                  {r.country && (
+                                    // Render whatever country code is
+                                    // on the row — review data carries
+                                    // countries that aren't in our
+                                    // storefront's SUPPORTED list
+                                    // (notably AU/CA from seed data),
+                                    // and the earlier gate of
+                                    // `COUNTRY_PROFILES[code] &&` was
+                                    // hiding the flag chip entirely
+                                    // for those reviews. The
+                                    // CountryFlag component itself
+                                    // gracefully returns null for any
+                                    // code it doesn't have an SVG for.
+                                    <span
+                                      className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                                      title={
+                                        (COUNTRY_PROFILES as any)[r.country]
+                                          ?.name ?? r.country
+                                      }
+                                    >
+                                      <CountryFlag code={r.country} />
+                                      <span className="tabular-nums">
+                                        {r.country}
                                       </span>
-                                    )}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -2541,8 +2600,13 @@ export default function ProductPage({
                       <div className="text-center">
                         <Button
                           onClick={() => {
-                            setReviewPage((p) => p + 1);
-                            fetchReviews(false);
+                            const next = reviewPage + 1;
+                            setReviewPage(next);
+                            // Pass `next` explicitly so the fetch
+                            // doesn't read a stale reviewPage from
+                            // its closure — see the comment inside
+                            // fetchReviews for the full story.
+                            fetchReviews(false, next);
                           }}
                           disabled={loadingReviews}
                         >

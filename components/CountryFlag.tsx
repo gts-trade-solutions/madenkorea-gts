@@ -30,6 +30,16 @@ import {
   NG,
   QA,
   AE,
+  // Imports beyond SUPPORTED_COUNTRIES — needed because user-generated
+  // data (reviews) carries country codes that aren't in the storefront's
+  // supported list. AU and CA appear in seeded review data; JP/NL/SG/etc
+  // were called out in earlier scoping work as "might come back" and
+  // cost ~300 bytes each gzipped, so we include them defensively.
+  AU,
+  CA,
+  JP,
+  NL,
+  SG,
 } from "country-flag-icons/react/3x2";
 
 // The library exports a `FlagComponent` type that's slightly looser
@@ -51,6 +61,11 @@ const FLAG_COMPONENTS: Record<string, React.ComponentType<any>> = {
   NG,
   QA,
   AE,
+  AU,
+  CA,
+  JP,
+  NL,
+  SG,
 };
 
 type Props = {
