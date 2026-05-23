@@ -14,15 +14,24 @@ type SessionUser = {
   email?: string | null;
   full_name?: string | null;
   avatar_url?: string | null;
-  role?: UserRole; // NEW
+  role?: UserRole;
+  // `preferred_country` is read from public.profiles. When it's
+  // null/missing for an authenticated user, the storefront's
+  // <CountryGate> blocks the UI behind a country-picker modal so we
+  // never have a logged-in user without a known country.
+  preferred_country?: string | null;
 };
 
 type AuthContextType = {
   user: SessionUser | null;
   isAuthenticated: boolean;
   ready: boolean;
-  isAdmin: boolean; // NEW
-  hasRole: (role: UserRole) => boolean; // NEW
+  isAdmin: boolean;
+  hasRole: (role: UserRole) => boolean;
+  // True when the user is authenticated AND their profile has no
+  // preferred_country set. <CountryGate> reads this to decide whether
+  // to render its blocking modal.
+  needsCountrySelection: boolean;
   login: (c: { email: string; password: string }) => Promise<void>;
   register: (r: {
     full_name: string;
@@ -110,12 +119,15 @@ async function syncPreferencesOnLogin(userId: string) {
         }
         cookieChanged = true;
       }
-    } else if (cookieCountry && isSupportedCountry(cookieCountry)) {
-      await supabase
-        .from("profiles")
-        .update({ preferred_country: cookieCountry })
-        .eq("id", userId);
     }
+    // The old "profile empty → backfill from cookie" branch for
+    // preferred_country was removed when the CountryGate landed. Now
+    // any user with a null preferred_country is intentionally being
+    // asked to pick one explicitly via the modal — silently filling
+    // in their (geo-detected, potentially wrong) cookie value behind
+    // their back would defeat the gate's whole purpose. The signup
+    // form and the gate are the only two places that write
+    // preferred_country going forward.
 
     if (cookieChanged && typeof window !== "undefined") {
       // Full reload so SSR re-reads the cookies and providers pick up
@@ -163,7 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("full_name, avatar_url, role")
+      .select("full_name, avatar_url, role, preferred_country")
       .eq("id", authed.id)
       .maybeSingle();
 
@@ -174,6 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       avatar_url:
         profile?.avatar_url ?? authed.user_metadata?.avatar_url ?? null,
       role: (profile?.role as UserRole) ?? "customer",
+      preferred_country: profile?.preferred_country ?? null,
     });
   }
 
@@ -274,6 +287,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
   const isAdmin = hasRole("admin");
 
+  // Only flag the gate once auth has resolved AND we know the user has
+  // no country. Without the `ready` guard, the modal would briefly
+  // flash on every page during the auth-hydration window before
+  // disappearing once the profile actually loads.
+  const needsCountrySelection =
+    ready && !!user && (user.preferred_country == null || user.preferred_country === "");
+
   const value = useMemo(
     () => ({
       user,
@@ -281,12 +301,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ready,
       isAdmin,
       hasRole,
+      needsCountrySelection,
       login,
       register,
       logout,
       refreshProfile,
     }),
-    [user, ready]
+    [user, ready, needsCountrySelection]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

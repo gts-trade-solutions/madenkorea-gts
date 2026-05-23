@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { supabaseRouteClient } from "@/lib/supabaseRoute";
 import { createServiceClient } from "@/lib/supabaseServer";
+import { isSupportedCountry } from "@/lib/countries";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,6 +86,27 @@ export async function POST(req: NextRequest) {
       isVerifiedPurchase = !!(purchased && purchased.length > 0);
     }
 
+    // Snapshot the reviewer's country onto the row so the storefront
+    // can group/filter reviews by country without joining live (and
+    // so old reviews don't suddenly say "Vietnam" if a reviewer
+    // changes their country later). Priority: profile.preferred_country
+    // (the explicit user choice) → mik_country cookie (the geo/visitor
+    // signal) → null (we leave it for backfill rather than guessing).
+    let reviewerCountry: string | null = null;
+    const { data: profileRow } = await admin
+      .from("profiles")
+      .select("preferred_country")
+      .eq("id", userId)
+      .maybeSingle<{ preferred_country: string | null }>();
+    if (profileRow?.preferred_country && isSupportedCountry(profileRow.preferred_country)) {
+      reviewerCountry = profileRow.preferred_country;
+    } else {
+      const cookieCountry = cookies().get("mik_country")?.value;
+      if (cookieCountry && isSupportedCountry(cookieCountry)) {
+        reviewerCountry = cookieCountry;
+      }
+    }
+
     const { error: insertErr } = await admin.from("product_reviews").insert({
       product_id: productId,
       user_id: userId,
@@ -95,6 +118,7 @@ export async function POST(req: NextRequest) {
       status: "pending",
       display_name: displayName,
       avatar_url: avatarUrl,
+      country: reviewerCountry,
     });
 
     if (insertErr) {

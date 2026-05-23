@@ -27,6 +27,7 @@ import {
   SUPPORTED_COUNTRIES,
   COUNTRY_PROFILES,
 } from '@/lib/countries';
+import { CountryFlag } from '@/components/CountryFlag';
 
 type IRStatus = 'pending' | 'approved' | 'rejected';
 type IR = {
@@ -1284,7 +1285,7 @@ function CapSettingsModal({
                         : 'bg-background hover:bg-muted'
                     }`}
                   >
-                    <span aria-hidden>{profile.flag}</span>
+                    <CountryFlag code={code} />
                     <span>{profile.name}</span>
                   </button>
                 );

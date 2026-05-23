@@ -20,6 +20,25 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Eye, EyeOff, CheckCircle2, XCircle } from "lucide-react";
+import {
+  SUPPORTED_COUNTRIES,
+  COUNTRY_PROFILES,
+  isSupportedCountry,
+  DEFAULT_COUNTRY,
+  type CountryCode,
+} from "@/lib/countries";
+
+// Read mik_country from document.cookie at mount so the country
+// dropdown defaults to whatever middleware seeded from geo (or the
+// country switcher set). Falls back to DEFAULT_COUNTRY if absent.
+function readCountryFromCookie(): CountryCode {
+  if (typeof document === "undefined") return DEFAULT_COUNTRY;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("mik_country="));
+  const raw = match ? decodeURIComponent(match.split("=")[1] ?? "") : "";
+  return isSupportedCountry(raw) ? raw : DEFAULT_COUNTRY;
+}
 
 // Browser Supabase client
 /* -------------------------------------------------------------------------- */
@@ -120,6 +139,15 @@ export default function RegisterPage() {
     confirm: "",
   });
 
+  // Country picker — required. Defaults to the visitor's geo-detected
+  // country so most users won't need to change it. Stored separately
+  // from `form` because it's a select, not a text input, and so we
+  // can lazily pick a default from the cookie on first render without
+  // re-running it on every keystroke.
+  const [country, setCountry] = useState<CountryCode>(() =>
+    readCountryFromCookie()
+  );
+
   const [agree, setAgree] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -203,6 +231,10 @@ export default function RegisterPage() {
       toast.error(t("errPasswordsMismatch"));
       return;
     }
+    if (!isSupportedCountry(country)) {
+      toast.error("Please pick your country before continuing.");
+      return;
+    }
 
     setSubmitting(true);
     setVerificationNotice(null);
@@ -214,7 +246,15 @@ export default function RegisterPage() {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: form.full_name } },
+        // Also stash the country in user_metadata so it survives
+        // until the user verifies their email and signs in for the
+        // first time — at which point AuthContext sees a profile
+        // with no preferred_country and the CountryGate would
+        // otherwise re-ask. We pre-write the profile below for the
+        // auto-confirm case; the gate covers the email-verify case.
+        options: {
+          data: { full_name: form.full_name, signup_country: country },
+        },
       });
 
       if (error) {
@@ -229,6 +269,26 @@ export default function RegisterPage() {
       }
 
       await attachAfterAuth();
+
+      // Persist the chosen country to the profile + cookies right
+      // away so the rest of the session reflects it (prices,
+      // K-Partnership offers, shipping math). The API also handles
+      // setting mik_country / mik_currency / mik_locale cookies.
+      // Best-effort: if it fails (network blip), the CountryGate
+      // will catch the user on next page load.
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const token = s?.session?.access_token;
+        await fetch("/api/me/country", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ country }),
+        });
+      } catch {}
 
       // Stitch pre-signup anonymous activity onto the new user_id and
       // emit a `signup` event so the funnel can show signup placement.
@@ -286,6 +346,38 @@ export default function RegisterPage() {
                   onChange={onChange}
                   required
                 />
+              </div>
+
+              {/* Country — required. The post-signup flow writes this
+                  to the user's profile + mik_country cookie, so they
+                  skip the CountryGate modal that catches existing
+                  users without a country. */}
+              <div className="space-y-2">
+                <Label htmlFor="country">Country</Label>
+                <select
+                  id="country"
+                  name="country"
+                  value={country}
+                  onChange={(e) =>
+                    setCountry(e.target.value as CountryCode)
+                  }
+                  required
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {SUPPORTED_COUNTRIES.map((code) => {
+                    const profile = COUNTRY_PROFILES[code];
+                    // <option> content is plain text only — show name.
+                    return (
+                      <option key={code} value={code}>
+                        {profile?.name ?? code}
+                      </option>
+                    );
+                  })}
+                </select>
+                <p className="text-[11px] text-muted-foreground">
+                  Used to show you the right prices, shipping, and
+                  offers. You can change this later in the header.
+                </p>
               </div>
 
               {/* Password */}
@@ -412,6 +504,36 @@ export default function RegisterPage() {
                     {match ? t("passwordsMatch") : t("passwordsDoNotMatch")}
                   </p>
                 )}
+              </div>
+
+              {/* Country — required at signup so we know which prices,
+                  K-Partnership offers, and shipping rules apply to the
+                  user from their very first interaction. Pre-filled
+                  from the visitor's mik_country cookie (geo-detected
+                  by middleware), so most users just confirm. */}
+              <div className="space-y-2">
+                <Label htmlFor="signup-country">Country</Label>
+                <select
+                  id="signup-country"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value as CountryCode)}
+                  required
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm h-10"
+                >
+                  {SUPPORTED_COUNTRIES.map((code) => {
+                    const profile = COUNTRY_PROFILES[code];
+                    // <option> content is plain text only — show name.
+                    return (
+                      <option key={code} value={code}>
+                        {profile?.name ?? code}
+                      </option>
+                    );
+                  })}
+                </select>
+                <p className="text-[11px] text-muted-foreground">
+                  You can change this anytime from the country selector
+                  in the header.
+                </p>
               </div>
 
               {/* Terms */}

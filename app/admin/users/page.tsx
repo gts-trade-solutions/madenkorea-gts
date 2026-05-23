@@ -19,6 +19,8 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { COUNTRY_PROFILES, type CountryCode } from "@/lib/countries";
+import { CountryFlag } from "@/components/CountryFlag";
 
 // Admin Users page.
 // Lists every account (paginated, search by email/name/phone) and lets
@@ -329,7 +331,23 @@ export default function AdminUsersPage() {
                           {u.phone || "—"}
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">
-                          {u.preferred_country || "—"}
+                          {u.preferred_country
+                            ? (() => {
+                                const cc = u.preferred_country as CountryCode;
+                                const profile = COUNTRY_PROFILES[cc];
+                                return profile ? (
+                                  <span
+                                    className="inline-flex items-center gap-1.5"
+                                    title={profile.name}
+                                  >
+                                    <CountryFlag code={cc} />
+                                    <span className="tabular-nums">{cc}</span>
+                                  </span>
+                                ) : (
+                                  u.preferred_country
+                                );
+                              })()
+                            : "—"}
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums">
                           {formatDate(u.last_sign_in_at)}

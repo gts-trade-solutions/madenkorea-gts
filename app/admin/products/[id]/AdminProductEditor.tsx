@@ -20,6 +20,7 @@ import {
   SUPPORTED_COUNTRIES,
   COUNTRY_PROFILES,
 } from "@/lib/countries";
+import { CountryFlag } from "@/components/CountryFlag";
 
 /* ───────── helpers ───────── */
 function slugify(s: string) {
@@ -840,8 +841,11 @@ export function AdminProductEditor({ productId }: { productId: string }) {
                       hasError ? "border-red-300" : ""
                     }`}
                   >
-                    <span className="w-8 text-center text-lg" aria-hidden>
-                      {profile?.flag ?? "🏳️"}
+                    <span className="w-8 flex justify-center" aria-hidden>
+                      <CountryFlag
+                        code={row.country_code}
+                        className="inline-block h-5 w-auto rounded-[1px]"
+                      />
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium">

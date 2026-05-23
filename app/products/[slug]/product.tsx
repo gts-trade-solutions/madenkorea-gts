@@ -82,7 +82,8 @@ import {
   effectivePriceForCountry,
   augmentProductsWithCountryOffers,
 } from "@/lib/pricing";
-import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+import { isSupportedCountry, DEFAULT_COUNTRY, COUNTRY_PROFILES } from "@/lib/countries";
+import { CountryFlag } from "@/components/CountryFlag";
 import { supabaseImageLoader } from "@/lib/supabaseImageLoader";
 
 // Read `mik_country` from document.cookie at call-time. Client-only;
@@ -183,9 +184,12 @@ type Review = {
   is_verified_purchase: boolean;
   status: "published" | "pending" | "hidden";
   created_at: string;
-  /* NEW: */
   display_name?: string | null;
   avatar_url?: string | null;
+  // ISO-2 country snapshotted at review-create time (backfilled to
+  // 'IN' for all pre-feature reviews). Drives the per-country filter
+  // and the visitor-country-on-top sort in the reviews tab.
+  country?: string | null;
 };
 
 type ReviewWithPhotos = Review & { photos?: string[] | null };
@@ -1085,6 +1089,14 @@ export default function ProductPage({
   const [reviewSort, setReviewSort] = useState<
     "helpful" | "recent" | "high" | "low"
   >("helpful");
+  // Country filter for the reviews tab. "" = no filter (default;
+  // visitor's country still bubbles to the top within the chosen
+  // sort). Any other value = strict filter to that country only.
+  const [reviewCountryFilter, setReviewCountryFilter] = useState<string>("");
+  // List of countries that actually have reviews for this product.
+  // Populated alongside the reviews fetch so the dropdown only shows
+  // options that produce results.
+  const [reviewCountries, setReviewCountries] = useState<string[]>([]);
   const [reviewPage, setReviewPage] = useState(1);
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [helpfulVoted, setHelpfulVoted] = useState<Record<string, boolean>>({});
@@ -1099,11 +1111,35 @@ export default function ProductPage({
     if (!product?.id) return;
     setLoadingReviews(true);
     const page = resetPage ? 1 : reviewPage;
+
+    // Side-fetch: collect every distinct country that has at least
+    // one published review for this product, so the filter dropdown
+    // can show only options that produce results. Only triggered when
+    // resetPage (i.e. the first page of a fresh load) to avoid extra
+    // round trips on "load more".
+    if (resetPage) {
+      const { data: countryRows } = await supabase
+        .from("product_reviews")
+        .select("country")
+        .eq("product_id", product.id)
+        .eq("status", "published")
+        .not("country", "is", null);
+      const uniq = Array.from(
+        new Set((countryRows ?? []).map((r: any) => r.country).filter(Boolean))
+      ) as string[];
+      setReviewCountries(uniq.sort());
+    }
+
     let q = supabase
       .from("product_reviews")
       .select("*")
       .eq("product_id", product.id)
       .eq("status", "published");
+
+    // Country filter: strict match when set.
+    if (reviewCountryFilter) {
+      q = q.eq("country", reviewCountryFilter);
+    }
 
     // sorting
     if (reviewSort === "helpful")
@@ -1124,7 +1160,23 @@ export default function ProductPage({
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     const { data } = await q.range(from, to);
-    const rows = (data ?? []) as Review[];
+    let rows = (data ?? []) as Review[];
+
+    // Bubble the visitor's country to the top when no explicit filter
+    // is active. Stable sort within the same country bucket — i.e.
+    // helpful/recent/etc. ordering is preserved within each bucket.
+    if (!reviewCountryFilter) {
+      const visitorCountry = readCountryFromCookie();
+      if (visitorCountry) {
+        rows = rows
+          .map((r, i) => ({ r, i, match: r.country === visitorCountry }))
+          .sort((a, b) =>
+            a.match === b.match ? a.i - b.i : a.match ? -1 : 1
+          )
+          .map((x) => x.r);
+      }
+    }
+
     setReviews(resetPage ? rows : [...reviews, ...rows]);
     setReviewPage(page);
 
@@ -1153,7 +1205,7 @@ export default function ProductPage({
   useEffect(() => {
     fetchReviews(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product?.id, reviewSort]);
+  }, [product?.id, reviewSort, reviewCountryFilter]);
 
   /* ---------------- Reviews: actions ---------------- */
   const requireLogin = () => {
@@ -2174,7 +2226,7 @@ export default function ProductPage({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <label className="text-sm text-muted-foreground">
                           {t("reviewsSortLabel")}
                         </label>
@@ -2188,6 +2240,36 @@ export default function ProductPage({
                           <option value="high">{t("reviewsSortHigh")}</option>
                           <option value="low">{t("reviewsSortLow")}</option>
                         </select>
+
+                        {/* Country filter — only rendered when there
+                            are at least two distinct review countries
+                            for this product. A single-country dropdown
+                            adds clutter for zero benefit. */}
+                        {reviewCountries.length > 1 && (
+                          <>
+                            <label className="text-sm text-muted-foreground ml-2">
+                              Country
+                            </label>
+                            <select
+                              value={reviewCountryFilter}
+                              onChange={(e) =>
+                                setReviewCountryFilter(e.target.value)
+                              }
+                              className="border rounded-md px-2 py-1 text-sm bg-background"
+                            >
+                              <option value="">All countries</option>
+                              {reviewCountries.map((cc) => {
+                                const profile = (COUNTRY_PROFILES as any)[cc];
+                                // <option> can't host SVGs — name only.
+                                return (
+                                  <option key={cc} value={cc}>
+                                    {profile?.name ?? cc}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </>
+                        )}
                         {myReview ? (
                           <Button
                             variant="outline"
@@ -2280,11 +2362,31 @@ export default function ProductPage({
 
                               <div>
                                 <StarRow value={r.rating} />
-                                <div className="text-sm text-foreground/90">
-                                  {r.display_name ||
-                                    (r.is_verified_purchase
-                                      ? t("verifiedBuyer")
-                                      : t("anonymousReviewer"))}
+                                <div className="text-sm text-foreground/90 flex items-center gap-1.5 flex-wrap">
+                                  <span>
+                                    {r.display_name ||
+                                      (r.is_verified_purchase
+                                        ? t("verifiedBuyer")
+                                        : t("anonymousReviewer"))}
+                                  </span>
+                                  {/* Country flag for the reviewer.
+                                      Snapshotted at review-create time
+                                      so it never changes if the user
+                                      later moves countries. */}
+                                  {r.country &&
+                                    (COUNTRY_PROFILES as any)[r.country] && (
+                                      <span
+                                        className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                                        title={
+                                          (COUNTRY_PROFILES as any)[r.country].name
+                                        }
+                                      >
+                                        <CountryFlag code={r.country} />
+                                        <span className="tabular-nums">
+                                          {r.country}
+                                        </span>
+                                      </span>
+                                    )}
                                 </div>
                               </div>
                             </div>

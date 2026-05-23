@@ -25,6 +25,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { COUNTRY_PROFILES } from "@/lib/countries";
+import { CountryFlag } from "@/components/CountryFlag";
 
 /* ---------- Types ---------- */
 type PromoRow = {
@@ -705,7 +706,7 @@ export default function InfluencerDashboardPage() {
                       className="inline-flex items-center gap-1 rounded-full border bg-white px-1.5 py-0.5 text-[10px]"
                       title={profile.name}
                     >
-                      <span aria-hidden>{profile.flag}</span>
+                      <CountryFlag code={code} className="inline-block h-3 w-auto rounded-[1px]" />
                       <span>{code}</span>
                     </span>
                   );

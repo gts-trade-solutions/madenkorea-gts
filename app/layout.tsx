@@ -31,6 +31,7 @@ import { FloatingWhatsApp } from "@/components/FloatingWhatsApp";
 import { AnalyticsBootstrap } from "@/components/AnalyticsBootstrap";
 import { AnalyticsScripts } from "@/components/AnalyticsScripts";
 import { CookieConsentBanner } from "@/components/CookieConsentBanner";
+import { CountryGate } from "@/components/CountryGate";
 import { SiteJsonLd } from "@/components/SiteJsonLd";
 import {
   WHATSAPP_DEFAULT_MESSAGE,
@@ -223,6 +224,11 @@ export default async function RootLayout({
                         <AnalyticsBootstrap />
                       </Suspense>
                       {children}
+                      {/* Forces signed-in users without a
+                          preferred_country to pick one before they
+                          can use the app. Renders nothing for anon
+                          visitors and on /auth/* routes. */}
+                      <CountryGate />
                       <FloatingWhatsApp
                         phoneNumber={WHATSAPP_PHONE_NUMBER}
                         message={WHATSAPP_DEFAULT_MESSAGE}

@@ -19,6 +19,7 @@ import {
   COUNTRY_PROFILES,
   type CountryCode,
 } from "@/lib/countries";
+import { CountryFlag } from "@/components/CountryFlag";
 
 type VideoRow = {
   country_code: string;
@@ -331,7 +332,7 @@ export default function KPartnershipVideosAdminPage() {
                 <option value="">— No default (no fallback video) —</option>
                 {countriesWithVideos.map((c) => (
                   <option key={c} value={c}>
-                    {COUNTRY_PROFILES[c]?.flag} {COUNTRY_PROFILES[c]?.name}
+                    {COUNTRY_PROFILES[c]?.name ?? c}
                   </option>
                 ))}
               </select>
@@ -387,7 +388,6 @@ export default function KPartnershipVideosAdminPage() {
                     <CountryRow
                       key={code}
                       code={code}
-                      flag={profile?.flag ?? "🏳️"}
                       name={profile?.name ?? code}
                       video={row}
                       isDefault={isDefault}
@@ -409,7 +409,6 @@ export default function KPartnershipVideosAdminPage() {
 
 function CountryRow({
   code,
-  flag,
   name,
   video,
   isDefault,
@@ -419,7 +418,6 @@ function CountryRow({
   onRemove,
 }: {
   code: string;
-  flag: string;
   name: string;
   video?: VideoRow;
   isDefault: boolean;
@@ -434,9 +432,10 @@ function CountryRow({
     <div className="rounded-lg border bg-background p-3 sm:p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xl" aria-hidden>
-            {flag}
-          </span>
+          <CountryFlag
+            code={code}
+            className="inline-block h-5 w-auto rounded-[1px] shrink-0"
+          />
           <div className="min-w-0">
             <div className="text-sm font-medium truncate">{name}</div>
             <div className="text-[11px] text-muted-foreground">{code}</div>
