@@ -1,11 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useCurrency } from "@/lib/contexts/CurrencyContext";
+import { getBusinessProfile } from "@/lib/businessInfo";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
 
 type FloatingWhatsAppProps = {
+  /** Fallback WhatsApp number when no `country_contacts.whatsapp_number`
+   *  is configured for the visitor's country. Wired from
+   *  `WHATSAPP_PHONE_NUMBER` in the root layout. */
   phoneNumber: string; // example: 919876543210
   message?: string;
 };
@@ -36,22 +41,49 @@ function WhatsAppIcon({ className }: { className?: string }) {
   );
 }
 
+function readCountryFromCookie(): string {
+  if (typeof document === "undefined") return DEFAULT_COUNTRY;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("mik_country="));
+  const raw = match ? decodeURIComponent(match.split("=")[1] ?? "") : "";
+  return isSupportedCountry(raw) ? raw : DEFAULT_COUNTRY;
+}
+
+function normalize(num: string | null | undefined): string {
+  return (num ?? "").replace(/[^0-9]/g, "");
+}
+
 export function FloatingWhatsApp({
   phoneNumber,
   message = "Hi, I need help.",
 }: FloatingWhatsAppProps) {
   const pathname = usePathname() ?? "";
-  const { isINR } = useCurrency();
   const t = useTranslations("floatingWhatsapp");
   const hideOnMobile = HIDE_ON_MOBILE_PREFIXES.some((p) => pathname.startsWith(p));
 
-  // Hide the WhatsApp shortcut entirely for international visitors —
-  // the number is +91 (Indian WhatsApp), so it's not useful for them.
-  // They use the international order request flow + the email address
-  // in the footer for support.
-  if (!isINR) return null;
+  // Resolve the visitor's country-specific WhatsApp number. Falls back
+  // to the prop (env-supplied global default) until the profile loads,
+  // and hides the button entirely if neither the country override nor
+  // the fallback has a number set.
+  const [resolved, setResolved] = useState<string>(() => normalize(phoneNumber));
+  useEffect(() => {
+    let cancelled = false;
+    const country = readCountryFromCookie();
+    getBusinessProfile(country).then((p) => {
+      if (cancelled) return;
+      // The resolver already prefers country override → env fallback.
+      const next = normalize(p.contact.whatsappNumber);
+      setResolved(next || normalize(phoneNumber));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [phoneNumber]);
 
-  const href = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+  if (!resolved) return null;
+
+  const href = `https://wa.me/${resolved}?text=${encodeURIComponent(message)}`;
 
   return (
     <Link

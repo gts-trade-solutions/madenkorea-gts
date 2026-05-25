@@ -14,6 +14,7 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
+import { cookies } from "next/headers";
 import { getBusinessInfo } from "@/lib/businessInfo";
 
 export const dynamic = "force-dynamic";
@@ -87,7 +88,7 @@ const WHY_ROWS: WhyRow[] = [
 
 export default async function AboutPage() {
   const t = await getTranslations("aboutPage");
-  const business = await getBusinessInfo();
+  const business = await getBusinessInfo(cookies().get("mik_country")?.value);
   const hasCompanyDetails =
     Boolean(business.legalEntityName) ||
     Boolean(business.registeredAddress) ||

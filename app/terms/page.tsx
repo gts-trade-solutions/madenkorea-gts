@@ -10,6 +10,7 @@ import {
   PolicyMeta,
   type TocItem,
 } from "@/components/PolicyLayout";
+import { cookies } from "next/headers";
 import { getBusinessInfo } from "@/lib/businessInfo";
 
 export const dynamic = "force-dynamic";
@@ -78,7 +79,7 @@ function NumberedSection({
 }
 
 export default async function TermsPage() {
-  const business = await getBusinessInfo();
+  const business = await getBusinessInfo(cookies().get("mik_country")?.value);
   const jurisdictionLine = business.jurisdictionCity
     ? `the courts in ${business.jurisdictionCity}, India`
     : "the courts at our registered place of business in India";

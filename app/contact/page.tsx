@@ -15,14 +15,26 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Mail, Phone, MapPin, Clock, ShieldCheck, Building2 } from "lucide-react";
+import { Mail, Phone, MapPin, Clock, ShieldCheck, Building2, Globe2, User } from "lucide-react";
 import { toast } from "sonner";
 import {
-  DEFAULT_BUSINESS_INFO,
-  getBusinessInfo,
-  type BusinessInfo,
+  DEFAULT_BUSINESS_PROFILE,
+  getBusinessProfile,
+  type BusinessProfile,
 } from "@/lib/businessInfo";
-import { WHATSAPP_PHONE_NUMBER } from "@/lib/config/site";
+import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+
+// Read visitor country from the same `mik_country` cookie used elsewhere
+// for country-aware behavior. Mirrors the inline helper used in product.tsx
+// — kept duplicated here for surgical reasons (see COUNTRY_PRICING.md).
+function readCountryFromCookie(): string {
+  if (typeof document === "undefined") return DEFAULT_COUNTRY;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("mik_country="));
+  const raw = match ? decodeURIComponent(match.split("=")[1] ?? "") : "";
+  return isSupportedCountry(raw) ? raw : DEFAULT_COUNTRY;
+}
 
 // Inline WhatsApp glyph reused for the contact-form CTA. Same path data
 // as `components/FloatingWhatsApp.tsx` so the brand mark stays
@@ -42,25 +54,29 @@ function WhatsAppIcon({ className }: { className?: string }) {
 
 export default function ContactPage() {
   const t = useTranslations("contactPage");
-  // Pull live business / legal / Grievance Officer info on mount. The
-  // page is `'use client'` because of the form below; the policy
-  // disclosures used to live in the footer but are now surfaced here on
-  // the relevant page only.
-  const [business, setBusiness] = useState<BusinessInfo>(DEFAULT_BUSINESS_INFO);
+  // Pull live business profile (brand + partner globals + country-resolved
+  // contact details) on mount. The visitor's country comes from the
+  // `mik_country` cookie — switching country in the header reloads the
+  // page so this effect runs again with the new value.
+  const [profile, setProfile] = useState<BusinessProfile>(DEFAULT_BUSINESS_PROFILE);
   useEffect(() => {
     let cancelled = false;
-    getBusinessInfo().then((b) => {
-      if (!cancelled) setBusiness(b);
+    const country = readCountryFromCookie();
+    getBusinessProfile(country).then((p) => {
+      if (!cancelled) setProfile(p);
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const supportPhone = business.publicPhone ?? "";
-  const supportAddress = business.registeredAddress ?? "";
+  const { brand, partner, contact } = profile;
+  const supportPhone = contact.phone ?? "";
+  const supportAddress = contact.publicAddress ?? partner.registeredAddress ?? "";
   const hasSupportPhone = supportPhone.length > 0;
   const hasSupportAddress = supportAddress.length > 0;
+  const whatsappNumber = contact.whatsappNumber ?? "";
+  const hasWhatsApp = whatsappNumber.length > 0;
 
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -114,6 +130,10 @@ export default function ContactPage() {
   // us. Note: this does NOT save to `contact_messages` — the message
   // only exists in the resulting WhatsApp thread.
   const handleSendWhatsApp = () => {
+    if (!hasWhatsApp) {
+      toast.error(t("errNetwork"));
+      return;
+    }
     if (!formData.name.trim() || !formData.message.trim()) {
       toast.error(t("errMissingWhatsapp"));
       return;
@@ -126,7 +146,7 @@ export default function ContactPage() {
       formData.message.trim(),
     ].filter(Boolean) as string[];
     const text = encodeURIComponent(lines.join("\n"));
-    const url = `https://wa.me/${WHATSAPP_PHONE_NUMBER}?text=${text}`;
+    const url = `https://wa.me/${whatsappNumber.replace(/[^0-9]/g, "")}?text=${text}`;
     window.open(url, "_blank", "noopener,noreferrer");
     // We don't clear the form here — the customer hasn't actually sent
     // the message yet (they still need to tap Send inside WhatsApp), so
@@ -261,11 +281,18 @@ export default function ContactPage() {
                 <CardDescription>{t("directDescription")}</CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-5">
+                {contact.contactName && (
+                  <ContactRow
+                    icon={<User className="h-4 w-4" />}
+                    label={t("rowContactName")}
+                    value={contact.contactName}
+                  />
+                )}
                 <ContactRow
                   icon={<Mail className="h-4 w-4" />}
                   label={t("rowEmail")}
-                  value={business.supportEmail}
-                  href={`mailto:${business.supportEmail}`}
+                  value={contact.supportEmail}
+                  href={`mailto:${contact.supportEmail}`}
                 />
                 {hasSupportPhone && (
                   <ContactRow
@@ -278,7 +305,7 @@ export default function ContactPage() {
                 <ContactRow
                   icon={<Clock className="h-4 w-4" />}
                   label={t("rowHours")}
-                  value={business.businessHours}
+                  value={contact.businessHours}
                 />
                 {hasSupportAddress && (
                   <ContactRow
@@ -290,40 +317,45 @@ export default function ContactPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-none shadow-md bg-gradient-to-br from-[#25D366] to-[#1ea857] text-white">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-full bg-white/20 p-2 flex-shrink-0">
-                    <WhatsAppIcon className="h-5 w-5" />
+            {hasWhatsApp && (
+              <Card className="border-none shadow-md bg-gradient-to-br from-[#25D366] to-[#1ea857] text-white">
+                <CardContent className="p-6">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-full bg-white/20 p-2 flex-shrink-0">
+                      <WhatsAppIcon className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-lg font-semibold mb-1">
+                        {t("whatsappCardTitle")}
+                      </h3>
+                      <p className="text-sm text-white/90 mb-4">
+                        {t("whatsappCardBody")}
+                      </p>
+                      <a
+                        href={`https://wa.me/${whatsappNumber.replace(/[^0-9]/g, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-medium text-[#1fa855] hover:bg-white/90 transition-colors"
+                      >
+                        <WhatsAppIcon className="h-4 w-4" />
+                        {t("whatsappCardCta")}
+                      </a>
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-lg font-semibold mb-1">
-                      {t("whatsappCardTitle")}
-                    </h3>
-                    <p className="text-sm text-white/90 mb-4">
-                      {t("whatsappCardBody")}
-                    </p>
-                    <a
-                      href={`https://wa.me/${WHATSAPP_PHONE_NUMBER}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-medium text-[#1fa855] hover:bg-white/90 transition-colors"
-                    >
-                      <WhatsAppIcon className="h-4 w-4" />
-                      {t("whatsappCardCta")}
-                    </a>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
 
-        {/* ---------- Grievance Officer + Company info ----------
-            Required under Consumer Protection (E-Commerce) Rules 2020
-            and the DPDP Act 2023. Visually subtler than the main form
-            since they're reference info, not the primary CTA. */}
-        {(business.grievanceOfficerName || business.legalEntityName) && (
+        {/* ---------- Brand + Partner + Grievance Officer ----------
+            Brand card is always shown when we know the brand entity.
+            Partner card shows the local distributor / importer + India-
+            specific legal IDs (GSTIN, CDSCO). GO card carries the
+            Consumer Protection (E-Commerce) Rules 2020 disclosure. */}
+        {(brand.legalEntityName ||
+          partner.legalEntityName ||
+          partner.grievanceOfficer.name) && (
           <div className="max-w-6xl mx-auto mt-16 pt-10 border-t">
             <div className="text-center mb-8">
               <h2 className="text-xl font-semibold">{t("legalHeading")}</h2>
@@ -331,8 +363,63 @@ export default function ContactPage() {
                 {t("legalDescription")}
               </p>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              {business.grievanceOfficerName && (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {brand.legalEntityName && (
+                <Card className="bg-muted/30 border-muted">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2">
+                      <Globe2 className="h-5 w-5 text-primary" />
+                      <CardTitle className="text-base">{t("brandTitle")}</CardTitle>
+                    </div>
+                    <CardDescription className="text-xs">
+                      {t("brandDescription")}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0 text-sm space-y-1">
+                    <p className="font-medium">{brand.legalEntityName}</p>
+                    {brand.registeredAddress && (
+                      <p className="text-muted-foreground whitespace-pre-line">
+                        {brand.registeredAddress}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {partner.legalEntityName && (
+                <Card className="bg-muted/30 border-muted">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-5 w-5 text-primary" />
+                      <CardTitle className="text-base">{partner.roleLabel}</CardTitle>
+                    </div>
+                    <CardDescription className="text-xs">
+                      {t("companyDescription")}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0 text-sm space-y-1">
+                    <p className="font-medium">{partner.legalEntityName}</p>
+                    {partner.registeredAddress && (
+                      <p className="text-muted-foreground whitespace-pre-line">
+                        {partner.registeredAddress}
+                      </p>
+                    )}
+                    {partner.gstin && (
+                      <p className="text-muted-foreground">
+                        {t("gstinInlineLabel")} <span className="font-mono">{partner.gstin}</span>
+                      </p>
+                    )}
+                    {partner.cdscoRegistration && (
+                      <p className="text-muted-foreground">
+                        {t("cdscoInlineLabel")}{" "}
+                        <span className="font-mono">{partner.cdscoRegistration}</span>
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {partner.grievanceOfficer.name && (
                 <Card className="bg-muted/30 border-muted">
                   <CardHeader className="pb-3">
                     <div className="flex items-center gap-2">
@@ -346,58 +433,25 @@ export default function ContactPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-0 text-sm space-y-1">
-                    <p className="font-medium">{business.grievanceOfficerName}</p>
-                    {business.grievanceOfficerDesignation && (
+                    <p className="font-medium">{partner.grievanceOfficer.name}</p>
+                    {partner.grievanceOfficer.designation && (
                       <p className="text-muted-foreground">
-                        {business.grievanceOfficerDesignation}
+                        {partner.grievanceOfficer.designation}
                       </p>
                     )}
-                    {business.grievanceOfficerEmail && (
+                    {partner.grievanceOfficer.email && (
                       <p>
                         <a
-                          href={`mailto:${business.grievanceOfficerEmail}`}
+                          href={`mailto:${partner.grievanceOfficer.email}`}
                           className="text-muted-foreground hover:text-foreground hover:underline"
                         >
-                          {business.grievanceOfficerEmail}
+                          {partner.grievanceOfficer.email}
                         </a>
                       </p>
                     )}
                     {hasSupportPhone && (
                       <p className="text-muted-foreground">
                         {t("phoneInlineLabel")} {supportPhone}
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {business.legalEntityName && (
-                <Card className="bg-muted/30 border-muted">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-5 w-5 text-primary" />
-                      <CardTitle className="text-base">{t("companyTitle")}</CardTitle>
-                    </div>
-                    <CardDescription className="text-xs">
-                      {t("companyDescription")}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-0 text-sm space-y-1">
-                    <p className="font-medium">{business.legalEntityName}</p>
-                    {hasSupportAddress && (
-                      <p className="text-muted-foreground whitespace-pre-line">
-                        {supportAddress}
-                      </p>
-                    )}
-                    {business.gstin && (
-                      <p className="text-muted-foreground">
-                        {t("gstinInlineLabel")} <span className="font-mono">{business.gstin}</span>
-                      </p>
-                    )}
-                    {business.cdscoRegistration && (
-                      <p className="text-muted-foreground">
-                        {t("cdscoInlineLabel")}{" "}
-                        <span className="font-mono">{business.cdscoRegistration}</span>
                       </p>
                     )}
                   </CardContent>

@@ -232,7 +232,9 @@ export async function POST(req: NextRequest) {
   // request is already saved and admin can see it at
   // /admin/international-orders. Email errors are returned as warnings
   // so the client can soften the success toast if needed.
-  const business = await getBusinessInfo();
+  // Pass the customer's country so the support email/phone in the
+  // notification + acknowledgement render any per-country override.
+  const business = await getBusinessInfo(body.country);
   const emailErrors: string[] = [];
 
   // Admin/team notification: list is admin-managed at

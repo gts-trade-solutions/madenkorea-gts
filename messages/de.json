@@ -496,6 +496,7 @@
     "errMissingWhatsapp": "Bitte geben Sie Ihren Namen und eine Nachricht ein.",
     "directHeading": "Erreichen Sie uns direkt",
     "directDescription": "Bevorzugen Sie einen schnellen Kanal? Wählen Sie einen dieser.",
+    "rowContactName": "Ansprechpartner",
     "rowEmail": "E-Mail",
     "rowPhone": "Telefon",
     "rowHours": "Geschäftszeiten",
@@ -509,6 +510,8 @@
     "grievanceDescription": "Für ungelöste Beschwerden · Bestätigung innerhalb von 48 Stunden · Lösung innerhalb eines Monats.",
     "companyTitle": "Unternehmensangaben",
     "companyDescription": "Betreiber des MadenKorea Shops.",
+    "brandTitle": "Marke",
+    "brandDescription": "Der Markeninhaber.",
     "phoneInlineLabel": "Telefon:",
     "gstinInlineLabel": "GSTIN:",
     "cdscoInlineLabel": "CDSCO-Reg.:"
@@ -1245,6 +1248,7 @@
       "trackCta": "Meine Bestellungen und Rechnungen anzeigen",
       "needHelpHeading": "Benötigen Sie Hilfe bei Ihrer Bestellung?",
       "needHelpBody": "Bei Fragen, Produktanfragen oder Versandupdates können Sie uns unter folgenden Kontaktdaten erreichen:",
+      "needHelpContact": "Ansprechpartner:",
       "needHelpPhone": "Telefon:",
       "needHelpEmail": "E-Mail:",
       "productsNoteHeading": "Eine kurze Anmerkung zu Ihren Produkten",
@@ -1256,7 +1260,8 @@
       "closing": "Vielen Dank, dass Sie sich für MadenKorea entschieden haben. Wir freuen uns darauf, dass Sie Ihre Bestellung erhalten!",
       "signoff": "Alles Liebe,",
       "signoffName": "Team MadenKorea",
-      "footer": "Sie erhalten diese E-Mail, weil Sie eine Bestellung auf madenkorea.com aufgegeben haben."
+      "footer": "Sie erhalten diese E-Mail, weil Sie eine Bestellung auf madenkorea.com aufgegeben haben.",
+      "brandFooterLabel": "Marke"
     },
     "passwordReset": {
       "subject": "Passwort zurücksetzen",

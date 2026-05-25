@@ -19,6 +19,7 @@ import {
   Truck,
   UserCircle,
 } from "lucide-react";
+import { cookies } from "next/headers";
 import { getShippingConfig } from "@/lib/storeSettings";
 import { getBusinessInfo } from "@/lib/businessInfo";
 
@@ -45,9 +46,10 @@ type Section = {
 };
 
 export default async function FAQPage() {
+  const visitorCountry = cookies().get("mik_country")?.value;
   const [shipping, business] = await Promise.all([
     getShippingConfig(),
-    getBusinessInfo(),
+    getBusinessInfo(visitorCountry),
   ]);
   const thresholdLabel = `₹${shipping.deliveryThreshold.toLocaleString("en-IN")}`;
   const feeLabel = `₹${shipping.defaultShippingFee.toLocaleString("en-IN")}`;

@@ -496,6 +496,7 @@
     "errMissingWhatsapp": "Veuillez entrer votre nom et un message.",
     "directHeading": "Nous contacter directement",
     "directDescription": "Préférez un canal rapide ? Choisissez l'un de ceux-ci.",
+    "rowContactName": "Contact",
     "rowEmail": "E-mail",
     "rowPhone": "Téléphone",
     "rowHours": "Heures de bureau",
@@ -509,6 +510,8 @@
     "grievanceDescription": "Pour les plaintes non résolues · accusé de réception dans les 48 h · résolu dans un mois.",
     "companyTitle": "Informations sur l'entreprise",
     "companyDescription": "Exploitant de la vitrine MadenKorea.",
+    "brandTitle": "Marque",
+    "brandDescription": "Le propriétaire de la marque.",
     "phoneInlineLabel": "Téléphone :",
     "gstinInlineLabel": "GSTIN :",
     "cdscoInlineLabel": "Enregistrement CDSCO :"
@@ -1245,6 +1248,7 @@
       "trackCta": "Voir mes commandes et factures",
       "needHelpHeading": "Besoin d'aide avec votre commande ?",
       "needHelpBody": "Pour toute assistance, question sur les produits ou mise à jour d'expédition, vous pouvez nous contacter à :",
+      "needHelpContact": "Contact :",
       "needHelpPhone": "Téléphone :",
       "needHelpEmail": "Email :",
       "productsNoteHeading": "Une note rapide sur vos produits",
@@ -1256,7 +1260,8 @@
       "closing": "Merci encore d'avoir choisi MadenKorea. Nous sommes impatients que vous receviez votre commande !",
       "signoff": "Amicalement,",
       "signoffName": "L'équipe MadenKorea",
-      "footer": "Vous recevez cet email parce que vous avez passé une commande sur madenkorea.com."
+      "footer": "Vous recevez cet email parce que vous avez passé une commande sur madenkorea.com.",
+      "brandFooterLabel": "Marque"
     },
     "passwordReset": {
       "subject": "Réinitialisez votre mot de passe",

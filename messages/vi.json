@@ -496,6 +496,7 @@
     "errMissingWhatsapp": "Vui lòng nhập tên và tin nhắn của bạn.",
     "directHeading": "Liên hệ trực tiếp với chúng tôi",
     "directDescription": "Thích một kênh nhanh? Chọn một trong những kênh này.",
+    "rowContactName": "Liên hệ",
     "rowEmail": "Email",
     "rowPhone": "Điện thoại",
     "rowHours": "Giờ làm việc",
@@ -509,6 +510,8 @@
     "grievanceDescription": "Để giải quyết các khiếu nại chưa được giải quyết · được xác nhận trong vòng 48 giờ · được giải quyết trong một tháng.",
     "companyTitle": "Thông tin công ty",
     "companyDescription": "Nhà điều hành của cửa hàng MadenKorea.",
+    "brandTitle": "Thương hiệu",
+    "brandDescription": "Chủ sở hữu thương hiệu.",
     "phoneInlineLabel": "Điện thoại:",
     "gstinInlineLabel": "GSTIN:",
     "cdscoInlineLabel": "CDSCO reg.:"
@@ -1245,6 +1248,7 @@
       "trackCta": "Xem đơn hàng & hóa đơn của tôi",
       "needHelpHeading": "Cần trợ giúp với đơn hàng của bạn?",
       "needHelpBody": "Để được hỗ trợ, truy vấn sản phẩm hoặc cập nhật vận chuyển, bạn có thể liên hệ với chúng tôi tại:",
+      "needHelpContact": "Liên hệ:",
       "needHelpPhone": "Điện thoại:",
       "needHelpEmail": "Email:",
       "productsNoteHeading": "Lưu ý nhanh về sản phẩm của bạn",
@@ -1256,7 +1260,8 @@
       "closing": "Cảm ơn bạn lần nữa đã chọn MadenKorea. Chúng tôi rất mong chờ để bạn nhận được đơn hàng!",
       "signoff": "Yêu thương,",
       "signoffName": "Đội ngũ MadenKorea",
-      "footer": "Bạn nhận được email này vì bạn đã đặt hàng trên madenkorea.com."
+      "footer": "Bạn nhận được email này vì bạn đã đặt hàng trên madenkorea.com.",
+      "brandFooterLabel": "Thương hiệu"
     },
     "passwordReset": {
       "subject": "Đặt lại mật khẩu của bạn",

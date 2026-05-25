@@ -9,6 +9,7 @@ import {
   PolicyMeta,
   type TocItem,
 } from "@/components/PolicyLayout";
+import { cookies } from "next/headers";
 import { getBusinessInfo } from "@/lib/businessInfo";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -54,7 +55,7 @@ const TOC: TocItem[] = [
 ];
 
 export default async function PrivacyPage() {
-  const business = await getBusinessInfo();
+  const business = await getBusinessInfo(cookies().get("mik_country")?.value);
 
   // Hide rows whose data isn't filled in by the admin yet so the page
   // never shows empty "label: " lines.

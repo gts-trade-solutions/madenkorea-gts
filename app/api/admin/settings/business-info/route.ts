@@ -37,10 +37,29 @@ async function getAdminOr401() {
 }
 
 export async function GET() {
-  const { error } = await getAdminOr401();
+  const { error, supabase } = await getAdminOr401();
   if (error) return error;
+  // Legacy flat shape consumed by the existing settings page state. Brand
+  // + partner_role_label come from the raw store_settings row so the admin
+  // form can edit them — they're not part of the BusinessInfo type today.
   const info = await getBusinessInfo();
-  return json({ ok: true, info });
+  const { data: raw } = await supabase
+    .from("store_settings")
+    .select(
+      "brand_legal_entity_name, brand_registered_address, brand_country_code, partner_role_label"
+    )
+    .eq("id", 1)
+    .maybeSingle();
+  const brand = {
+    brandLegalEntityName: (raw?.brand_legal_entity_name as string | null) ?? null,
+    brandRegisteredAddress:
+      (raw?.brand_registered_address as string | null) ?? null,
+    brandCountryCode: (raw?.brand_country_code as string | null) ?? null,
+    partnerRoleLabel:
+      (raw?.partner_role_label as string | null) ??
+      "Authorized Importer & Distribution Partner",
+  };
+  return json({ ok: true, info: { ...info, ...brand } });
 }
 
 // Trim a string field to null when empty so the DB stores meaningful data
@@ -57,7 +76,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
 
-  const update = {
+  const update: Record<string, any> = {
     legal_entity_name: clean(body.legalEntityName),
     registered_address: clean(body.registeredAddress),
     public_phone: clean(body.publicPhone),
@@ -73,6 +92,22 @@ export async function POST(req: Request) {
     updated_at: new Date().toISOString(),
     updated_by: user!.id,
   };
+
+  // Brand-side fields are optional in the payload — only update them when
+  // the admin form submits them. The brand role label is always present
+  // because it has a non-null DB default, but we still allow a blank
+  // submission to reset to the default.
+  if ("brandLegalEntityName" in body)
+    update.brand_legal_entity_name = clean(body.brandLegalEntityName);
+  if ("brandRegisteredAddress" in body)
+    update.brand_registered_address = clean(body.brandRegisteredAddress);
+  if ("brandCountryCode" in body)
+    update.brand_country_code = clean(body.brandCountryCode);
+  if ("partnerRoleLabel" in body) {
+    const v = clean(body.partnerRoleLabel);
+    update.partner_role_label =
+      v ?? "Authorized Importer & Distribution Partner";
+  }
 
   const { error: upErr } = await supabase
     .from("store_settings")

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
@@ -9,7 +10,10 @@ import {
   isSupportedCurrency,
   type CurrencyCode,
 } from "@/lib/currency";
-import { getBusinessInfo, DEFAULT_BUSINESS_INFO } from "@/lib/businessInfo";
+import {
+  getBusinessProfile,
+  DEFAULT_BUSINESS_PROFILE,
+} from "@/lib/businessInfo";
 import { getEmailTranslator } from "@/lib/i18n/email";
 import { getAdminRecipientEmails } from "@/lib/notificationRecipients";
 import { clearPromoCookie } from "@/lib/promo-cookie";
@@ -602,22 +606,70 @@ export async function POST(req: NextRequest) {
       const siteUrl = resolveSiteUrl(req);
       const accountOrdersUrl = `${siteUrl}/account/orders`;
 
-      // Pull live business contact details from `store_settings` so
+      // Pull live business profile (brand + partner + country-resolved
+      // contact details) from `store_settings` + `country_contacts` so
       // changes the admin makes in /admin/settings → Business propagate
-      // to the order confirmation email immediately. Falls back to the
-      // module-level defaults if the row is unreachable; we never want
-      // a transient DB error to block the confirmation email.
-      const biz = await getBusinessInfo().catch(() => DEFAULT_BUSINESS_INFO);
-      const supportEmail = biz.supportEmail || DEFAULT_BUSINESS_INFO.supportEmail;
+      // to the order confirmation email immediately. The visitor's country
+      // comes from the `mik_country` cookie carried on the verify POST —
+      // the same browser session that placed the order. Falls back to the
+      // module-level defaults if either read fails; we never want a
+      // transient DB error to block the confirmation email.
+      const orderCountry =
+        cookies().get("mik_country")?.value?.toUpperCase() || null;
+      const profile = await getBusinessProfile(orderCountry ?? undefined).catch(
+        () => DEFAULT_BUSINESS_PROFILE
+      );
+      const supportEmail =
+        profile.contact.supportEmail ||
+        DEFAULT_BUSINESS_PROFILE.contact.supportEmail;
 
       // The admin enters the phone in whatever display form they prefer
       // (e.g. "+91 93848 57587" or "9384857587"). For the human-readable
       // line we keep that string as-is. For the `tel:` href we strip
       // everything except digits and `+` so the dial action works on
       // any device.
-      const supportPhoneDisplay = biz.publicPhone || "";
+      const supportPhoneDisplay = profile.contact.phone || "";
       const phoneDigits = supportPhoneDisplay.replace(/[^\d+]/g, "");
       const supportPhoneHref = phoneDigits ? `tel:${phoneDigits}` : "";
+      const supportContactName = profile.contact.contactName || "";
+
+      // Brand + Partner footer text. Brand stays the same on every email;
+      // partner is the local importer/distributor responsible for
+      // fulfillment, GST and grievances. Only renders the block(s) that
+      // have data — keeps the email tidy if either side isn't configured.
+      const brandFooterHtml = profile.brand.legalEntityName
+        ? `<strong>${escapeHtml(profile.brand.legalEntityName)}</strong>${
+            profile.brand.registeredAddress
+              ? `<br />${escapeHtml(profile.brand.registeredAddress)}`
+              : ""
+          }`
+        : "";
+      const partnerFooterHtml = profile.partner.legalEntityName
+        ? `<strong>${escapeHtml(profile.partner.roleLabel)}</strong><br /><strong>${escapeHtml(profile.partner.legalEntityName)}</strong>${
+            profile.partner.registeredAddress
+              ? `<br />${escapeHtml(profile.partner.registeredAddress)}`
+              : ""
+          }${
+            profile.partner.gstin
+              ? `<br />GSTIN: ${escapeHtml(profile.partner.gstin)}`
+              : ""
+          }`
+        : "";
+      const brandFooterText = profile.brand.legalEntityName
+        ? [profile.brand.legalEntityName, profile.brand.registeredAddress]
+            .filter(Boolean)
+            .join("\n")
+        : "";
+      const partnerFooterText = profile.partner.legalEntityName
+        ? [
+            profile.partner.roleLabel,
+            profile.partner.legalEntityName,
+            profile.partner.registeredAddress,
+            profile.partner.gstin ? `GSTIN: ${profile.partner.gstin}` : null,
+          ]
+            .filter(Boolean)
+            .join("\n")
+        : "";
 
       // Localize the buyer-facing email to the locale the order was
       // placed in. Admin notification stays English regardless (it
@@ -932,6 +984,9 @@ export async function POST(req: NextRequest) {
                   ${tEmail("orderConfirm.needHelpBody")}
                 </p>
                 <p style="margin: 0; color: #92400e; font-size: 13px">
+                  ${supportContactName
+                    ? `<strong>${tEmail("orderConfirm.needHelpContact")}</strong> ${escapeHtml(supportContactName)}<br />`
+                    : ""}
                   ${supportPhoneDisplay
                     ? `<strong>${tEmail("orderConfirm.needHelpPhone")}</strong> <a href="${supportPhoneHref}" style="color: inherit; text-decoration: none">${supportPhoneDisplay}</a><br />`
                     : ""}
@@ -984,6 +1039,35 @@ export async function POST(req: NextRequest) {
               </p>
             </div>
 
+            ${
+              brandFooterHtml || partnerFooterHtml
+                ? `
+            <div
+              style="
+                margin: 20px auto 0;
+                max-width: 640px;
+                padding: 16px;
+                border-top: 1px solid #e5e7eb;
+                color: #6b7280;
+                font-size: 12px;
+                line-height: 1.6;
+              "
+            >
+              ${
+                brandFooterHtml
+                  ? `<div style="margin-bottom: 12px"><span style="color: #9ca3af; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">${tEmail("orderConfirm.brandFooterLabel")}</span><br />${brandFooterHtml}</div>`
+                  : ""
+              }
+              ${
+                partnerFooterHtml
+                  ? `<div>${partnerFooterHtml}</div>`
+                  : ""
+              }
+            </div>
+            `
+                : ""
+            }
+
             <p
               style="
                 margin: 16px auto 0;
@@ -1033,6 +1117,9 @@ export async function POST(req: NextRequest) {
           accountOrdersUrl,
           "",
           tEmail("orderConfirm.needHelpBody"),
+          ...(supportContactName
+            ? [`${tEmail("orderConfirm.needHelpContact")} ${supportContactName}`]
+            : []),
           ...(supportPhoneDisplay
             ? [`${tEmail("orderConfirm.needHelpPhone")} ${supportPhoneDisplay}`]
             : []),
@@ -1040,6 +1127,15 @@ export async function POST(req: NextRequest) {
           "",
           tEmail("orderConfirm.signoff"),
           tEmail("orderConfirm.signoffName"),
+          ...(brandFooterText
+            ? [
+                "",
+                "—".repeat(20),
+                tEmail("orderConfirm.brandFooterLabel"),
+                brandFooterText,
+              ]
+            : []),
+          ...(partnerFooterText ? ["", partnerFooterText] : []),
         ].join("\n");
 
         emailPromises.push(

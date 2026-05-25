@@ -13,7 +13,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LogOut, Save } from 'lucide-react';
+import { LogOut, Save, Plus, Trash2 } from 'lucide-react';
+import { SUPPORTED_COUNTRIES, COUNTRY_PROFILES } from '@/lib/countries';
 import { toast } from 'sonner';
 
 export default function AdminSettingsPage() {
@@ -41,7 +42,15 @@ export default function AdminSettingsPage() {
 
   // Business / legal / compliance fields. Live in store_settings; loaded
   // from /api/admin/settings/business-info and saved back the same way.
+  // Three layers now:
+  //   - brand* fields = Korean brand company (global)
+  //   - partnerRoleLabel + everything else = Indian distribution partner (global)
+  //   - per-country contact overrides live in a separate state (countryContacts)
   const [business, setBusiness] = useState({
+    brandLegalEntityName: "",
+    brandRegisteredAddress: "",
+    brandCountryCode: "KR",
+    partnerRoleLabel: "Authorized Importer & Distribution Partner",
     legalEntityName: "",
     registeredAddress: "",
     publicPhone: "",
@@ -56,6 +65,20 @@ export default function AdminSettingsPage() {
     marketplaceDisclosureEnabled: false,
   });
   const [savingBusiness, setSavingBusiness] = useState(false);
+
+  type CountryContactRow = {
+    countryCode: string;
+    contactName: string;
+    publicPhone: string;
+    whatsappNumber: string;
+    supportEmail: string;
+    businessHours: string;
+    publicAddress: string;
+    isActive: boolean;
+  };
+  const [countryContacts, setCountryContacts] = useState<CountryContactRow[]>([]);
+  const [savingCountryContacts, setSavingCountryContacts] = useState(false);
+  const [addCountryCode, setAddCountryCode] = useState<string>("");
 
   useEffect(() => {
     if (!hasRole('admin')) {
@@ -106,6 +129,11 @@ export default function AdminSettingsPage() {
         const info = data?.info ?? {};
         setBusiness((prev) => ({
           ...prev,
+          brandLegalEntityName: info.brandLegalEntityName ?? '',
+          brandRegisteredAddress: info.brandRegisteredAddress ?? '',
+          brandCountryCode: info.brandCountryCode ?? 'KR',
+          partnerRoleLabel:
+            info.partnerRoleLabel ?? 'Authorized Importer & Distribution Partner',
           legalEntityName: info.legalEntityName ?? '',
           registeredAddress: info.registeredAddress ?? '',
           publicPhone: info.publicPhone ?? '',
@@ -121,7 +149,62 @@ export default function AdminSettingsPage() {
         }));
       } catch {}
     })();
+
+    // Load country contact overrides.
+    (async () => {
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const token = s?.session?.access_token;
+        const res = await fetch('/api/admin/settings/country-contacts', {
+          credentials: 'include',
+          headers: token ? { authorization: `Bearer ${token}` } : undefined,
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const rows: any[] = Array.isArray(data?.rows) ? data.rows : [];
+        setCountryContacts(
+          rows.map((r) => ({
+            countryCode: String(r.countryCode || '').toUpperCase(),
+            contactName: r.contactName ?? '',
+            publicPhone: r.publicPhone ?? '',
+            whatsappNumber: r.whatsappNumber ?? '',
+            supportEmail: r.supportEmail ?? '',
+            businessHours: r.businessHours ?? '',
+            publicAddress: r.publicAddress ?? '',
+            isActive: r.isActive !== false,
+          }))
+        );
+      } catch {}
+    })();
   }, [hasRole, router]);
+
+  const handleSaveCountryContacts = async () => {
+    setSavingCountryContacts(true);
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      const res = await fetch('/api/admin/settings/country-contacts', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'content-type': 'application/json',
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ rows: countryContacts }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body.ok === false) {
+        toast.error(body.error || 'Failed to save country contacts');
+        return;
+      }
+      toast.success('Country contacts saved');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to save country contacts');
+    } finally {
+      setSavingCountryContacts(false);
+    }
+  };
 
   const handleSaveBusiness = async () => {
     setSavingBusiness(true);
@@ -475,23 +558,101 @@ export default function AdminSettingsPage() {
           <TabsContent value="business">
             <Card>
               <CardHeader>
-                <CardTitle>Business &amp; legal info</CardTitle>
+                <CardTitle>Brand company</CardTitle>
                 <CardDescription>
-                  Used across customer-facing pages (Privacy, Terms, Refund, Cancellation, footer)
-                  and on invoices. Leave a field blank to hide it.
+                  The brand owner. Shown globally on every country&apos;s site
+                  alongside the local distribution partner.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="legalEntityName">Legal entity name</Label>
+                    <Label htmlFor="brandLegalEntityName">Brand legal entity name</Label>
+                    <Input
+                      id="brandLegalEntityName"
+                      value={business.brandLegalEntityName}
+                      onChange={(e) =>
+                        setBusiness((b) => ({ ...b, brandLegalEntityName: e.target.value }))
+                      }
+                      placeholder="e.g. Happy Times Co Ltd"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="brandCountryCode">Country of registration</Label>
+                    <Select
+                      value={business.brandCountryCode}
+                      onValueChange={(v) =>
+                        setBusiness((b) => ({ ...b, brandCountryCode: v }))
+                      }
+                    >
+                      <SelectTrigger id="brandCountryCode">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SUPPORTED_COUNTRIES.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {COUNTRY_PROFILES[c].flag} {COUNTRY_PROFILES[c].name} ({c})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="brandRegisteredAddress">Brand registered address</Label>
+                  <Textarea
+                    id="brandRegisteredAddress"
+                    rows={2}
+                    value={business.brandRegisteredAddress}
+                    onChange={(e) =>
+                      setBusiness((b) => ({ ...b, brandRegisteredAddress: e.target.value }))
+                    }
+                    placeholder="Street, City, Country"
+                  />
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button onClick={handleSaveBusiness} disabled={savingBusiness}>
+                    <Save className="mr-2 h-4 w-4" />
+                    {savingBusiness ? 'Saving…' : 'Save brand & partner info'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Distribution partner</CardTitle>
+                <CardDescription>
+                  The local importer / distributor handling fulfillment, GST,
+                  and grievances. Global — same record everywhere. Per-country
+                  contact details (phone, email, hours) live in the next card.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-2">
+                  <Label htmlFor="partnerRoleLabel">Partner role label</Label>
+                  <Input
+                    id="partnerRoleLabel"
+                    value={business.partnerRoleLabel}
+                    onChange={(e) =>
+                      setBusiness((b) => ({ ...b, partnerRoleLabel: e.target.value }))
+                    }
+                    placeholder="Authorized Importer & Distribution Partner"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Displayed as the heading of the partner card on the storefront.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="legalEntityName">Partner legal entity name</Label>
                     <Input
                       id="legalEntityName"
                       value={business.legalEntityName}
                       onChange={(e) =>
                         setBusiness((b) => ({ ...b, legalEntityName: e.target.value }))
                       }
-                      placeholder="e.g. Race Auto India Pvt Ltd"
+                      placeholder="e.g. GTS Trade Solutions Pvt Ltd"
                     />
                   </div>
                   <div className="grid gap-2">
@@ -508,7 +669,7 @@ export default function AdminSettingsPage() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="registeredAddress">Registered office address</Label>
+                  <Label htmlFor="registeredAddress">Partner registered office address</Label>
                   <Textarea
                     id="registeredAddress"
                     rows={3}
@@ -520,40 +681,48 @@ export default function AdminSettingsPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="publicPhone">Public phone</Label>
-                    <Input
-                      id="publicPhone"
-                      value={business.publicPhone}
-                      onChange={(e) =>
-                        setBusiness((b) => ({ ...b, publicPhone: e.target.value }))
-                      }
-                      placeholder="+91 98xxxxxxxx"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="supportEmail">Support email</Label>
-                    <Input
-                      id="supportEmail"
-                      type="email"
-                      value={business.supportEmail}
-                      onChange={(e) =>
-                        setBusiness((b) => ({ ...b, supportEmail: e.target.value }))
-                      }
-                      placeholder="info@madenkorea.com"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="businessHours">Business hours</Label>
-                    <Input
-                      id="businessHours"
-                      value={business.businessHours}
-                      onChange={(e) =>
-                        setBusiness((b) => ({ ...b, businessHours: e.target.value }))
-                      }
-                      placeholder="Mon-Fri 9AM - 6PM IST"
-                    />
+                <div className="border-t pt-4">
+                  <p className="text-sm font-medium">Default contact details</p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Fallback values used when a visitor&apos;s country has no
+                    override row in the &ldquo;Per-country contact overrides&rdquo;
+                    card below.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="publicPhone">Default public phone</Label>
+                      <Input
+                        id="publicPhone"
+                        value={business.publicPhone}
+                        onChange={(e) =>
+                          setBusiness((b) => ({ ...b, publicPhone: e.target.value }))
+                        }
+                        placeholder="+91 98xxxxxxxx"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="supportEmail">Default support email</Label>
+                      <Input
+                        id="supportEmail"
+                        type="email"
+                        value={business.supportEmail}
+                        onChange={(e) =>
+                          setBusiness((b) => ({ ...b, supportEmail: e.target.value }))
+                        }
+                        placeholder="info@madenkorea.com"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="businessHours">Default business hours</Label>
+                      <Input
+                        id="businessHours"
+                        value={business.businessHours}
+                        onChange={(e) =>
+                          setBusiness((b) => ({ ...b, businessHours: e.target.value }))
+                        }
+                        placeholder="Mon-Fri 9AM - 6PM IST"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -670,7 +839,233 @@ export default function AdminSettingsPage() {
                 <div className="flex justify-end pt-2">
                   <Button onClick={handleSaveBusiness} disabled={savingBusiness}>
                     <Save className="mr-2 h-4 w-4" />
-                    {savingBusiness ? 'Saving…' : 'Save business info'}
+                    {savingBusiness ? 'Saving…' : 'Save partner info'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Per-country contact overrides</CardTitle>
+                <CardDescription>
+                  When a visitor is in country X, the storefront uses the values
+                  in row X for phone, WhatsApp, support email, hours and public
+                  address. Empty fields fall back to the &ldquo;Default contact
+                  details&rdquo; above. Countries with no row see only the defaults.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {countryContacts.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No country overrides yet. Pick a country below to add one.
+                  </p>
+                )}
+                {countryContacts.map((row, idx) => (
+                  <div
+                    key={row.countryCode}
+                    className="rounded-md border p-4 space-y-3 bg-muted/20"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">
+                          {COUNTRY_PROFILES[row.countryCode as keyof typeof COUNTRY_PROFILES]?.flag}{' '}
+                          {COUNTRY_PROFILES[row.countryCode as keyof typeof COUNTRY_PROFILES]?.name ?? row.countryCode}
+                        </span>
+                        <span className="text-xs text-muted-foreground">({row.countryCode})</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={row.isActive}
+                            onCheckedChange={(v) => {
+                              setCountryContacts((rs) =>
+                                rs.map((r, i) =>
+                                  i === idx ? { ...r, isActive: v } : r
+                                )
+                              );
+                            }}
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {row.isActive ? 'Active' : 'Disabled'}
+                          </span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setCountryContacts((rs) =>
+                              rs.filter((_, i) => i !== idx)
+                            )
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="grid gap-1.5 md:col-span-3">
+                        <Label htmlFor={`cc-name-${idx}`} className="text-xs">
+                          Contact name
+                        </Label>
+                        <Input
+                          id={`cc-name-${idx}`}
+                          value={row.contactName}
+                          onChange={(e) =>
+                            setCountryContacts((rs) =>
+                              rs.map((r, i) =>
+                                i === idx ? { ...r, contactName: e.target.value } : r
+                              )
+                            )
+                          }
+                          placeholder="Person or department (e.g. Customer Care · Manoj Prabhu)"
+                        />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor={`cc-phone-${idx}`} className="text-xs">
+                          Phone
+                        </Label>
+                        <Input
+                          id={`cc-phone-${idx}`}
+                          value={row.publicPhone}
+                          onChange={(e) =>
+                            setCountryContacts((rs) =>
+                              rs.map((r, i) =>
+                                i === idx ? { ...r, publicPhone: e.target.value } : r
+                              )
+                            )
+                          }
+                          placeholder="(falls back to default)"
+                        />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor={`cc-wa-${idx}`} className="text-xs">
+                          WhatsApp number
+                        </Label>
+                        <Input
+                          id={`cc-wa-${idx}`}
+                          value={row.whatsappNumber}
+                          onChange={(e) =>
+                            setCountryContacts((rs) =>
+                              rs.map((r, i) =>
+                                i === idx ? { ...r, whatsappNumber: e.target.value } : r
+                              )
+                            )
+                          }
+                          placeholder="Digits only, e.g. 919384857587"
+                        />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor={`cc-email-${idx}`} className="text-xs">
+                          Support email
+                        </Label>
+                        <Input
+                          id={`cc-email-${idx}`}
+                          type="email"
+                          value={row.supportEmail}
+                          onChange={(e) =>
+                            setCountryContacts((rs) =>
+                              rs.map((r, i) =>
+                                i === idx ? { ...r, supportEmail: e.target.value } : r
+                              )
+                            )
+                          }
+                          placeholder="(falls back to default)"
+                        />
+                      </div>
+                      <div className="grid gap-1.5 md:col-span-1">
+                        <Label htmlFor={`cc-hours-${idx}`} className="text-xs">
+                          Business hours
+                        </Label>
+                        <Input
+                          id={`cc-hours-${idx}`}
+                          value={row.businessHours}
+                          onChange={(e) =>
+                            setCountryContacts((rs) =>
+                              rs.map((r, i) =>
+                                i === idx ? { ...r, businessHours: e.target.value } : r
+                              )
+                            )
+                          }
+                          placeholder="(falls back to default)"
+                        />
+                      </div>
+                      <div className="grid gap-1.5 md:col-span-2">
+                        <Label htmlFor={`cc-addr-${idx}`} className="text-xs">
+                          Public address (optional)
+                        </Label>
+                        <Input
+                          id={`cc-addr-${idx}`}
+                          value={row.publicAddress}
+                          onChange={(e) =>
+                            setCountryContacts((rs) =>
+                              rs.map((r, i) =>
+                                i === idx ? { ...r, publicAddress: e.target.value } : r
+                              )
+                            )
+                          }
+                          placeholder="Local office or mailing address"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="border-t pt-4 flex flex-wrap items-end gap-3">
+                  <div className="grid gap-1.5 min-w-[14rem]">
+                    <Label className="text-xs">Add country</Label>
+                    <Select
+                      value={addCountryCode}
+                      onValueChange={(v) => setAddCountryCode(v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pick a country…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SUPPORTED_COUNTRIES.filter(
+                          (c) => !countryContacts.some((r) => r.countryCode === c)
+                        ).map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {COUNTRY_PROFILES[c].flag} {COUNTRY_PROFILES[c].name} ({c})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    variant="outline"
+                    disabled={!addCountryCode}
+                    onClick={() => {
+                      if (!addCountryCode) return;
+                      setCountryContacts((rs) => [
+                        ...rs,
+                        {
+                          countryCode: addCountryCode,
+                          contactName: '',
+                          publicPhone: '',
+                          whatsappNumber: '',
+                          supportEmail: '',
+                          businessHours: '',
+                          publicAddress: '',
+                          isActive: true,
+                        },
+                      ]);
+                      setAddCountryCode('');
+                    }}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add country
+                  </Button>
+
+                  <div className="flex-1" />
+
+                  <Button
+                    onClick={handleSaveCountryContacts}
+                    disabled={savingCountryContacts}
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    {savingCountryContacts ? 'Saving…' : 'Save country contacts'}
                   </Button>
                 </div>
               </CardContent>

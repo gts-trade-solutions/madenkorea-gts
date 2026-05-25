@@ -496,6 +496,7 @@
     "errMissingWhatsapp": "Please enter your name and a message.",
     "directHeading": "Reach us directly",
     "directDescription": "Prefer a quick channel? Pick one of these.",
+    "rowContactName": "Contact",
     "rowEmail": "Email",
     "rowPhone": "Phone",
     "rowHours": "Business hours",
@@ -509,6 +510,8 @@
     "grievanceDescription": "For unresolved complaints · acknowledged within 48 hrs · resolved within one month.",
     "companyTitle": "Company information",
     "companyDescription": "Operator of the MadenKorea storefront.",
+    "brandTitle": "Brand",
+    "brandDescription": "The brand owner.",
     "phoneInlineLabel": "Phone:",
     "gstinInlineLabel": "GSTIN:",
     "cdscoInlineLabel": "CDSCO reg.:"
@@ -1245,6 +1248,7 @@
       "trackCta": "View my orders & invoices",
       "needHelpHeading": "Need help with your order?",
       "needHelpBody": "For any support, product queries, or shipment updates, you can reach us at:",
+      "needHelpContact": "Contact:",
       "needHelpPhone": "Phone:",
       "needHelpEmail": "Email:",
       "productsNoteHeading": "A quick note about your products",
@@ -1256,7 +1260,8 @@
       "closing": "Thank you again for choosing MadenKorea. We’re excited for you to receive your order!",
       "signoff": "Love,",
       "signoffName": "Team MadenKorea",
-      "footer": "You’re receiving this email because you placed an order on madenkorea.com."
+      "footer": "You’re receiving this email because you placed an order on madenkorea.com.",
+      "brandFooterLabel": "Brand"
     },
     "passwordReset": {
       "subject": "Reset your password",

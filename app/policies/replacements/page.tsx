@@ -12,6 +12,7 @@ import {
   PolicyMeta,
   type TocItem,
 } from "@/components/PolicyLayout";
+import { cookies } from "next/headers";
 import { getBusinessInfo } from "@/lib/businessInfo";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ const TOC: TocItem[] = [
 ];
 
 export default async function ReplacementPolicyPage() {
-  const business = await getBusinessInfo();
+  const business = await getBusinessInfo(cookies().get("mik_country")?.value);
   const supportEmail = business.supportEmail;
 
   return (

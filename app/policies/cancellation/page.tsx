@@ -20,6 +20,7 @@ import {
   PolicyMeta,
   type TocItem,
 } from "@/components/PolicyLayout";
+import { cookies } from "next/headers";
 import { getShippingConfig } from "@/lib/storeSettings";
 import { getBusinessInfo } from "@/lib/businessInfo";
 
@@ -43,9 +44,10 @@ const TOC: TocItem[] = [
 ];
 
 export default async function CancellationPolicyPage() {
+  const visitorCountry = cookies().get("mik_country")?.value;
   const [config, business] = await Promise.all([
     getShippingConfig(),
-    getBusinessInfo(),
+    getBusinessInfo(visitorCountry),
   ]);
   const thresholdLabel = `₹${config.deliveryThreshold.toLocaleString("en-IN")}`;
 
