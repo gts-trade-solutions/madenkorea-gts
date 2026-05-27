@@ -132,7 +132,7 @@ export async function GET(req: Request) {
   let pq = sb
     .from("profiles")
     .select(
-      "id, full_name, phone, preferred_country, role, created_at, updated_at",
+      "id, full_name, phone, preferred_country, role, created_at, updated_at, email_verified_at, email_verification_grace_starts_at, email_verification_deadline_override",
       { count: "exact" }
     );
   if (matchedIds) {
@@ -169,6 +169,11 @@ export async function GET(req: Request) {
       role: p.role ?? "customer",
       last_sign_in_at: au?.last_sign_in_at ?? null,
       created_at: p.created_at ?? au?.created_at ?? null,
+      email_verified_at: p.email_verified_at ?? null,
+      email_verification_grace_starts_at:
+        p.email_verification_grace_starts_at ?? null,
+      email_verification_deadline_override:
+        p.email_verification_deadline_override ?? null,
     };
   });
 

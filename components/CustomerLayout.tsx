@@ -1,5 +1,6 @@
 import { Header } from './Header';
 import { Footer } from './Footer';
+import { EmailVerificationBanner } from './EmailVerificationBanner';
 
 export function CustomerLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,7 @@ export function CustomerLayout({ children }: { children: React.ReactNode }) {
     // preferred over `hidden` because it does not break sticky/fixed
     // positioning of children.
     <div className="flex min-h-screen flex-col overflow-x-clip">
+      <EmailVerificationBanner />
       <Header />
       <main className="flex-1">{children}</main>
       <Footer />

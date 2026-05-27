@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { supabaseRouteClient } from "@/lib/supabaseRoute";
 import { createServiceClient } from "@/lib/supabaseServer";
 import { isSupportedCountry } from "@/lib/countries";
+import { requireEmailVerified } from "@/lib/auth/emailVerification";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { ok: false, error: "UNAUTHORIZED" },
         { status: 401 }
+      );
+    }
+
+    // Email verification gate. Stops fake-email accounts from posting
+    // reviews that influence storefront credibility.
+    const block = await requireEmailVerified(userId);
+    if (block) {
+      return NextResponse.json(
+        { ok: false, error: block.message, code: "email_not_verified" },
+        { status: 403 }
       );
     }
 

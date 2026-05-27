@@ -18,9 +18,36 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  MailCheck,
+  MailWarning,
+  MailX,
+  MoreHorizontal,
+  Send,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  CheckCheck,
 } from "lucide-react";
 import { COUNTRY_PROFILES, type CountryCode } from "@/lib/countries";
 import { CountryFlag } from "@/components/CountryFlag";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 // Admin Users page.
 // Lists every account (paginated, search by email/name/phone) and lets
@@ -42,6 +69,22 @@ type UserRow = {
   role: "customer" | "admin" | "super_admin";
   last_sign_in_at: string | null;
   created_at: string | null;
+  email_verified_at: string | null;
+  email_verification_grace_starts_at: string | null;
+  email_verification_deadline_override: string | null;
+};
+
+type EmailChangeRequest = {
+  id: string;
+  user_id: string;
+  current_email: string;
+  requested_email: string;
+  status: "pending" | "approved" | "rejected" | "superseded";
+  reason: string | null;
+  admin_note: string | null;
+  requested_at: string;
+  processed_at: string | null;
+  requester_name: string | null;
 };
 
 type UsersResponse = {
@@ -102,6 +145,120 @@ export default function AdminUsersPage() {
     nextRole: "customer" | "admin";
   } | null>(null);
 
+  // Email-change-request review state.
+  const [emailRequests, setEmailRequests] = useState<EmailChangeRequest[]>([]);
+  const [emailRequestsLoading, setEmailRequestsLoading] = useState(true);
+  const [reviewingRequest, setReviewingRequest] =
+    useState<EmailChangeRequest | null>(null);
+  const [reviewAction, setReviewAction] = useState<"approve" | "reject" | null>(null);
+  const [reviewNote, setReviewNote] = useState("");
+  const [reviewBusy, setReviewBusy] = useState(false);
+
+  // Verification per-row state.
+  const [extendDialog, setExtendDialog] = useState<UserRow | null>(null);
+  const [extendDays, setExtendDays] = useState(7);
+  const [verifyBusy, setVerifyBusy] = useState<string | null>(null);
+
+  const fetchEmailRequests = async () => {
+    setEmailRequestsLoading(true);
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      const res = await fetch(
+        `/api/admin/email-change-requests?status=pending`,
+        {
+          credentials: "include",
+          headers: token ? { authorization: `Bearer ${token}` } : undefined,
+          cache: "no-store",
+        }
+      );
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body?.ok) {
+        setEmailRequests((body.rows as EmailChangeRequest[]) ?? []);
+      }
+    } finally {
+      setEmailRequestsLoading(false);
+    }
+  };
+
+  const callUserVerification = async (
+    userId: string,
+    payload: Record<string, unknown>,
+    successMsg: string
+  ) => {
+    setVerifyBusy(userId);
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      const res = await fetch(
+        `/api/admin/users/${encodeURIComponent(userId)}/verification`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body?.ok === false) {
+        toast.error(body?.message || body?.error || "Action failed.");
+        return;
+      }
+      if (body?.alreadyVerified) {
+        toast.info("User is already verified.");
+      } else {
+        toast.success(successMsg);
+      }
+      await fetchPage(q, page);
+    } finally {
+      setVerifyBusy(null);
+    }
+  };
+
+  const submitReview = async () => {
+    if (!reviewingRequest || !reviewAction) return;
+    setReviewBusy(true);
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      const res = await fetch(
+        `/api/admin/email-change-requests/${encodeURIComponent(reviewingRequest.id)}`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            action: reviewAction,
+            adminNote: reviewNote.trim() || undefined,
+          }),
+        }
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body?.ok === false) {
+        toast.error(body?.message || body?.error || "Action failed.");
+        return;
+      }
+      toast.success(
+        reviewAction === "approve"
+          ? "Email change approved. Verification email sent to the new address."
+          : "Request rejected."
+      );
+      setReviewingRequest(null);
+      setReviewAction(null);
+      setReviewNote("");
+      await fetchEmailRequests();
+      await fetchPage(q, page);
+    } finally {
+      setReviewBusy(false);
+    }
+  };
+
   const fetchPage = async (qParam: string, p: number) => {
     setLoading(true);
     try {
@@ -136,6 +293,7 @@ export default function AdminUsersPage() {
       return;
     }
     fetchPage(q, page);
+    void fetchEmailRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, hasRole, router, page]);
 
@@ -234,6 +392,74 @@ export default function AdminUsersPage() {
           database access can change them.
         </p>
 
+        {/* Pending email change requests */}
+        {!emailRequestsLoading && emailRequests.length > 0 && (
+          <Card className="border-amber-300 bg-amber-50/60">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="h-4 w-4 text-amber-700" />
+                <span className="text-sm font-semibold text-amber-900">
+                  {emailRequests.length} pending email change{" "}
+                  {emailRequests.length === 1 ? "request" : "requests"}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {emailRequests.map((r) => (
+                  <div
+                    key={r.id}
+                    className="flex flex-col gap-2 rounded-md border border-amber-200 bg-white p-3 text-xs sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="space-y-0.5">
+                      <p>
+                        <strong>{r.requester_name || "(no name)"}</strong>{" "}
+                        <span className="text-muted-foreground">wants to change</span>
+                      </p>
+                      <p className="font-mono text-[11px]">
+                        {r.current_email}{" "}
+                        <span className="text-muted-foreground">→</span>{" "}
+                        <strong>{r.requested_email}</strong>
+                      </p>
+                      {r.reason && (
+                        <p className="text-muted-foreground italic">
+                          &ldquo;{r.reason}&rdquo;
+                        </p>
+                      )}
+                      <p className="text-[10px] text-muted-foreground">
+                        Submitted {formatDate(r.requested_at)}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-red-300 text-red-700"
+                        onClick={() => {
+                          setReviewingRequest(r);
+                          setReviewAction("reject");
+                          setReviewNote("");
+                        }}
+                      >
+                        <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700"
+                        onClick={() => {
+                          setReviewingRequest(r);
+                          setReviewAction("approve");
+                          setReviewNote("");
+                        }}
+                      >
+                        <CheckCheck className="h-3.5 w-3.5 mr-1" /> Approve
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Search */}
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -265,6 +491,7 @@ export default function AdminUsersPage() {
                   <th className="text-left px-4 py-3 font-medium">Email</th>
                   <th className="text-left px-4 py-3 font-medium">Name</th>
                   <th className="text-left px-4 py-3 font-medium">Role</th>
+                  <th className="text-left px-4 py-3 font-medium">Verification</th>
                   <th className="text-left px-4 py-3 font-medium">Phone</th>
                   <th className="text-left px-4 py-3 font-medium">Country</th>
                   <th className="text-left px-4 py-3 font-medium">Last sign-in</th>
@@ -276,7 +503,7 @@ export default function AdminUsersPage() {
                 {loading && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-4 py-12 text-center text-muted-foreground"
                     >
                       <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
@@ -287,7 +514,7 @@ export default function AdminUsersPage() {
                 {!loading && data && data.users.length === 0 && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-4 py-12 text-center text-muted-foreground"
                     >
                       No users match this search.
@@ -327,6 +554,30 @@ export default function AdminUsersPage() {
                           )}
                         </td>
                         <td className="px-4 py-3">{roleBadge(u.role)}</td>
+                        <td className="px-4 py-3">
+                          <VerificationCell
+                            row={u}
+                            busy={verifyBusy === u.id}
+                            onResend={() =>
+                              callUserVerification(
+                                u.id,
+                                { action: "resend" },
+                                "Verification email sent."
+                              )
+                            }
+                            onMarkVerified={() =>
+                              callUserVerification(
+                                u.id,
+                                { action: "mark-verified" },
+                                "User marked as verified."
+                              )
+                            }
+                            onExtend={() => {
+                              setExtendDays(7);
+                              setExtendDialog(u);
+                            }}
+                          />
+                        </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">
                           {u.phone || "—"}
                         </td>
@@ -491,6 +742,240 @@ export default function AdminUsersPage() {
           </div>
         </div>
       )}
+
+      {/* Extend grace period dialog */}
+      <Dialog
+        open={!!extendDialog}
+        onOpenChange={(o) => !o && setExtendDialog(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Extend grace period</DialogTitle>
+            <DialogDescription>
+              Add days to the current lockout deadline for{" "}
+              <strong>{extendDialog?.email ?? extendDialog?.full_name}</strong>.
+              Useful for VIP customers or active disputes where you need to
+              give them more time to verify.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="extendDays">Extra days</Label>
+            <Input
+              id="extendDays"
+              type="number"
+              min={1}
+              max={365}
+              value={extendDays}
+              onChange={(e) => setExtendDays(Number(e.target.value) || 1)}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setExtendDialog(null)}
+              disabled={verifyBusy === extendDialog?.id}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!extendDialog) return;
+                const target = extendDialog;
+                setExtendDialog(null);
+                await callUserVerification(
+                  target.id,
+                  { action: "extend", days: extendDays },
+                  `Grace period extended by ${extendDays} day${extendDays === 1 ? "" : "s"}.`
+                );
+              }}
+              disabled={verifyBusy === extendDialog?.id}
+            >
+              Extend by {extendDays} day{extendDays === 1 ? "" : "s"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Email change request review dialog */}
+      <Dialog
+        open={!!reviewingRequest && !!reviewAction}
+        onOpenChange={(o) => {
+          if (!o) {
+            setReviewingRequest(null);
+            setReviewAction(null);
+            setReviewNote("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {reviewAction === "approve"
+                ? "Approve email change"
+                : "Reject email change"}
+            </DialogTitle>
+            <DialogDescription>
+              {reviewAction === "approve" ? (
+                <>
+                  This will change the user&apos;s sign-in email to{" "}
+                  <strong>{reviewingRequest?.requested_email}</strong> and send
+                  a fresh verification link to the new address. Their existing
+                  verification status will be reset.
+                </>
+              ) : (
+                <>
+                  This will reject the request. The user will see the rejection
+                  reason on their account settings page next time they visit.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="adminNote" className="flex items-baseline justify-between">
+              <span>Note (visible to the user)</span>
+              <span className="text-xs text-muted-foreground font-normal">
+                {reviewAction === "reject" ? "Required" : "Optional"}
+              </span>
+            </Label>
+            <Textarea
+              id="adminNote"
+              rows={3}
+              value={reviewNote}
+              onChange={(e) => setReviewNote(e.target.value)}
+              placeholder={
+                reviewAction === "reject"
+                  ? "Explain why so the user knows what to do next."
+                  : "Optional message — e.g. confirmed via WhatsApp."
+              }
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReviewingRequest(null);
+                setReviewAction(null);
+                setReviewNote("");
+              }}
+              disabled={reviewBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={reviewAction === "approve" ? "default" : "destructive"}
+              onClick={submitReview}
+              disabled={
+                reviewBusy ||
+                (reviewAction === "reject" && reviewNote.trim().length === 0)
+              }
+            >
+              {reviewBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              {reviewAction === "approve" ? "Approve & send email" : "Reject"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
+  );
+}
+
+// --------------------------------------------------------------------
+// VerificationCell — shows a colored badge based on verification stage
+// and a kebab menu of admin actions. Stage is derived purely from row
+// fields + cached config (server already computed the absolute lockout
+// when we fetched the row, so we just need to translate now() vs that).
+// --------------------------------------------------------------------
+function VerificationCell({
+  row,
+  busy,
+  onResend,
+  onMarkVerified,
+  onExtend,
+}: {
+  row: UserRow;
+  busy: boolean;
+  onResend: () => void;
+  onMarkVerified: () => void;
+  onExtend: () => void;
+}) {
+  // Staff bypass — server-side gate also treats these as verified, but
+  // mirror it here so the badge matches.
+  const isStaff =
+    row.role === "admin" || row.role === "super_admin" || (row.role as any) === "vendor";
+
+  if (isStaff || row.email_verified_at) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+        <MailCheck className="h-3.5 w-3.5" />
+        Verified
+      </span>
+    );
+  }
+
+  // Compute deadline client-side using a 30-day default. The server is
+  // the source of truth for gating; this is just a display hint.
+  const graceStart = row.email_verification_grace_starts_at
+    ? new Date(row.email_verification_grace_starts_at)
+    : null;
+  const deadline = row.email_verification_deadline_override
+    ? new Date(row.email_verification_deadline_override)
+    : graceStart
+      ? new Date(graceStart.getTime() + 30 * 86400000)
+      : null;
+  const now = Date.now();
+  const daysLeft = deadline
+    ? Math.ceil((deadline.getTime() - now) / 86400000)
+    : null;
+  const stage =
+    !deadline
+      ? "soft"
+      : now >= deadline.getTime()
+        ? "locked"
+        : daysLeft !== null && daysLeft <= 23 // approximate warning window
+          ? "warning"
+          : "soft";
+
+  const labelStyle: Record<string, string> = {
+    soft: "text-blue-700",
+    warning: "text-amber-700",
+    locked: "text-red-700",
+  };
+  const Icon =
+    stage === "locked" ? MailX : stage === "warning" ? MailWarning : MailCheck;
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`inline-flex items-center gap-1 text-xs ${labelStyle[stage]}`}>
+        <Icon className="h-3.5 w-3.5" />
+        {stage === "locked"
+          ? "Locked out"
+          : stage === "warning"
+            ? `${daysLeft}d left`
+            : "Unverified"}
+      </span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="sm" variant="ghost" disabled={busy} className="h-6 w-6 p-0">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>Verification actions</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={onResend}>
+            <Send className="h-4 w-4 mr-2" />
+            Send verification email
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onExtend}>
+            <Clock className="h-4 w-4 mr-2" />
+            Extend grace period…
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onMarkVerified}>
+            <CheckCircle2 className="h-4 w-4 mr-2" />
+            Mark as verified
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }

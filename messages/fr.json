@@ -1263,6 +1263,16 @@
       "footer": "Vous recevez cet email parce que vous avez passé une commande sur madenkorea.com.",
       "brandFooterLabel": "Marque"
     },
+    "verifyEmail": {
+      "subject": "Vérifiez votre email pour MadenKorea",
+      "heading": "Confirmez votre email",
+      "intro": "Veuillez confirmer qu'il s'agit bien de votre email afin que nous puissions être sûrs que c'est vous. La vérification débloque le paiement, les avis et les outils de partenariat sur MadenKorea.",
+      "cta": "Vérifier mon email",
+      "fallbackPrefix": "Si le bouton ne fonctionne pas, collez ce lien dans votre navigateur :",
+      "expiryNotice": "Ce lien expire dans {hours} heures pour votre sécurité.",
+      "ignoreNotice": "Vous ne vous êtes pas inscrit sur MadenKorea ? Vous pouvez ignorer cet email en toute sécurité.",
+      "signoff": "L'équipe MadenKorea"
+    },
     "passwordReset": {
       "subject": "Réinitialisez votre mot de passe",
       "heading": "Réinitialisez votre mot de passe",

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import { requireEmailVerified } from "@/lib/auth/emailVerification";
 
 /** Helper: get user either from sb-* cookies or Authorization: Bearer */
 async function withUser(req: NextRequest) {
@@ -59,6 +60,16 @@ async function computeAvailable(sb: any, influencerId: string) {
 export async function POST(req: NextRequest) {
   const { user, sb } = await withUser(req);
   if (!user) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+
+  // Email verification gate. Payouts move real money — refusing them to
+  // unverified accounts prevents typo'd-email actors from cashing out.
+  const block = await requireEmailVerified(user.id);
+  if (block) {
+    return NextResponse.json(
+      { ok: false, error: block.message, code: "email_not_verified" },
+      { status: 403 }
+    );
+  }
 
   const { method, amount, contact_email, request_note } = await req.json().catch(() => ({}));
 

@@ -299,6 +299,27 @@ export default function RegisterPage() {
         body: JSON.stringify({ kind: "signup" }),
       }).catch(() => {});
 
+      // Fire the custom verification email. Best-effort — failures don't
+      // block signup. The user can always resend from the banner once
+      // they're inside the app. Uses the resend route so the email +
+      // rate-limit + token logic stays in one place.
+      void (async () => {
+        try {
+          const { data: s } = await supabase.auth.getSession();
+          const at = s?.session?.access_token;
+          await fetch("/api/auth/verify-email/resend", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "content-type": "application/json",
+              ...(at ? { authorization: `Bearer ${at}` } : {}),
+            },
+          });
+        } catch {
+          /* best-effort */
+        }
+      })();
+
       toast.success(t("successToast"));
       router.replace(mode === "influencer" ? "/influencer-request" : redirect);
     } catch (err: any) {

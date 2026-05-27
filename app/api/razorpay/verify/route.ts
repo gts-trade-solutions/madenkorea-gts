@@ -819,11 +819,17 @@ export async function POST(req: NextRequest) {
                 <h3 style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #111827">
                   ${tEmail("orderConfirm.itemsHeading")}
                 </h3>
-                <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden">
+                <table style="width: 100%; max-width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; table-layout: fixed">
+                  <colgroup>
+                    <col style="width: 50%" />
+                    <col style="width: 12%" />
+                    <col style="width: 19%" />
+                    <col style="width: 19%" />
+                  </colgroup>
                   <thead style="background: #f9fafb">
                     <tr>
                       <th style="text-align: left; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">${tEmail("orderConfirm.colItem")}</th>
-                      <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb; width: 50px">${tEmail("orderConfirm.colQty")}</th>
+                      <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">${tEmail("orderConfirm.colQty")}</th>
                       <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">${tEmail("orderConfirm.colUnitPrice")}</th>
                       <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">${tEmail("orderConfirm.colLineTotal")}</th>
                     </tr>
@@ -833,13 +839,13 @@ export async function POST(req: NextRequest) {
                       .map(
                         (it) => `
                     <tr>
-                      <td style="padding: 8px 10px; border-bottom: 1px solid #f3f4f6">
-                        <div style="font-weight: 500; color: #111827">${escapeHtml(it.name ?? "—")}</div>
-                        ${it.sku ? `<div style="font-size: 11px; color: #9ca3af; font-family: monospace">${escapeHtml(it.sku)}</div>` : ""}
+                      <td style="padding: 8px 10px; border-bottom: 1px solid #f3f4f6; word-break: break-word; overflow-wrap: anywhere">
+                        <div style="font-weight: 500; color: #111827; word-break: break-word; overflow-wrap: anywhere">${escapeHtml(it.name ?? "—")}</div>
+                        ${it.sku ? `<div style="font-size: 11px; color: #9ca3af; font-family: monospace; word-break: break-all; overflow-wrap: anywhere">${escapeHtml(it.sku)}</div>` : ""}
                       </td>
-                      <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6">${it.quantity}</td>
-                      <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6">${fmt(it.unit_price)}</td>
-                      <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6; font-weight: 500">${fmt(it.line_total)}</td>
+                      <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6; word-break: break-word">${it.quantity}</td>
+                      <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6; word-break: break-word">${fmt(it.unit_price)}</td>
+                      <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6; font-weight: 500; word-break: break-word">${fmt(it.line_total)}</td>
                     </tr>`
                       )
                       .join("")}
@@ -1345,11 +1351,17 @@ export async function POST(req: NextRequest) {
               <h3 style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #111827">
                 Items
               </h3>
-              <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden">
+              <table style="width: 100%; max-width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; table-layout: fixed">
+                <colgroup>
+                  <col style="width: 50%" />
+                  <col style="width: 12%" />
+                  <col style="width: 19%" />
+                  <col style="width: 19%" />
+                </colgroup>
                 <thead style="background: #f9fafb">
                   <tr>
                     <th style="text-align: left; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">Item</th>
-                    <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb; width: 50px">Qty</th>
+                    <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">Qty</th>
                     <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">Unit</th>
                     <th style="text-align: right; padding: 8px 10px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb">Line total</th>
                   </tr>
@@ -1359,13 +1371,13 @@ export async function POST(req: NextRequest) {
                     .map(
                       (it) => `
                   <tr>
-                    <td style="padding: 8px 10px; border-bottom: 1px solid #f3f4f6">
-                      <div style="font-weight: 500; color: #111827">${escapeHtml(it.name ?? "—")}</div>
-                      ${it.sku ? `<div style="font-size: 11px; color: #9ca3af; font-family: monospace">${escapeHtml(it.sku)}</div>` : ""}
+                    <td style="padding: 8px 10px; border-bottom: 1px solid #f3f4f6; word-break: break-word; overflow-wrap: anywhere">
+                      <div style="font-weight: 500; color: #111827; word-break: break-word; overflow-wrap: anywhere">${escapeHtml(it.name ?? "—")}</div>
+                      ${it.sku ? `<div style="font-size: 11px; color: #9ca3af; font-family: monospace; word-break: break-all; overflow-wrap: anywhere">${escapeHtml(it.sku)}</div>` : ""}
                     </td>
-                    <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6">${it.quantity}</td>
-                    <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6">${fmt(it.unit_price)}</td>
-                    <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6; font-weight: 500">${fmt(it.line_total)}</td>
+                    <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6; word-break: break-word">${it.quantity}</td>
+                    <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6; word-break: break-word">${fmt(it.unit_price)}</td>
+                    <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f3f4f6; font-weight: 500; word-break: break-word">${fmt(it.line_total)}</td>
                   </tr>`
                     )
                     .join("")}

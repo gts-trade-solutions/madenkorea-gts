@@ -1273,6 +1273,16 @@
       "ignoreNotice": "Didn't request a reset? You can safely ignore this email — your password won't change.",
       "signoff": "Team MadenKorea"
     },
+    "verifyEmail": {
+      "subject": "Verify your email for MadenKorea",
+      "heading": "Confirm your email",
+      "intro": "Please confirm this is your email so we know it's really you. Verifying unlocks checkout, reviews, and partnership tools across MadenKorea.",
+      "cta": "Verify my email",
+      "fallbackPrefix": "If the button doesn't work, paste this link into your browser:",
+      "expiryNotice": "This link expires in {hours} hours for your security.",
+      "ignoreNotice": "Didn't sign up for MadenKorea? You can safely ignore this email.",
+      "signoff": "Team MadenKorea"
+    },
     "internationalOrderAck": {
       "subject": "We received your international order request",
       "heading": "Hi {name}, your request has been received.",

@@ -1263,6 +1263,16 @@
       "footer": "Bạn nhận được email này vì bạn đã đặt hàng trên madenkorea.com.",
       "brandFooterLabel": "Thương hiệu"
     },
+    "verifyEmail": {
+      "subject": "Xác minh email của bạn cho MadenKorea",
+      "heading": "Xác nhận email của bạn",
+      "intro": "Vui lòng xác nhận đây là email của bạn để chúng tôi biết đây thực sự là bạn. Xác minh sẽ mở khóa thanh toán, đánh giá và các công cụ đối tác trên MadenKorea.",
+      "cta": "Xác minh email của tôi",
+      "fallbackPrefix": "Nếu nút không hoạt động, hãy dán liên kết này vào trình duyệt của bạn:",
+      "expiryNotice": "Liên kết này hết hạn trong {hours} giờ vì lý do bảo mật.",
+      "ignoreNotice": "Bạn không đăng ký MadenKorea? Bạn có thể bỏ qua email này một cách an toàn.",
+      "signoff": "Đội ngũ MadenKorea"
+    },
     "passwordReset": {
       "subject": "Đặt lại mật khẩu của bạn",
       "heading": "Đặt lại mật khẩu của bạn",

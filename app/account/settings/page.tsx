@@ -28,6 +28,7 @@ import {
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 import { Flag } from "@/components/Flag";
+import { EmailChangeRequestBlock } from "@/components/EmailChangeRequestBlock";
 import {
   COUNTRY_PROFILES,
   SUPPORTED_COUNTRIES,
@@ -184,6 +185,31 @@ export default function AccountSettingsPage() {
       setSavingPassword(false);
       toast.error(t("pwErrVerify"));
       return;
+    }
+    // Email-verification gate. Password change is a trust-required
+    // action — refusing it for unverified accounts prevents a stolen
+    // session from locking the legitimate user out before they've
+    // proven the email is theirs. Server-side gating isn't possible
+    // here (supabase.auth.updateUser is a client SDK call), so this is
+    // the client-side enforcement.
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const at = s?.session?.access_token;
+      const vRes = await fetch("/api/me/email-verification-status", {
+        credentials: "include",
+        headers: at ? { authorization: `Bearer ${at}` } : undefined,
+        cache: "no-store",
+      });
+      const vBody = await vRes.json().catch(() => ({}));
+      if (vBody?.authenticated && !vBody?.verified) {
+        setSavingPassword(false);
+        toast.error(
+          "Verify your email before changing your password."
+        );
+        return;
+      }
+    } catch {
+      /* network blip — fall through to the password update */
     }
     const { error: reauthError } = await supabase.auth.signInWithPassword({
       email,
@@ -415,6 +441,7 @@ export default function AccountSettingsPage() {
                       value={profile.email || ""}
                       disabled
                     />
+                    <EmailChangeRequestBlock />
                   </div>
 
                   <div className="grid gap-2">

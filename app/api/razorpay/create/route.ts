@@ -17,6 +17,7 @@ import {
   computeIntlShippingInr,
 } from "@/lib/internationalShipping";
 import { isSupportedCountry, DEFAULT_COUNTRY } from "@/lib/countries";
+import { requireEmailVerified } from "@/lib/auth/emailVerification";
 
 export async function POST(req: NextRequest) {
   try {
@@ -28,6 +29,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { ok: false, error: "Unauthorized" },
         { status: 401 }
+      );
+    }
+
+    // Email verification gate. Trust-required action: prevents fake-email
+    // signups from completing payments, which would generate SES bounces
+    // and pollute the orders table with un-reachable customers.
+    const block = await requireEmailVerified(userId);
+    if (block) {
+      return NextResponse.json(
+        { ok: false, error: block.message, code: "email_not_verified" },
+        { status: 403 }
       );
     }
 

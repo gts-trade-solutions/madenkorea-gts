@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { headers, cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { requireEmailVerified } from "@/lib/auth/emailVerification";
 
 const json = (d: any, s = 200) =>
   NextResponse.json(d, { status: s, headers: { "cache-control": "no-store" } });
@@ -26,6 +27,16 @@ export async function POST(req: Request) {
     user = data.user;
   }
   if (!user) return json({ ok: false, error: "UNAUTH" }, 401);
+
+  // Email verification gate. K-Partnership is a real business
+  // relationship — never want to onboard partners on un-reachable emails.
+  const block = await requireEmailVerified(user.id);
+  if (block) {
+    return json(
+      { ok: false, error: block.message, code: "email_not_verified" },
+      403
+    );
+  }
 
   // Already an influencer?
   const { data: infl } = await supabase
