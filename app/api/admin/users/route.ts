@@ -8,27 +8,29 @@ import { createClient } from "@supabase/supabase-js";
 
 // Admin-only paginated user list backing /admin/users.
 //
-// Query:
-//   ?q=<term>    — case-insensitive match on email / full_name / phone
-//   ?page=<n>    — 1-indexed, default 1
-//   ?limit=<n>   — default 50, clamped 1..200
+// Query params (all optional):
+//   q            — case-insensitive match on email / full_name / phone
+//   page         — 1-indexed, default 1
+//   limit        — default 50, clamped 1..200
+//   sort         — newest (default) | oldest | name_asc | name_desc
+//                  | email_asc | email_desc | recent_activity
+//   joined_from  — ISO yyyy-mm-dd, includes the day
+//   joined_to    — ISO yyyy-mm-dd, includes the day (end-of-day inclusive)
+//   role         — customer | admin | super_admin
+//   verification — verified | unverified | locked
+//   country      — ISO-2 country code (matches profiles.preferred_country)
 //
-// Response shape:
-//   {
-//     ok: true,
-//     total: 1234,
-//     page: 1,
-//     limit: 50,
-//     users: [{
-//       id, email, full_name, phone, preferred_country, role,
-//       last_sign_in_at, created_at
-//     }]
-//   }
+// Filtering / sorting implementation:
+//   - DB-level: q, joined_from, joined_to, role, country, sort newest/
+//     oldest/name_asc/name_desc. Uses Supabase pagination + exact count.
+//   - JS-level: verification filter, sort email/recent_activity. When
+//     these are active we fetch all matching rows (capped 1000), filter
+//     + sort + paginate in JS, and return the post-filter count.
 //
-// We page over auth.users (the source of truth for accounts) and
-// left-join the public.profiles row for app metadata (role + name +
-// phone). Doing it the other way (profiles-first) would skip accounts
-// whose profile row was never inserted.
+// Why JS for verification: the resolved stage depends on
+// (grace_start, deadline_override, store_settings.lockout_days). Doing
+// it as a single PostgREST filter would need a stored procedure;
+// 1000-row in-memory pass is fine at this app's scale (<100 users today).
 
 const json = (d: any, s = 200) =>
   NextResponse.json(d, { status: s, headers: { "cache-control": "no-store" } });
@@ -69,6 +71,27 @@ function admin() {
   );
 }
 
+const STAFF_ROLES = ["admin", "super_admin", "vendor"];
+
+type SortKey =
+  | "newest"
+  | "oldest"
+  | "name_asc"
+  | "name_desc"
+  | "email_asc"
+  | "email_desc"
+  | "recent_activity";
+
+const DB_SORT: Record<string, { column: string; ascending: boolean } | null> = {
+  newest: { column: "created_at", ascending: false },
+  oldest: { column: "created_at", ascending: true },
+  name_asc: { column: "full_name", ascending: true },
+  name_desc: { column: "full_name", ascending: false },
+  email_asc: null,
+  email_desc: null,
+  recent_activity: null,
+};
+
 export async function GET(req: Request) {
   const { user, error } = await getAdminOr401();
   if (error) return error;
@@ -81,15 +104,36 @@ export async function GET(req: Request) {
     Math.max(1, Math.floor(Number(url.searchParams.get("limit")) || 50))
   );
 
+  const rawSort = (url.searchParams.get("sort") || "newest") as SortKey;
+  const sort: SortKey = (
+    Object.keys(DB_SORT) as SortKey[]
+  ).includes(rawSort)
+    ? rawSort
+    : "newest";
+
+  const joinedFromRaw = (url.searchParams.get("joined_from") || "").trim();
+  const joinedToRaw = (url.searchParams.get("joined_to") || "").trim();
+  const roleFilter = (url.searchParams.get("role") || "").trim();
+  const verificationFilter = (url.searchParams.get("verification") || "").trim();
+  const countryFilter = (url.searchParams.get("country") || "").trim().toUpperCase();
+
   const sb = admin();
 
-  // Step 1 — pull candidate profile rows (the table we can search +
-  // filter cheaply). Then in step 2 we fetch matching auth.users rows
-  // to attach email + last_sign_in.
-  //
-  // For search, we OR-match on full_name and phone (both live on
-  // profiles). For email matches we have to query auth.users
-  // separately because Supabase RLS doesn't allow joining onto it.
+  // Step 0 — store config for lockout-day calculation (needed for
+  // verification filter / stage display). Defaults match
+  // lib/auth/emailVerification.ts constants so behavior is consistent
+  // if the column is missing.
+  const { data: settings } = await sb
+    .from("store_settings")
+    .select("email_verification_lockout_days")
+    .eq("id", 1)
+    .maybeSingle();
+  const lockoutDays =
+    Number(settings?.email_verification_lockout_days) > 0
+      ? Number(settings!.email_verification_lockout_days)
+      : 30;
+
+  // Step 1 — search-term pre-filter (existing behavior, untouched).
   let matchedIds: Set<string> | null = null;
   if (q) {
     const wildcard = `%${q.replace(/[%_]/g, "\\$&")}%`;
@@ -99,8 +143,6 @@ export async function GET(req: Request) {
           .from("profiles")
           .select("id")
           .or(`full_name.ilike.${wildcard},phone.ilike.${wildcard}`),
-        // auth.users doesn't support .ilike via the JS SDK — listUsers
-        // supports a string search though.
         sb.auth.admin.listUsers({ page: 1, perPage: 200 }).then((r) => ({
           data: {
             users: (r.data?.users ?? []).filter((u) =>
@@ -126,43 +168,91 @@ export async function GET(req: Request) {
     }
   }
 
-  // Step 2 — fetch the matching profile rows with pagination. We sort
-  // by created_at desc so the newest accounts surface first (most
-  // common "I just signed someone up, where are they" path).
+  // Determine whether we can DB-paginate (fast path) or have to fetch
+  // all rows for JS-side filter/sort. JS path triggers when:
+  //   - verification filter is set (needs computed stage)
+  //   - sort is email_asc / email_desc / recent_activity (needs auth)
+  const needsJsPath =
+    verificationFilter !== "" ||
+    sort === "email_asc" ||
+    sort === "email_desc" ||
+    sort === "recent_activity";
+
+  // Step 2 — build the profile query with DB-level filters.
   let pq = sb
     .from("profiles")
     .select(
       "id, full_name, phone, preferred_country, role, created_at, updated_at, email_verified_at, email_verification_grace_starts_at, email_verification_deadline_override",
       { count: "exact" }
     );
-  if (matchedIds) {
-    pq = pq.in("id", Array.from(matchedIds));
+  if (matchedIds) pq = pq.in("id", Array.from(matchedIds));
+  if (joinedFromRaw) pq = pq.gte("created_at", joinedFromRaw);
+  if (joinedToRaw) {
+    // Inclusive end-of-day: append T23:59:59.999Z so the day is included.
+    const endIso = /\d{4}-\d{2}-\d{2}$/.test(joinedToRaw)
+      ? `${joinedToRaw}T23:59:59.999Z`
+      : joinedToRaw;
+    pq = pq.lte("created_at", endIso);
   }
-  const from = (page - 1) * limit;
-  const to = from + limit - 1;
-  const { data: profs, count, error: pErr } = await pq
-    .order("created_at", { ascending: false })
-    .range(from, to);
-  if (pErr) return json({ ok: false, error: pErr.message }, 500);
+  if (roleFilter && ["customer", "admin", "super_admin"].includes(roleFilter)) {
+    pq = pq.eq("role", roleFilter);
+  }
+  if (countryFilter) {
+    pq = pq.eq("preferred_country", countryFilter);
+  }
 
-  // Step 3 — fetch the matching auth.users rows in one pass. The
-  // sdk's listUsers paginates at 1000/page max; for any single page of
-  // our admin UI we'll always have <=200 ids, so getUserById each (in
-  // parallel) is fine.
-  const ids = (profs ?? []).map((p: any) => p.id);
-  const authResults = await Promise.all(
-    ids.map((id) => sb.auth.admin.getUserById(id))
-  );
+  // Apply DB sort if possible.
+  const dbSort = DB_SORT[sort];
+  if (dbSort) {
+    pq = pq.order(dbSort.column, { ascending: dbSort.ascending, nullsFirst: false });
+  } else {
+    // JS-sort path; we still want a deterministic primary order so newer
+    // signups appear before older within the same JS-sort tie.
+    pq = pq.order("created_at", { ascending: false });
+  }
+
+  let profs: any[] | null = null;
+  let totalAfterDbFilters = 0;
+
+  if (needsJsPath) {
+    // Fetch all matching rows (capped) — we'll filter + sort + paginate
+    // in JS below.
+    const { data, count, error: pErr } = await pq.range(0, 999);
+    if (pErr) return json({ ok: false, error: pErr.message }, 500);
+    profs = data ?? [];
+    totalAfterDbFilters = count ?? profs.length;
+  } else {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+    const { data, count, error: pErr } = await pq.range(from, to);
+    if (pErr) return json({ ok: false, error: pErr.message }, 500);
+    profs = data ?? [];
+    totalAfterDbFilters = count ?? profs.length;
+  }
+
+  // Step 3 — fetch auth.users for the matching ids (parallel
+  // getUserById). For the JS-path we may have up to 1000 ids — that's
+  // 1000 parallel requests, which is fine for the SDK but heavy on
+  // latency. Cap concurrency at 25 to be polite.
+  const ids = profs.map((p) => p.id as string);
   const authMap = new Map<string, any>();
-  authResults.forEach((r, i) => {
-    if (r.data?.user) authMap.set(ids[i], r.data.user);
-  });
+  const chunkSize = 25;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const results = await Promise.all(
+      chunk.map((id) => sb.auth.admin.getUserById(id))
+    );
+    results.forEach((r, j) => {
+      if (r.data?.user) authMap.set(chunk[j], r.data.user);
+    });
+  }
 
-  const users = (profs ?? []).map((p: any) => {
+  // Step 4 — assemble merged rows.
+  let users = profs.map((p: any) => {
     const au = authMap.get(p.id);
     return {
       id: p.id,
-      email: au?.email ?? null,
+      email: (au?.email as string | null) ?? null,
       full_name: p.full_name ?? null,
       phone: p.phone ?? null,
       preferred_country: p.preferred_country ?? null,
@@ -177,9 +267,66 @@ export async function GET(req: Request) {
     };
   });
 
+  if (needsJsPath) {
+    // Verification filter — compute stage per row.
+    if (verificationFilter) {
+      const now = Date.now();
+      users = users.filter((u) => {
+        const isStaff = STAFF_ROLES.includes(u.role);
+        const verified = isStaff || !!u.email_verified_at;
+        if (verificationFilter === "verified") return verified;
+
+        if (verified) return false;
+        // Compute deadline for lockout determination.
+        const graceStart = u.email_verification_grace_starts_at
+          ? new Date(u.email_verification_grace_starts_at).getTime()
+          : null;
+        const deadline = u.email_verification_deadline_override
+          ? new Date(u.email_verification_deadline_override).getTime()
+          : graceStart !== null
+            ? graceStart + lockoutDays * 86400000
+            : null;
+        const lockedOut = deadline !== null && now >= deadline;
+        if (verificationFilter === "locked") return lockedOut;
+        if (verificationFilter === "unverified") return !lockedOut;
+        return true;
+      });
+    }
+
+    // JS-level sort if needed.
+    if (sort === "email_asc" || sort === "email_desc") {
+      users.sort((a, b) => {
+        const ae = (a.email ?? "").toLowerCase();
+        const be = (b.email ?? "").toLowerCase();
+        return sort === "email_asc"
+          ? ae.localeCompare(be)
+          : be.localeCompare(ae);
+      });
+    } else if (sort === "recent_activity") {
+      users.sort((a, b) => {
+        const at = a.last_sign_in_at ? new Date(a.last_sign_in_at).getTime() : 0;
+        const bt = b.last_sign_in_at ? new Date(b.last_sign_in_at).getTime() : 0;
+        return bt - at;
+      });
+    }
+
+    // JS-level pagination.
+    const total = users.length;
+    const startIdx = (page - 1) * limit;
+    const sliced = users.slice(startIdx, startIdx + limit);
+    return json({
+      ok: true,
+      total,
+      page,
+      limit,
+      users: sliced,
+      current_user_id: user!.id,
+    });
+  }
+
   return json({
     ok: true,
-    total: count ?? users.length,
+    total: totalAfterDbFilters,
     page,
     limit,
     users,

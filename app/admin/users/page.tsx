@@ -48,6 +48,104 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { SUPPORTED_COUNTRIES } from "@/lib/countries";
+
+type SortKey =
+  | "newest"
+  | "oldest"
+  | "name_asc"
+  | "name_desc"
+  | "email_asc"
+  | "email_desc"
+  | "recent_activity";
+
+type Filters = {
+  joinedFrom: string;
+  joinedTo: string;
+  role: "" | "customer" | "admin" | "super_admin";
+  verification: "" | "verified" | "unverified" | "locked";
+  country: string;
+};
+
+const SORT_LABELS: Record<SortKey, string> = {
+  newest: "Newest first",
+  oldest: "Oldest first",
+  name_asc: "Name A → Z",
+  name_desc: "Name Z → A",
+  email_asc: "Email A → Z",
+  email_desc: "Email Z → A",
+  recent_activity: "Recently active",
+};
+
+// Date range presets (UTC dates so the comparisons match the DB).
+function dateOnly(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+const DATE_PRESETS: Array<{ key: string; label: string; compute: () => { from: string; to: string } | null }> = [
+  { key: "any", label: "Any time", compute: () => null },
+  {
+    key: "today",
+    label: "Today",
+    compute: () => {
+      const t = dateOnly(new Date());
+      return { from: t, to: t };
+    },
+  },
+  {
+    key: "7d",
+    label: "Last 7 days",
+    compute: () => {
+      const to = new Date();
+      const from = new Date(to.getTime() - 6 * 86400000);
+      return { from: dateOnly(from), to: dateOnly(to) };
+    },
+  },
+  {
+    key: "30d",
+    label: "Last 30 days",
+    compute: () => {
+      const to = new Date();
+      const from = new Date(to.getTime() - 29 * 86400000);
+      return { from: dateOnly(from), to: dateOnly(to) };
+    },
+  },
+  {
+    key: "this_month",
+    label: "This month",
+    compute: () => {
+      const now = new Date();
+      const from = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { from: dateOnly(from), to: dateOnly(now) };
+    },
+  },
+  {
+    key: "last_month",
+    label: "Last month",
+    compute: () => {
+      const now = new Date();
+      const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const to = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { from: dateOnly(from), to: dateOnly(to) };
+    },
+  },
+  {
+    key: "this_year",
+    label: "This year",
+    compute: () => {
+      const now = new Date();
+      const from = new Date(now.getFullYear(), 0, 1);
+      return { from: dateOnly(from), to: dateOnly(now) };
+    },
+  },
+  { key: "custom", label: "Custom range…", compute: () => null },
+];
 
 // Admin Users page.
 // Lists every account (paginated, search by email/name/phone) and lets
@@ -144,6 +242,17 @@ export default function AdminUsersPage() {
     row: UserRow;
     nextRole: "customer" | "admin";
   } | null>(null);
+
+  // Filter / sort state.
+  const [sort, setSort] = useState<SortKey>("newest");
+  const [filters, setFilters] = useState<Filters>({
+    joinedFrom: "",
+    joinedTo: "",
+    role: "",
+    verification: "",
+    country: "",
+  });
+  const [datePreset, setDatePreset] = useState<string>("any");
 
   // Email-change-request review state.
   const [emailRequests, setEmailRequests] = useState<EmailChangeRequest[]>([]);
@@ -259,7 +368,12 @@ export default function AdminUsersPage() {
     }
   };
 
-  const fetchPage = async (qParam: string, p: number) => {
+  const fetchPage = async (
+    qParam: string,
+    p: number,
+    sortParam: SortKey = sort,
+    filterParams: Filters = filters
+  ) => {
     setLoading(true);
     try {
       const { data: s } = await supabase.auth.getSession();
@@ -268,6 +382,12 @@ export default function AdminUsersPage() {
       if (qParam.trim()) params.set("q", qParam.trim());
       params.set("page", String(p));
       params.set("limit", String(PAGE_LIMIT));
+      params.set("sort", sortParam);
+      if (filterParams.joinedFrom) params.set("joined_from", filterParams.joinedFrom);
+      if (filterParams.joinedTo) params.set("joined_to", filterParams.joinedTo);
+      if (filterParams.role) params.set("role", filterParams.role);
+      if (filterParams.verification) params.set("verification", filterParams.verification);
+      if (filterParams.country) params.set("country", filterParams.country);
       const res = await fetch(`/api/admin/users?${params.toString()}`, {
         credentials: "include",
         headers: token ? { authorization: `Bearer ${token}` } : undefined,
@@ -284,6 +404,53 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Apply sort/filter changes immediately (no debounce — selects are
+  // intentional clicks, not typing). Resets page to 1.
+  useEffect(() => {
+    if (!ready || !hasRole("admin")) return;
+    setPage(1);
+    fetchPage(q, 1, sort, filters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    sort,
+    filters.joinedFrom,
+    filters.joinedTo,
+    filters.role,
+    filters.verification,
+    filters.country,
+  ]);
+
+  const activeFilterCount =
+    (filters.joinedFrom || filters.joinedTo ? 1 : 0) +
+    (filters.role ? 1 : 0) +
+    (filters.verification ? 1 : 0) +
+    (filters.country ? 1 : 0);
+
+  const resetFilters = () => {
+    setFilters({
+      joinedFrom: "",
+      joinedTo: "",
+      role: "",
+      verification: "",
+      country: "",
+    });
+    setDatePreset("any");
+    setSort("newest");
+  };
+
+  const applyDatePreset = (key: string) => {
+    setDatePreset(key);
+    const preset = DATE_PRESETS.find((p) => p.key === key);
+    if (!preset) return;
+    const range = preset.compute();
+    if (range) {
+      setFilters((f) => ({ ...f, joinedFrom: range.from, joinedTo: range.to }));
+    } else if (key === "any") {
+      setFilters((f) => ({ ...f, joinedFrom: "", joinedTo: "" }));
+    }
+    // custom → leave fields alone, user edits them directly
   };
 
   useEffect(() => {
@@ -384,7 +551,7 @@ export default function AdminUsersPage() {
     <>
       <AdminBackBar to="/admin" title="Users" />
 
-      <div className="container mx-auto py-6 space-y-4 max-w-6xl">
+      <div className="container mx-auto py-6 space-y-4 max-w-screen-2xl px-4">
         <p className="text-sm text-muted-foreground">
           Manage account-level admin access. Promoting a user grants full
           access to every <code>/admin/*</code> surface. Super-admin
@@ -460,16 +627,163 @@ export default function AdminUsersPage() {
           </Card>
         )}
 
-        {/* Search */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by email, name, or phone…"
-            className="pl-10"
-          />
-        </div>
+        {/* Search + filters + sort */}
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="relative flex-1 min-w-[220px]">
+                <Label className="text-xs">Search</Label>
+                <div className="relative mt-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    placeholder="Email, name, or phone…"
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              <div className="min-w-[180px]">
+                <Label className="text-xs">Sort by</Label>
+                <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                      <SelectItem key={k} value={k}>
+                        {SORT_LABELS[k]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-[140px]">
+                <Label className="text-xs">Joined</Label>
+                <Select value={datePreset} onValueChange={applyDatePreset}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DATE_PRESETS.map((p) => (
+                      <SelectItem key={p.key} value={p.key}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-[140px]">
+                <Label className="text-xs">Role</Label>
+                <Select
+                  value={filters.role || "all"}
+                  onValueChange={(v) =>
+                    setFilters((f) => ({
+                      ...f,
+                      role:
+                        v === "all" ? "" : (v as Filters["role"]),
+                    }))
+                  }
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All roles</SelectItem>
+                    <SelectItem value="customer">Customer</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="super_admin">Super admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-[160px]">
+                <Label className="text-xs">Verification</Label>
+                <Select
+                  value={filters.verification || "all"}
+                  onValueChange={(v) =>
+                    setFilters((f) => ({
+                      ...f,
+                      verification:
+                        v === "all" ? "" : (v as Filters["verification"]),
+                    }))
+                  }
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="verified">Verified</SelectItem>
+                    <SelectItem value="unverified">Unverified</SelectItem>
+                    <SelectItem value="locked">Locked out</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-[160px]">
+                <Label className="text-xs">Country</Label>
+                <Select
+                  value={filters.country || "all"}
+                  onValueChange={(v) =>
+                    setFilters((f) => ({
+                      ...f,
+                      country: v === "all" ? "" : v,
+                    }))
+                  }
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All countries</SelectItem>
+                    {SUPPORTED_COUNTRIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {COUNTRY_PROFILES[c].flag} {COUNTRY_PROFILES[c].name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(activeFilterCount > 0 || sort !== "newest") && (
+                <Button variant="ghost" size="sm" onClick={resetFilters}>
+                  Reset
+                </Button>
+              )}
+            </div>
+
+            {datePreset === "custom" && (
+              <div className="flex flex-wrap items-end gap-3 pt-2 border-t">
+                <div className="min-w-[160px]">
+                  <Label className="text-xs">From</Label>
+                  <Input
+                    type="date"
+                    value={filters.joinedFrom}
+                    onChange={(e) =>
+                      setFilters((f) => ({ ...f, joinedFrom: e.target.value }))
+                    }
+                    className="mt-1"
+                  />
+                </div>
+                <div className="min-w-[160px]">
+                  <Label className="text-xs">To</Label>
+                  <Input
+                    type="date"
+                    value={filters.joinedTo}
+                    onChange={(e) =>
+                      setFilters((f) => ({ ...f, joinedTo: e.target.value }))
+                    }
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Counts */}
         <div className="text-xs text-muted-foreground">
@@ -488,15 +802,15 @@ export default function AdminUsersPage() {
             <table className="w-full text-sm">
               <thead className="text-xs uppercase text-muted-foreground border-b">
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium">Email</th>
-                  <th className="text-left px-4 py-3 font-medium">Name</th>
-                  <th className="text-left px-4 py-3 font-medium">Role</th>
-                  <th className="text-left px-4 py-3 font-medium">Verification</th>
-                  <th className="text-left px-4 py-3 font-medium">Phone</th>
-                  <th className="text-left px-4 py-3 font-medium">Country</th>
-                  <th className="text-left px-4 py-3 font-medium">Last sign-in</th>
-                  <th className="text-left px-4 py-3 font-medium">Joined</th>
-                  <th className="text-right px-4 py-3 font-medium">Action</th>
+                  <th className="text-left px-3 py-3 font-medium">Email</th>
+                  <th className="text-left px-3 py-3 font-medium hidden sm:table-cell">Name</th>
+                  <th className="text-left px-3 py-3 font-medium">Role</th>
+                  <th className="text-left px-3 py-3 font-medium">Verification</th>
+                  <th className="text-left px-3 py-3 font-medium hidden xl:table-cell">Phone</th>
+                  <th className="text-left px-3 py-3 font-medium hidden lg:table-cell">Country</th>
+                  <th className="text-left px-3 py-3 font-medium hidden xl:table-cell">Last sign-in</th>
+                  <th className="text-left px-3 py-3 font-medium hidden md:table-cell">Joined</th>
+                  <th className="text-right px-3 py-3 font-medium">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -533,28 +847,32 @@ export default function AdminUsersPage() {
                           isSelf ? "bg-muted/20" : ""
                         }`}
                       >
-                        <td className="px-4 py-3 font-mono text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate max-w-[220px]" title={u.email ?? ""}>
+                        <td className="px-3 py-3 font-mono text-xs">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="truncate max-w-[180px] sm:max-w-[220px]" title={u.email ?? ""}>
                               {u.email ?? "—"}
                             </span>
                             {isSelf && (
                               <Badge
                                 variant="outline"
-                                className="text-[10px] uppercase tracking-wide"
+                                className="text-[10px] uppercase tracking-wide flex-shrink-0"
                               >
                                 You
                               </Badge>
                             )}
                           </div>
+                          {/* Mobile fallback: show name + role badge under email when other cols hidden */}
+                          <div className="mt-1 sm:hidden text-[11px] text-muted-foreground">
+                            {u.full_name?.trim() || "—"}
+                          </div>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-3 hidden sm:table-cell">
                           {u.full_name?.trim() || (
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-3">{roleBadge(u.role)}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-3">{roleBadge(u.role)}</td>
+                        <td className="px-3 py-3">
                           <VerificationCell
                             row={u}
                             busy={verifyBusy === u.id}
@@ -578,10 +896,10 @@ export default function AdminUsersPage() {
                             }}
                           />
                         </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                        <td className="px-3 py-3 text-xs text-muted-foreground hidden xl:table-cell">
                           {u.phone || "—"}
                         </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                        <td className="px-3 py-3 text-xs text-muted-foreground hidden lg:table-cell">
                           {u.preferred_country
                             ? (() => {
                                 const cc = u.preferred_country as CountryCode;
@@ -600,13 +918,13 @@ export default function AdminUsersPage() {
                               })()
                             : "—"}
                         </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums">
+                        <td className="px-3 py-3 text-xs text-muted-foreground tabular-nums hidden xl:table-cell">
                           {formatDate(u.last_sign_in_at)}
                         </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums">
+                        <td className="px-3 py-3 text-xs text-muted-foreground tabular-nums hidden md:table-cell">
                           {formatDate(u.created_at)}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-3 py-3 text-right">
                           {isSuper ? (
                             <span
                               className="inline-flex items-center text-xs text-muted-foreground"

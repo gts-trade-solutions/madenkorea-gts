@@ -513,6 +513,79 @@ export default function AdminSettingsPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Email verification</CardTitle>
+                  <CardDescription>
+                    Controls how long new customers can use the site before their
+                    email must be verified. The clock starts at signup (or at
+                    rollout for existing accounts). Per-user extensions live in
+                    the <Button variant="link" className="px-1 h-auto" onClick={() => router.push('/admin/users')}>Users page</Button>.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="graceDays">Soft warning after</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="graceDays"
+                          type="number"
+                          min={1}
+                          max={90}
+                          value={emailVerification.graceDays}
+                          onChange={(e) =>
+                            setEmailVerification((v) => ({
+                              ...v,
+                              graceDays: Number(e.target.value) || 0,
+                            }))
+                          }
+                        />
+                        <span className="text-sm text-muted-foreground">days</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Until this day, the banner is subtle and dismissible.
+                        After it, a prominent warning with a countdown appears.
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="lockoutDays">Soft lockout after</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="lockoutDays"
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={emailVerification.lockoutDays}
+                          onChange={(e) =>
+                            setEmailVerification((v) => ({
+                              ...v,
+                              lockoutDays: Number(e.target.value) || 0,
+                            }))
+                          }
+                        />
+                        <span className="text-sm text-muted-foreground">days</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        After this day, an unverified user sees a soft-lock modal.
+                        Browsing still works; cart, checkout, reviews, and other
+                        account actions are blocked until they verify.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      onClick={handleSaveEmailVerification}
+                      disabled={savingEmailVerification}
+                    >
+                      <Save className="mr-2 h-4 w-4" />
+                      {savingEmailVerification ? 'Saving…' : 'Save email verification settings'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
@@ -1124,78 +1197,6 @@ export default function AdminSettingsPage() {
               </CardContent>
             </Card>
 
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle>Email verification</CardTitle>
-                <CardDescription>
-                  Controls how long new customers can use the site before their
-                  email must be verified. The clock starts at signup (or at
-                  rollout for existing accounts). Per-user extensions live in
-                  the <Button variant="link" className="px-1 h-auto" onClick={() => router.push('/admin/users')}>Users page</Button>.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="graceDays">Soft warning after</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        id="graceDays"
-                        type="number"
-                        min={1}
-                        max={90}
-                        value={emailVerification.graceDays}
-                        onChange={(e) =>
-                          setEmailVerification((v) => ({
-                            ...v,
-                            graceDays: Number(e.target.value) || 0,
-                          }))
-                        }
-                      />
-                      <span className="text-sm text-muted-foreground">days</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Until this day, the banner is subtle and dismissible.
-                      After it, a prominent warning with a countdown appears.
-                    </p>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="lockoutDays">Soft lockout after</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        id="lockoutDays"
-                        type="number"
-                        min={1}
-                        max={365}
-                        value={emailVerification.lockoutDays}
-                        onChange={(e) =>
-                          setEmailVerification((v) => ({
-                            ...v,
-                            lockoutDays: Number(e.target.value) || 0,
-                          }))
-                        }
-                      />
-                      <span className="text-sm text-muted-foreground">days</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      After this day, an unverified user sees a soft-lock modal.
-                      Browsing still works; cart, checkout, reviews, and other
-                      account actions are blocked until they verify.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <Button
-                    onClick={handleSaveEmailVerification}
-                    disabled={savingEmailVerification}
-                  >
-                    <Save className="mr-2 h-4 w-4" />
-                    {savingEmailVerification ? 'Saving…' : 'Save email verification settings'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
 
           <TabsContent value="payments">
