@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabaseServer";
 import { sendEmail } from "@/lib/ses";
 import { getAdminRecipientEmails } from "@/lib/notificationRecipients";
+import { createAdminNotification } from "@/lib/admin/notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +45,16 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Admin bell notification.
+    void createAdminNotification({
+      type: "contact_submitted",
+      title: `New contact message from ${name}`,
+      body: subject || message.slice(0, 120),
+      link: "/admin/contact-messages",
+      severity: "info",
+      meta: { name, email, subject: subject || null },
+    });
 
     // Admin recipients now come from the admin-managed list. First
     // entry is the primary "to"; the rest get CC'd. This replaces the

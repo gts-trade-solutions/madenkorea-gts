@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { requireEmailVerified } from "@/lib/auth/emailVerification";
+import { createAdminNotification } from "@/lib/admin/notifications";
 
 /** Helper: get user either from sb-* cookies or Authorization: Bearer */
 async function withUser(req: NextRequest) {
@@ -116,6 +117,18 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
   }
+
+  // Admin bell notification — payouts move real money, so admins should
+  // know about new requests promptly.
+  void createAdminNotification({
+    type: "payout_requested",
+    title: `Payout request — ₹${amt.toFixed(2)}`,
+    body: contact_email ? `Contact: ${contact_email}` : null,
+    link: "/admin/influencers",
+    severity: "warning",
+    meta: { payout_id: data.id, user_id: user.id, amount: amt },
+    createdBy: user.id,
+  });
 
   return NextResponse.json({ ok: true, id: data.id });
 }

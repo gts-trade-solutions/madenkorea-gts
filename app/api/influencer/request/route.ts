@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { headers, cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { requireEmailVerified } from "@/lib/auth/emailVerification";
+import { createAdminNotification } from "@/lib/admin/notifications";
 
 const json = (d: any, s = 200) =>
   NextResponse.json(d, { status: s, headers: { "cache-control": "no-store" } });
@@ -83,6 +84,17 @@ export async function POST(req: Request) {
     .single();
 
   if (error) return json({ ok: false, error: error.message }, 400);
+
+  // Admin bell notification.
+  void createAdminNotification({
+    type: "kpartnership_requested",
+    title: `New K-Partnership application${body.handle ? ` from @${String(body.handle).trim()}` : ""}`,
+    body: (body.note || "").trim() || null,
+    link: "/admin/influencers",
+    severity: "info",
+    meta: { request_id: created.id, user_id: user.id, handle: body.handle ?? null },
+    createdBy: user.id,
+  });
 
   return json({
     ok: true,

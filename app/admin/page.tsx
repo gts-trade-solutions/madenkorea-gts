@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
+import { NotificationBell } from "@/components/admin/NotificationBell";
 import {
   Card,
   CardContent,
@@ -148,13 +149,14 @@ export default function AdminDashboard() {
       <header className="border-b bg-background">
         <div className="container mx-auto py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold">Admin Portal</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">
+          <div className="flex items-center gap-3">
+            <NotificationBell />
+            <span className="text-sm text-muted-foreground hidden sm:inline">
               {user?.full_name ?? user?.email}
             </span>
             <Button variant="outline" size="sm" onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
-              Logout
+              <span className="hidden sm:inline">Logout</span>
             </Button>
           </div>
         </div>

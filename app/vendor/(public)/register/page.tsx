@@ -89,6 +89,21 @@ export default function VendorRegisterPage() {
       toast.error(error.message || 'Could not submit application');
       return;
     }
+    // Fire the admin bell notification (best-effort).
+    void (async () => {
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const at = s?.session?.access_token;
+        await fetch('/api/vendor/notify-signup', {
+          method: 'POST',
+          credentials: 'include',
+          headers: at ? { authorization: `Bearer ${at}` } : undefined,
+        });
+      } catch {
+        /* swallow — bell isn't critical to the apply flow */
+      }
+    })();
+
     toast.success('Application submitted! We’ll review and notify you.');
     router.replace('/vendor'); // VendorGate will show “Pending” if not yet approved
   };

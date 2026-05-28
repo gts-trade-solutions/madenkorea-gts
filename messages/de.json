@@ -509,9 +509,9 @@
     "grievanceTitle": "Beschwerdestelle",
     "grievanceDescription": "Für ungelöste Beschwerden · Bestätigung innerhalb von 48 Stunden · Lösung innerhalb eines Monats.",
     "companyTitle": "Unternehmensangaben",
-    "companyDescription": "Betreiber des MadenKorea Shops.",
+    "companyDescription": "Exporteur.",
     "brandTitle": "Marke",
-    "brandDescription": "Der Markeninhaber.",
+    "brandDescription": "Hersteller.",
     "phoneInlineLabel": "Telefon:",
     "gstinInlineLabel": "GSTIN:",
     "cdscoInlineLabel": "CDSCO-Reg.:"
@@ -1262,6 +1262,25 @@
       "signoffName": "Team MadenKorea",
       "footer": "Sie erhalten diese E-Mail, weil Sie eine Bestellung auf madenkorea.com aufgegeben haben.",
       "brandFooterLabel": "Marke"
+    },
+    "welcomeEmail": {
+      "subject": "Willkommen bei MadenKorea, {name}!",
+      "subjectNoName": "Willkommen bei MadenKorea!",
+      "heading": "Willkommen, {name}!",
+      "headingNoName": "Willkommen bei MadenKorea!",
+      "intro": "Ihre vertrauenswürdige Adresse für authentische koreanische Beauty- und Lifestyle-Produkte, geliefert direkt zu Ihrer Haustür.",
+      "pullQuote": "Wir sind hier, um authentische koreanische Beauty — ungefiltert, ungeöffnet, unberührt — zu jeder Haustür weltweit zu bringen.",
+      "valuesHeading": "Was Sie bei jeder Bestellung bekommen",
+      "valuePremium": "Premium-Qualität — von vertrauenswürdigen koreanischen Marken.",
+      "valueReach": "Zuverlässige Lieferung nach Hause weltweit.",
+      "valueCustomer": "Echter menschlicher Support, problemlose Rücksendungen.",
+      "valueAuthentic": "100 % authentisch — kein Graumarkt, keine Überraschungen.",
+      "trendingHeading": "Gerade im Trend",
+      "trendingIntro": "Einige der Favoriten unserer Kunden in dieser Woche:",
+      "shopCta": "Zum Shop",
+      "signoff": "Bis bald im Shop,",
+      "signoffName": "Team MadenKorea",
+      "footer": "Sie erhalten diese E-Mail, weil Sie gerade ein MadenKorea-Konto erstellt haben."
     },
     "verifyEmail": {
       "subject": "Bestätigen Sie Ihre E-Mail für MadenKorea",

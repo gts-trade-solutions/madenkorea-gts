@@ -509,9 +509,9 @@
     "grievanceTitle": "Sĩ quan xử lý khiếu nại",
     "grievanceDescription": "Để giải quyết các khiếu nại chưa được giải quyết · được xác nhận trong vòng 48 giờ · được giải quyết trong một tháng.",
     "companyTitle": "Thông tin công ty",
-    "companyDescription": "Nhà điều hành của cửa hàng MadenKorea.",
+    "companyDescription": "Nhà xuất khẩu.",
     "brandTitle": "Thương hiệu",
-    "brandDescription": "Chủ sở hữu thương hiệu.",
+    "brandDescription": "Nhà sản xuất.",
     "phoneInlineLabel": "Điện thoại:",
     "gstinInlineLabel": "GSTIN:",
     "cdscoInlineLabel": "CDSCO reg.:"
@@ -1262,6 +1262,25 @@
       "signoffName": "Đội ngũ MadenKorea",
       "footer": "Bạn nhận được email này vì bạn đã đặt hàng trên madenkorea.com.",
       "brandFooterLabel": "Thương hiệu"
+    },
+    "welcomeEmail": {
+      "subject": "Chào mừng đến với MadenKorea, {name}!",
+      "subjectNoName": "Chào mừng đến với MadenKorea!",
+      "heading": "Chào mừng, {name}!",
+      "headingNoName": "Chào mừng đến với MadenKorea!",
+      "intro": "Điểm đến đáng tin cậy của bạn cho các sản phẩm làm đẹp và phong cách sống chính hãng từ Hàn Quốc, mang những sáng tạo tiêu dùng tốt nhất đến tận cửa nhà bạn.",
+      "pullQuote": "Chúng tôi tồn tại để mang vẻ đẹp Hàn Quốc chính hãng — không lọc, không đóng gói lại, không can thiệp — đến mọi cửa nhà trên thế giới.",
+      "valuesHeading": "Những gì bạn sẽ nhận được với mỗi đơn hàng",
+      "valuePremium": "Chất lượng cao cấp — từ các thương hiệu Hàn Quốc đáng tin cậy.",
+      "valueReach": "Giao hàng tận nơi đáng tin cậy trên toàn thế giới.",
+      "valueCustomer": "Hỗ trợ con người thực sự, đổi trả không rắc rối.",
+      "valueAuthentic": "100% chính hãng — không hàng xách tay, không bất ngờ.",
+      "trendingHeading": "Đang thịnh hành",
+      "trendingIntro": "Một số sản phẩm yêu thích của khách hàng trong tuần này:",
+      "shopCta": "Khám phá cửa hàng",
+      "signoff": "Hẹn gặp lại tại cửa hàng,",
+      "signoffName": "Đội ngũ MadenKorea",
+      "footer": "Bạn nhận được email này vì bạn vừa tạo tài khoản MadenKorea."
     },
     "verifyEmail": {
       "subject": "Xác minh email của bạn cho MadenKorea",

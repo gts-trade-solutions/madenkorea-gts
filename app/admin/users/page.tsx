@@ -27,6 +27,7 @@ import {
   Clock,
   XCircle,
   CheckCheck,
+  Trash2,
 } from "lucide-react";
 import { COUNTRY_PROFILES, type CountryCode } from "@/lib/countries";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -268,6 +269,11 @@ export default function AdminUsersPage() {
   const [extendDays, setExtendDays] = useState(7);
   const [verifyBusy, setVerifyBusy] = useState<string | null>(null);
 
+  // Hard-delete user state.
+  const [deleting, setDeleting] = useState<UserRow | null>(null);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const fetchEmailRequests = async () => {
     setEmailRequestsLoading(true);
     try {
@@ -324,6 +330,54 @@ export default function AdminUsersPage() {
       await fetchPage(q, page);
     } finally {
       setVerifyBusy(null);
+    }
+  };
+
+  const performDelete = async () => {
+    if (!deleting) return;
+    const target = deleting;
+    setDeletingId(target.id);
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      const res = await fetch(
+        `/api/admin/users/${encodeURIComponent(target.id)}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ confirmEmail: deleteConfirmEmail }),
+        }
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body?.ok === false) {
+        const code = body?.code || body?.error;
+        const messages: Record<string, string> = {
+          CANNOT_DELETE_SELF: "You can't delete your own account.",
+          CANNOT_DELETE_STAFF:
+            "Demote the admin to customer first, then delete.",
+          CANNOT_DELETE_VENDOR:
+            "This account is a vendor. Remove the vendor record first.",
+          MISSING_CONFIRMATION: "Type the email to confirm.",
+          EMAIL_MISMATCH:
+            "The confirmation email doesn't match this account.",
+        };
+        toast.error(
+          messages[code] || body?.message || body?.error || "Delete failed."
+        );
+        return;
+      }
+      toast.success(`Deleted ${target.email ?? target.full_name ?? "user"}.`);
+      setDeleting(null);
+      setDeleteConfirmEmail("");
+      await fetchPage(q, page);
+    } catch (e: any) {
+      toast.error(e?.message || "Delete failed.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -953,17 +1007,32 @@ export default function AdminUsersPage() {
                               Remove admin
                             </Button>
                           ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={busyRow === u.id}
-                              onClick={() =>
-                                setConfirming({ row: u, nextRole: "admin" })
-                              }
-                            >
-                              <ShieldCheck className="h-4 w-4 mr-1" />
-                              Make admin
-                            </Button>
+                            <div className="inline-flex items-center gap-1.5 justify-end">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={busyRow === u.id}
+                                onClick={() =>
+                                  setConfirming({ row: u, nextRole: "admin" })
+                                }
+                              >
+                                <ShieldCheck className="h-4 w-4 mr-1" />
+                                Make admin
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-700 hover:bg-red-50"
+                                disabled={busyRow === u.id || deletingId === u.id}
+                                onClick={() => {
+                                  setDeleting(u);
+                                  setDeleteConfirmEmail("");
+                                }}
+                                title="Delete user and all associated data"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -1060,6 +1129,75 @@ export default function AdminUsersPage() {
           </div>
         </div>
       )}
+
+      {/* Delete user confirm dialog */}
+      <Dialog
+        open={!!deleting}
+        onOpenChange={(o) => {
+          if (!o && !deletingId) {
+            setDeleting(null);
+            setDeleteConfirmEmail("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-700">
+              Delete user permanently?
+            </DialogTitle>
+            <DialogDescription>
+              This deletes <strong>{deleting?.email ?? deleting?.full_name}</strong>{" "}
+              and all data linked to this account — orders, cart, wishlist,
+              addresses, reviews, payouts, tokens, the lot. Cannot be undone.
+              <br />
+              <br />
+              To confirm, type the user&apos;s email below:
+              <br />
+              <code className="text-xs">{deleting?.email ?? ""}</code>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="confirm-email">Confirm email</Label>
+            <Input
+              id="confirm-email"
+              type="email"
+              value={deleteConfirmEmail}
+              onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+              placeholder={deleting?.email ?? ""}
+              autoComplete="off"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleting(null);
+                setDeleteConfirmEmail("");
+              }}
+              disabled={!!deletingId}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={performDelete}
+              disabled={
+                !!deletingId ||
+                deleteConfirmEmail.trim().toLowerCase() !==
+                  (deleting?.email ?? "").toLowerCase() ||
+                !deleting?.email
+              }
+            >
+              {deletingId ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-1" />
+              )}
+              {deletingId ? "Deleting…" : "Delete permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Extend grace period dialog */}
       <Dialog

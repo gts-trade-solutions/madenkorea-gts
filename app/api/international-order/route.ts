@@ -7,6 +7,7 @@ import { getBusinessInfo } from "@/lib/businessInfo";
 import { FALLBACK_RATES, formatPrice, isSupportedCurrency } from "@/lib/currency";
 import { getEmailTranslator } from "@/lib/i18n/email";
 import { getAdminRecipientEmails } from "@/lib/notificationRecipients";
+import { createAdminNotification } from "@/lib/admin/notifications";
 
 // International order request endpoint.
 //
@@ -227,6 +228,17 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+
+  // Admin bell notification (separate from the email notification —
+  // bell is for in-app, email is for off-hours awareness).
+  void createAdminNotification({
+    type: "intl_order_requested",
+    title: `International order request — ${body.country}`,
+    body: `${body.customer_name}${body.customer_email ? ` · ${body.customer_email}` : ""}`,
+    link: "/admin/international-orders",
+    severity: "info",
+    meta: { request_id: inserted.id, country: body.country },
+  });
 
   // Notify team + ack customer. Both failures are non-fatal — the
   // request is already saved and admin can see it at

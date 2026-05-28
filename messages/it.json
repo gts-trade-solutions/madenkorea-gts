@@ -509,9 +509,9 @@
     "grievanceTitle": "Responsabile della gestione dei reclami",
     "grievanceDescription": "Per reclami non risolti · riconosciuti entro 48 ore · risolti entro un mese.",
     "companyTitle": "Informazioni aziendali",
-    "companyDescription": "Gestore della vetrina MadenKorea.",
+    "companyDescription": "Esportatore.",
     "brandTitle": "Marchio",
-    "brandDescription": "Il proprietario del marchio.",
+    "brandDescription": "Produttore.",
     "phoneInlineLabel": "Telefono:",
     "gstinInlineLabel": "GSTIN:",
     "cdscoInlineLabel": "Reg. CDSCO:"
@@ -1262,6 +1262,25 @@
       "signoffName": "Team MadenKorea",
       "footer": "Stai ricevendo questa email perché hai effettuato un ordine su madenkorea.com.",
       "brandFooterLabel": "Marchio"
+    },
+    "welcomeEmail": {
+      "subject": "Benvenuto su MadenKorea, {name}!",
+      "subjectNoName": "Benvenuto su MadenKorea!",
+      "heading": "Benvenuto, {name}!",
+      "headingNoName": "Benvenuto su MadenKorea!",
+      "intro": "La tua destinazione affidabile per prodotti coreani autentici di bellezza e lifestyle, consegnati direttamente a casa tua.",
+      "pullQuote": "Esistiamo per portare l'autentica bellezza coreana — non filtrata, non riconfezionata, intatta — a ogni porta nel mondo.",
+      "valuesHeading": "Cosa ottieni con ogni ordine",
+      "valuePremium": "Qualità premium — da marchi coreani affidabili.",
+      "valueReach": "Consegna a domicilio affidabile in tutto il mondo.",
+      "valueCustomer": "Supporto umano vero, resi senza problemi.",
+      "valueAuthentic": "100% autentico — niente mercato grigio, nessuna sorpresa.",
+      "trendingHeading": "Di tendenza adesso",
+      "trendingIntro": "Alcuni dei preferiti dei nostri clienti questa settimana:",
+      "shopCta": "Esplora la vetrina",
+      "signoff": "Ci vediamo in negozio,",
+      "signoffName": "Team MadenKorea",
+      "footer": "Stai ricevendo questa email perché hai appena creato un account MadenKorea."
     },
     "verifyEmail": {
       "subject": "Verifica la tua email per MadenKorea",

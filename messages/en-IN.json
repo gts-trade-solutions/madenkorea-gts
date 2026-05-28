@@ -509,9 +509,9 @@
     "grievanceTitle": "Grievance Redressal Officer",
     "grievanceDescription": "For unresolved complaints · acknowledged within 48 hrs · resolved within one month.",
     "companyTitle": "Company information",
-    "companyDescription": "Operator of the MadenKorea storefront.",
+    "companyDescription": "Exporter.",
     "brandTitle": "Brand",
-    "brandDescription": "The brand owner.",
+    "brandDescription": "Manufacturer.",
     "phoneInlineLabel": "Phone:",
     "gstinInlineLabel": "GSTIN:",
     "cdscoInlineLabel": "CDSCO reg.:"
@@ -1262,6 +1262,25 @@
       "signoffName": "Team MadenKorea",
       "footer": "You’re receiving this email because you placed an order on madenkorea.com.",
       "brandFooterLabel": "Brand"
+    },
+    "welcomeEmail": {
+      "subject": "Welcome to MadenKorea, {name}!",
+      "subjectNoName": "Welcome to MadenKorea!",
+      "heading": "Welcome, {name}!",
+      "headingNoName": "Welcome to MadenKorea!",
+      "intro": "Your trusted destination for authentic Korean beauty and lifestyle products, bringing the best of Consumer Innovations directly to your doorstep.",
+      "pullQuote": "We exist to bring authentic Korean beauty — unfiltered, unrepacked, untouched — to every doorstep worldwide.",
+      "valuesHeading": "What you'll get with every order",
+      "valuePremium": "Premium quality — sourced from trusted Korean brands.",
+      "valueReach": "Reliable doorstep delivery worldwide.",
+      "valueCustomer": "Real human support, hassle-free returns.",
+      "valueAuthentic": "100% authentic — no grey market, no surprises.",
+      "trendingHeading": "Trending right now",
+      "trendingIntro": "Some of our shoppers' favourites this week:",
+      "shopCta": "Browse the storefront",
+      "signoff": "See you in the shop,",
+      "signoffName": "Team MadenKorea",
+      "footer": "You're receiving this email because you just created a MadenKorea account."
     },
     "verifyEmail": {
       "subject": "Verify your email for MadenKorea",

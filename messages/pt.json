@@ -509,9 +509,9 @@
     "grievanceTitle": "Responsável pela Resolução de Reclamações",
     "grievanceDescription": "Para reclamações não resolvidas · reconhecidas no prazo de 48 horas · resolvidas no prazo de um mês.",
     "companyTitle": "Informações da empresa",
-    "companyDescription": "Operador da loja MadenKorea.",
+    "companyDescription": "Exportador.",
     "brandTitle": "Marca",
-    "brandDescription": "O proprietário da marca.",
+    "brandDescription": "Fabricante.",
     "phoneInlineLabel": "Telefone:",
     "gstinInlineLabel": "GSTIN:",
     "cdscoInlineLabel": "Reg. CDSCO:"
@@ -1262,6 +1262,25 @@
       "signoffName": "Equipa MadenKorea",
       "footer": "Está a receber este email porque fez um pedido em madenkorea.com.",
       "brandFooterLabel": "Marca"
+    },
+    "welcomeEmail": {
+      "subject": "Bem-vindo à MadenKorea, {name}!",
+      "subjectNoName": "Bem-vindo à MadenKorea!",
+      "heading": "Bem-vindo, {name}!",
+      "headingNoName": "Bem-vindo à MadenKorea!",
+      "intro": "O seu destino de confiança para produtos autênticos coreanos de beleza e estilo de vida, entregues diretamente à sua porta.",
+      "pullQuote": "Existimos para levar a autêntica beleza coreana — sem filtros, sem reembalagem, intacta — a cada porta no mundo.",
+      "valuesHeading": "O que vai receber em cada encomenda",
+      "valuePremium": "Qualidade premium — de marcas coreanas de confiança.",
+      "valueReach": "Entrega ao domicílio fiável em todo o mundo.",
+      "valueCustomer": "Apoio humano real, devoluções sem complicações.",
+      "valueAuthentic": "100% autêntico — sem mercado paralelo, sem surpresas.",
+      "trendingHeading": "Tendência agora",
+      "trendingIntro": "Alguns dos favoritos dos nossos clientes esta semana:",
+      "shopCta": "Explorar a loja",
+      "signoff": "Vejo-o em loja,",
+      "signoffName": "Equipa MadenKorea",
+      "footer": "Está a receber este email porque acabou de criar uma conta na MadenKorea."
     },
     "verifyEmail": {
       "subject": "Verifique o seu email para MadenKorea",

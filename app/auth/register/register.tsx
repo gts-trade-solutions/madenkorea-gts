@@ -299,22 +299,31 @@ export default function RegisterPage() {
         body: JSON.stringify({ kind: "signup" }),
       }).catch(() => {});
 
-      // Fire the custom verification email. Best-effort — failures don't
-      // block signup. The user can always resend from the banner once
-      // they're inside the app. Uses the resend route so the email +
-      // rate-limit + token logic stays in one place.
+      // Fire the custom verification email + the welcome email in
+      // parallel. Both best-effort — neither blocks signup. The user
+      // can always resend the verification one from the banner if it
+      // didn't arrive; the welcome email is one-shot promotional and
+      // doesn't need a retry path.
       void (async () => {
         try {
           const { data: s } = await supabase.auth.getSession();
           const at = s?.session?.access_token;
-          await fetch("/api/auth/verify-email/resend", {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "content-type": "application/json",
-              ...(at ? { authorization: `Bearer ${at}` } : {}),
-            },
-          });
+          const headers: Record<string, string> = {
+            "content-type": "application/json",
+          };
+          if (at) headers.authorization = `Bearer ${at}`;
+          await Promise.all([
+            fetch("/api/auth/verify-email/resend", {
+              method: "POST",
+              credentials: "include",
+              headers,
+            }),
+            fetch("/api/auth/welcome-email", {
+              method: "POST",
+              credentials: "include",
+              headers,
+            }),
+          ]);
         } catch {
           /* best-effort */
         }

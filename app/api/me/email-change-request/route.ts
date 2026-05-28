@@ -16,6 +16,7 @@ import { cookies, headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createServiceClient } from "@/lib/supabaseServer";
+import { createAdminNotification } from "@/lib/admin/notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -156,6 +157,17 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+
+  // Admin bell notification.
+  void createAdminNotification({
+    type: "email_change_requested",
+    title: `Email change request from ${currentEmail}`,
+    body: `→ ${requested}${reason ? ` · ${reason}` : ""}`,
+    link: "/admin/users",
+    severity: "info",
+    meta: { request_id: inserted.id, user_id: userId, requested_email: requested },
+    createdBy: userId,
+  });
 
   return NextResponse.json({ ok: true, request: inserted });
 }

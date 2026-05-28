@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "./NotificationBell";
 
 // Sticky-top header bar with a left "← Back" button + page title and
 // an optional right slot for actions (Refresh, Save, etc.). Used as
@@ -33,7 +34,10 @@ export function AdminBackBar({ to = "/admin", title, rightSlot }: Props) {
           </Button>
           <h1 className="text-2xl font-bold">{title}</h1>
         </div>
-        {rightSlot}
+        <div className="flex items-center gap-3">
+          {rightSlot}
+          <NotificationBell />
+        </div>
       </div>
     </header>
   );

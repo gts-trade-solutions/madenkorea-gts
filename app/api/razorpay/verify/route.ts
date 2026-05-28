@@ -14,6 +14,7 @@ import {
   getBusinessProfile,
   DEFAULT_BUSINESS_PROFILE,
 } from "@/lib/businessInfo";
+import { createAdminNotification } from "@/lib/admin/notifications";
 import { getEmailTranslator } from "@/lib/i18n/email";
 import { getAdminRecipientEmails } from "@/lib/notificationRecipients";
 import { clearPromoCookie } from "@/lib/promo-cookie";
@@ -432,6 +433,17 @@ export async function POST(req: NextRequest) {
         paid_at: new Date().toISOString(),
       })
       .eq("id", order.id);
+
+    // Admin bell notification — best-effort, never fails the payment.
+    void createAdminNotification({
+      type: "order_placed",
+      title: `New order ${order.order_number ?? order.id} — ${formatMoney(paidAmount, orderCurrency)}`,
+      body: order.user_id ? null : "Guest checkout",
+      link: `/admin/orders/${order.id}`,
+      severity: "info",
+      meta: { order_id: order.id, currency: orderCurrency, total: paidAmount },
+      createdBy: order.user_id ?? null,
+    });
 
     // M-07: persist a row in `payments` for every successful capture so
     // refund / reporting flows have a real record to read. Best-effort —
