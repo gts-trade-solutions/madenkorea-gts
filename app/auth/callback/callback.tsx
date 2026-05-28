@@ -55,6 +55,25 @@ export default function AuthCallbackPage() {
           body: JSON.stringify({ kind: "login" }),
         }).catch(() => {});
 
+        // OAuth signup onboarding: fires the welcome email + admin
+        // bell + marks email_verified_at IF this looks like a fresh
+        // OAuth signup. Idempotent for returning logins — the endpoint
+        // checks profile age + the already-verified flag and no-ops
+        // otherwise, so it's safe to call every time we land here.
+        void (async () => {
+          try {
+            const { data: s } = await supabase.auth.getSession();
+            const at = s?.session?.access_token;
+            await fetch("/api/auth/oauth-signup-complete", {
+              method: "POST",
+              credentials: "include",
+              headers: at ? { authorization: `Bearer ${at}` } : undefined,
+            });
+          } catch {
+            /* best-effort */
+          }
+        })();
+
         router.replace(redirect);
       } catch (err) {
         console.error(err);
