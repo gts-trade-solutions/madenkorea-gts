@@ -23,7 +23,11 @@ type Item = {
   translatedCount: number;
   totalLocales: number;
   humanEditedCount: number;
-  byLocale: Record<string, { source: string; updated_at: string }>;
+  staleCount: number;
+  byLocale: Record<
+    string,
+    { source: string; updated_at: string; stale: boolean }
+  >;
 };
 
 type Response = {
@@ -51,8 +55,10 @@ export default function AdminTranslationsKindList() {
   // which is whatever the user is typing). Submitting the form syncs
   // them and resets to page 0.
   const [appliedQuery, setAppliedQuery] = useState("");
+  const [showStaleOnly, setShowStaleOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [translating, startTranslating] = useTransition();
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   // Redirect bad slugs to the dashboard so we don't render an empty
   // table for unsupported kinds (e.g. someone hits /admin/translations/foo).
@@ -62,7 +68,7 @@ export default function AdminTranslationsKindList() {
     }
   }, [kind, router]);
 
-  async function load(query: string, pageIndex: number) {
+  async function load(query: string, pageIndex: number, stale: boolean) {
     if (!kind || !VALID_KINDS.includes(kind)) return;
     setLoading(true);
     setError(null);
@@ -72,6 +78,7 @@ export default function AdminTranslationsKindList() {
         window.location.origin
       );
       if (query.trim()) url.searchParams.set("q", query.trim());
+      if (stale) url.searchParams.set("stale", "1");
       url.searchParams.set("limit", String(PAGE_SIZE));
       url.searchParams.set("offset", String(pageIndex * PAGE_SIZE));
       const res = await fetch(url, { cache: "no-store" });
@@ -85,13 +92,13 @@ export default function AdminTranslationsKindList() {
     }
   }
 
-  // Refetch on (kind, page, appliedQuery) change. The search box drives
-  // `appliedQuery` via form submit so a stray keystroke doesn't trigger
-  // a paged refetch per character.
+  // Refetch on (kind, page, appliedQuery, showStaleOnly) change. The
+  // search box drives `appliedQuery` via form submit so a stray
+  // keystroke doesn't trigger a paged refetch per character.
   useEffect(() => {
-    void load(appliedQuery, page);
+    void load(appliedQuery, page, showStaleOnly);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, page, appliedQuery]);
+  }, [kind, page, appliedQuery, showStaleOnly]);
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,11 +127,75 @@ export default function AdminTranslationsKindList() {
         );
         // Reload the current page so the row's status badges refresh
         // without scrolling the admin back to page 0.
-        await load(appliedQuery, page);
+        await load(appliedQuery, page, showStaleOnly);
       } catch (err: any) {
         toast.error(err?.message ?? "Translation failed");
       }
     });
+  }
+
+  // Bulk retranslate every entity on the current page that has any
+  // stale translations. Runs entities sequentially (each translate call
+  // hits the Anthropic API and we don't want to spike rate limits).
+  // Human-edited rows are skipped by default — that's the translator
+  // script's `force=false` semantic. If you need to overwrite human
+  // edits you have to do it per-entity from the editor with Force.
+  async function retranslateStaleOnPage() {
+    if (!data || !kind) return;
+    const staleItems = data.items.filter((it) => it.staleCount > 0);
+    if (staleItems.length === 0) {
+      toast.info("Nothing stale on this page.");
+      return;
+    }
+    if (
+      !confirm(
+        `Retranslate ${staleItems.length} ${
+          staleItems.length === 1 ? "entity" : "entities"
+        } with stale translations? Human-edited rows are skipped — use the editor's Force re-translate to overwrite those.`
+      )
+    ) {
+      return;
+    }
+    setBulkBusy(true);
+    let translated = 0;
+    let errors = 0;
+
+    // Entity concurrency — each request fans out to up to 5 parallel
+    // locale calls server-side, so 3 entities at once means at most
+    // ~15 simultaneous Anthropic requests. Well under any plausible
+    // tier limit and ~3x faster than fully sequential.
+    const ENTITY_CONCURRENCY = 3;
+    const runOne = async (it: typeof staleItems[number]) => {
+      try {
+        const res = await fetch("/api/admin/content-translations/translate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind, id: it.id, force: false }),
+        });
+        const j = await res.json();
+        if (!res.ok || !j?.ok) {
+          errors += 1;
+        } else {
+          translated += Number(j.result?.translated ?? 0);
+        }
+      } catch {
+        errors += 1;
+      }
+    };
+    for (let i = 0; i < staleItems.length; i += ENTITY_CONCURRENCY) {
+      const chunk = staleItems.slice(i, i + ENTITY_CONCURRENCY);
+      await Promise.all(chunk.map(runOne));
+    }
+
+    setBulkBusy(false);
+    if (errors > 0) {
+      toast.error(
+        `Retranslated ${translated} locales, ${errors} entities errored.`
+      );
+    } else {
+      toast.success(`Retranslated ${translated} locales across ${staleItems.length} entities.`);
+    }
+    await load(appliedQuery, page, showStaleOnly);
   }
 
   return (
@@ -136,7 +207,7 @@ export default function AdminTranslationsKindList() {
         }
         rightSlot={
           <Button
-            onClick={() => void load(appliedQuery, page)}
+            onClick={() => void load(appliedQuery, page, showStaleOnly)}
             disabled={loading}
             size="sm"
             variant="outline"
@@ -147,14 +218,40 @@ export default function AdminTranslationsKindList() {
       />
 
       <div className="container mx-auto py-6 space-y-4">
-        <form onSubmit={submitSearch} className="flex gap-2 max-w-md">
-          <Input
-            placeholder="Filter by name…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <Button type="submit" variant="outline">Search</Button>
-        </form>
+        <div className="flex flex-wrap items-center gap-3">
+          <form onSubmit={submitSearch} className="flex gap-2 flex-1 min-w-[260px] max-w-md">
+            <Input
+              placeholder="Filter by name…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <Button type="submit" variant="outline">Search</Button>
+          </form>
+
+          <Button
+            variant={showStaleOnly ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setPage(0);
+              setShowStaleOnly((v) => !v);
+            }}
+            title="Show only entities where the English source has changed since at least one translation was created"
+          >
+            {showStaleOnly ? "Showing stale only" : "Show stale only"}
+          </Button>
+
+          <div className="flex-1" />
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void retranslateStaleOnPage()}
+            disabled={bulkBusy || loading || !data?.items?.some((it) => it.staleCount > 0)}
+            title="Re-runs the translator on every entity in the current page that has stale translations. Human-edited rows are skipped."
+          >
+            {bulkBusy ? "Retranslating…" : "Retranslate stale on this page"}
+          </Button>
+        </div>
 
         {error && (
           <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -215,26 +312,43 @@ export default function AdminTranslationsKindList() {
                             {it.translatedCount}/{it.totalLocales}
                           </span>
                         </div>
-                        {it.humanEditedCount > 0 && (
-                          <div className="text-[11px] text-blue-700 mt-1">
-                            {it.humanEditedCount} human-edited
-                          </div>
-                        )}
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          {it.humanEditedCount > 0 && (
+                            <span className="text-[11px] text-blue-700">
+                              {it.humanEditedCount} human-edited
+                            </span>
+                          )}
+                          {it.staleCount > 0 && (
+                            <span
+                              className="text-[11px] font-medium text-amber-700"
+                              title="Source changed since these translations were created"
+                            >
+                              {it.staleCount} stale
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {data.locales.map((l) => {
                             const s = it.byLocale[l];
+                            const isStale = !!s && s.stale === true;
                             return (
                               <span
                                 key={l}
-                                title={s ? `${s.source} · ${s.updated_at}` : "Not translated"}
+                                title={
+                                  s
+                                    ? `${s.source}${isStale ? " · stale" : ""} · ${s.updated_at}`
+                                    : "Not translated"
+                                }
                                 className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium border ${
                                   !s
                                     ? "border-muted bg-muted/40 text-muted-foreground"
-                                    : s.source === "human"
-                                    ? "border-blue-200 bg-blue-50 text-blue-700"
-                                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : isStale
+                                      ? "border-amber-300 bg-amber-50 text-amber-900"
+                                      : s.source === "human"
+                                        ? "border-blue-200 bg-blue-50 text-blue-700"
+                                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
                                 }`}
                               >
                                 {l}
@@ -245,12 +359,19 @@ export default function AdminTranslationsKindList() {
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <Button
-                          variant="ghost"
+                          variant={it.staleCount > 0 ? "default" : "ghost"}
                           size="sm"
                           onClick={() => translateOne(it.id, false)}
                           disabled={translating}
+                          title={
+                            it.staleCount > 0
+                              ? "Retranslate stale locales (human-edited rows are skipped)"
+                              : "Translate any missing locales"
+                          }
                         >
-                          Translate missing
+                          {it.staleCount > 0
+                            ? "Retranslate stale"
+                            : "Translate missing"}
                         </Button>
                         <Button
                           asChild

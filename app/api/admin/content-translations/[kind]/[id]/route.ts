@@ -16,7 +16,12 @@ import {
   json,
   KINDS,
 } from "../../_lib";
-import { TARGET_LOCALES, type TargetLocale } from "@/lib/contentTranslator";
+import {
+  TARGET_LOCALES,
+  namespaceHash,
+  pickTranslatablePayload,
+  type TargetLocale,
+} from "@/lib/contentTranslator";
 
 type RouteParams = { params: { kind: string; id: string } };
 
@@ -46,13 +51,39 @@ export async function GET(_req: Request, { params }: RouteParams) {
   if (trErr) return json({ ok: false, error: trErr.message }, 500);
   if (!source) return json({ ok: false, error: "ENTITY_NOT_FOUND" }, 404);
 
+  // Compute the current source hash and tag each translation row with
+  // a `stale` flag so the UI can show drift indicators without doing
+  // its own hashing. Using the same `namespaceHash(pickTranslatablePayload)`
+  // pipeline as the translator script + the per-entity translate API
+  // means stale detection here is always consistent with the actual
+  // skip-or-translate decision the translator makes.
+  //
+  // Edge cases:
+  //   - source_hash null on a translation row (legacy data) → treat as
+  //     stale = true. The admin should retranslate to refresh.
+  //   - source_hash matches but row was human-edited → still NOT stale.
+  //     The hash on a human row tracks the AI snapshot it was edited
+  //     against; if that snapshot equals current source, the human
+  //     edit is still aligned with the current English copy.
+  //   - source_hash mismatch on a human row → stale = true, but the
+  //     editor warns that retranslating will overwrite human edits.
+  const currentSourceHash = namespaceHash(
+    pickTranslatablePayload(kind, source as Record<string, any>)
+  );
+
+  const translationsWithStale = (rows ?? []).map((r: any) => {
+    const stale = !r.source_hash || r.source_hash !== currentSourceHash;
+    return { ...r, stale };
+  });
+
   return json({
     ok: true,
     kind,
     locales: [...TARGET_LOCALES],
     translatableFields: [...cfg.translatableFields],
     source,
-    translations: rows ?? [],
+    currentSourceHash,
+    translations: translationsWithStale,
   });
 }
 

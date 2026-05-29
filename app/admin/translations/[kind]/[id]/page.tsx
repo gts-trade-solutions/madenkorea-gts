@@ -35,6 +35,10 @@ type TranslationRow = {
   locale: string;
   source: string;
   source_hash: string | null;
+  /** Server-computed: true when the row's source_hash doesn't match
+   *  the current English source. UI surfaces this as a "Stale" badge
+   *  + warning banner + emphasised Retranslate button. */
+  stale: boolean;
   created_at: string;
   updated_at: string;
   [k: string]: any;
@@ -46,6 +50,10 @@ type EditorData = {
   locales: string[];
   translatableFields: string[];
   source: Record<string, any>;
+  /** Hash of the current English source, computed by the API using the
+   *  same fn the translator script uses. Useful for debugging only —
+   *  the UI relies on the per-row `stale` flag, not this directly. */
+  currentSourceHash: string;
   translations: TranslationRow[];
 };
 
@@ -176,6 +184,7 @@ function LocaleTabs({
         const active = l === selected;
         const isHuman = r?.source === "human";
         const isMissing = !r;
+        const isStale = !!r && r.stale === true;
         return (
           <button
             key={l}
@@ -183,7 +192,13 @@ function LocaleTabs({
             onClick={() => onSelect(l)}
             className={`
               inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors
-              ${active ? "border-primary bg-primary text-primary-foreground" : "border-muted hover:bg-muted/50"}
+              ${
+                active
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : isStale
+                    ? "border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900"
+                    : "border-muted hover:bg-muted/50"
+              }
             `}
           >
             <span className="font-mono">{l}</span>
@@ -195,10 +210,18 @@ function LocaleTabs({
                 isMissing ? "Not translated" : isHuman ? "Human-edited" : "AI-translated"
               }
             />
+            {isStale && (
+              <span
+                className="inline-flex items-center rounded-full bg-amber-200 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-amber-900"
+                title="Source changed since this translation was created"
+              >
+                Stale
+              </span>
+            )}
           </button>
         );
       })}
-      <div className="ml-auto flex items-center gap-3 text-[11px] text-muted-foreground">
+      <div className="ml-auto flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> AI
         </span>
@@ -207,6 +230,12 @@ function LocaleTabs({
         </span>
         <span className="inline-flex items-center gap-1">
           <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" /> Missing
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="rounded-sm bg-amber-200 px-1 py-0 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+            Stale
+          </span>{" "}
+          Source changed
         </span>
       </div>
     </div>
@@ -346,10 +375,24 @@ function LocaleEditor({
 
   const isHuman = row?.source === "human";
   const isMissing = !row;
+  const isStale = !!row && row.stale === true;
 
   return (
     <Card>
       <CardContent className="space-y-5 pt-6">
+        {isStale && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-medium">
+              The English source has changed since this translation was created.
+            </p>
+            <p className="mt-1 text-amber-800">
+              {isHuman
+                ? "Your manual edits are still preserved on the storefront, but the underlying English copy has drifted. Force re-translate to refresh from the new source (this WILL overwrite your manual edits), or update the fields here and save to re-anchor."
+                : "Re-translate to refresh this locale from the current English source."}
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-3">
           <span
             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${
@@ -362,6 +405,11 @@ function LocaleEditor({
           >
             {isMissing ? "Missing" : isHuman ? "Human-edited" : "AI-translated"}
           </span>
+          {isStale && (
+            <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900">
+              Stale — source changed
+            </span>
+          )}
           {row && (
             <span className="text-xs text-muted-foreground tabular-nums">
               Updated {new Date(row.updated_at).toLocaleString()}
@@ -381,7 +429,9 @@ function LocaleEditor({
             ) : (
               <>
                 <Button
-                  variant="outline"
+                  // When stale, promote retranslate to a primary CTA so
+                  // it stands out as the recommended action.
+                  variant={isStale ? "default" : "outline"}
                   size="sm"
                   onClick={() => translate(true)}
                   disabled={translating}
@@ -404,7 +454,14 @@ function LocaleEditor({
                 </Button>
               </>
             )}
-            <Button onClick={save} disabled={saving} size="sm">
+            <Button
+              onClick={save}
+              disabled={saving}
+              size="sm"
+              // When stale, the manual save path is secondary — the
+              // visual gradient nudges admins toward Re-translate.
+              variant={isStale ? "outline" : "default"}
+            >
               {saving ? "Saving…" : "Save (mark human)"}
             </Button>
           </div>

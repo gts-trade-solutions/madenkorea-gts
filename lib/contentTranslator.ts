@@ -302,9 +302,13 @@ export async function translateEntity(opts: {
     errors: [],
   };
 
+  // Sort locales into work vs skip BEFORE dispatch so progress totals
+  // are accurate even with concurrency, and the Anthropic calls (the
+  // slow part) only fire for locales that actually need translation.
+  type LocaleWork = { locale: TargetLocale };
+  const work: LocaleWork[] = [];
   for (const locale of locales) {
     const ex = existingByLocale.get(locale);
-
     if (ex?.source === "human") {
       result.humanLocked += 1;
       onProgress?.(locale, "human-locked");
@@ -315,29 +319,48 @@ export async function translateEntity(opts: {
       onProgress?.(locale, "skipped");
       continue;
     }
+    work.push({ locale });
+  }
 
-    try {
-      const translated = await translateOnePayload(
-        apiKey,
-        cfg.label,
-        locale,
-        nameForContext,
-        payload
-      );
-      await onLocaleTranslated(locale, {
-        [cfg.fkColumn]: sourceRow["id"],
-        locale,
-        ...translated,
-        source_hash: sourceHash,
-        source: "ai",
-        updated_at: new Date().toISOString(),
-      });
-      result.translated += 1;
-      onProgress?.(locale, "done");
-    } catch (err: any) {
-      result.errors.push({ locale, message: err?.message ?? String(err) });
-      onProgress?.(locale, "error", err?.message ?? String(err));
-    }
+  // Locale concurrency — Anthropic Haiku tier-1 is ~100 RPM, well
+  // beyond what 5 parallel calls can hit. The cap mostly protects us
+  // from a future tier downgrade and from amplifying network errors
+  // when the source row triggers a retry storm. Sequential previously
+  // meant 7 locales × ~5s = ~35s per entity; with cap=5 it's closer
+  // to ~10s per entity (one round of 5, then the remainder).
+  const LOCALE_CONCURRENCY = 5;
+
+  for (let i = 0; i < work.length; i += LOCALE_CONCURRENCY) {
+    const chunk = work.slice(i, i + LOCALE_CONCURRENCY);
+    await Promise.all(
+      chunk.map(async ({ locale }) => {
+        try {
+          const translated = await translateOnePayload(
+            apiKey,
+            cfg.label,
+            locale,
+            nameForContext,
+            payload
+          );
+          await onLocaleTranslated(locale, {
+            [cfg.fkColumn]: sourceRow["id"],
+            locale,
+            ...translated,
+            source_hash: sourceHash,
+            source: "ai",
+            updated_at: new Date().toISOString(),
+          });
+          result.translated += 1;
+          onProgress?.(locale, "done");
+        } catch (err: any) {
+          result.errors.push({
+            locale,
+            message: err?.message ?? String(err),
+          });
+          onProgress?.(locale, "error", err?.message ?? String(err));
+        }
+      })
+    );
   }
 
   return result;

@@ -19,7 +19,11 @@ import {
   json,
   KINDS,
 } from "../_lib";
-import { TARGET_LOCALES } from "@/lib/contentTranslator";
+import {
+  TARGET_LOCALES,
+  namespaceHash,
+  pickTranslatablePayload,
+} from "@/lib/contentTranslator";
 
 type RouteParams = { params: { kind: string } };
 
@@ -42,9 +46,24 @@ export async function GET(req: Request, { params }: RouteParams) {
   // `name`; banners use `alt` since title is optional.
   const displayCol = kind === "banners" ? "alt" : "name";
 
+  // Stale filter — when ?stale=1 is set, the response only includes
+  // entities with at least one stale translation. Applied client-side
+  // since the staleness predicate spans source-hash computation and a
+  // row-by-row comparison against the translations table.
+  const staleOnly = searchParams.get("stale") === "1";
+
+  // Select the display column + every translatable field so we can
+  // compute the current source hash here and surface staleness per
+  // entity. Translatable fields are usually under 5KB total per row
+  // (product descriptions are the longest), so reading them at list
+  // time is cheap at page sizes of 25–50.
+  const selectCols = ["id", "slug", displayCol, ...cfg.translatableFields]
+    .filter((c, i, arr) => arr.indexOf(c) === i) // dedupe in case displayCol overlaps
+    .join(", ");
+
   let sourceQ = sb
     .from(cfg.sourceTable)
-    .select(`id, slug, ${displayCol}`, { count: "exact" });
+    .select(selectCols, { count: "exact" });
 
   if (cfg.sourceFilter) {
     for (const [k, v] of Object.entries(cfg.sourceFilter)) {
@@ -67,31 +86,50 @@ export async function GET(req: Request, { params }: RouteParams) {
     });
   }
 
-  // Fetch all (entity_id, locale, source) tuples for these rows in
-  // one query so we can compute per-locale status without N round
-  // trips. Cast — see coverage route comment for why TS chokes here.
+  // Fetch all (entity_id, locale, source, source_hash) tuples for
+  // these rows in one query so we can compute per-locale status +
+  // staleness without N round trips. Cast — see coverage route
+  // comment for why TS chokes here.
   const { data: trRows, error: trErr } = (await sb
     .from(cfg.translationsTable)
-    .select(`${cfg.fkColumn}, locale, source, updated_at`)
+    .select(`${cfg.fkColumn}, locale, source, source_hash, updated_at`)
     .in(cfg.fkColumn, ids)) as { data: any[] | null; error: any };
   if (trErr) return json({ ok: false, error: trErr.message }, 500);
 
-  const statusByEntity: Record<
-    string,
-    Record<string, { source: string; updated_at: string }>
-  > = {};
+  // Compute current source hashes once per entity. We need these to
+  // mark rows stale where the stored source_hash no longer matches
+  // the canonical English content.
+  const currentHashByEntity = new Map<string, string>();
+  for (const r of (rows ?? []) as any[]) {
+    currentHashByEntity.set(
+      r.id as string,
+      namespaceHash(pickTranslatablePayload(kind, r as Record<string, any>))
+    );
+  }
+
+  type LocaleStatus = {
+    source: string;
+    updated_at: string;
+    stale: boolean;
+  };
+  const statusByEntity: Record<string, Record<string, LocaleStatus>> = {};
   for (const r of trRows ?? []) {
     const eid = (r as any)[cfg.fkColumn] as string;
+    const currentHash = currentHashByEntity.get(eid) ?? "";
+    const stale = !r.source_hash || r.source_hash !== currentHash;
     (statusByEntity[eid] ??= {})[r.locale] = {
       source: r.source ?? "ai",
       updated_at: r.updated_at,
+      stale,
     };
   }
 
-  const items = (rows ?? []).map((r: any) => {
+  let items = (rows ?? []).map((r: any) => {
     const localeStatus = statusByEntity[r.id] ?? {};
+    const localeValues = Object.values(localeStatus);
     const translated = TARGET_LOCALES.filter((l) => l in localeStatus).length;
-    const human = Object.values(localeStatus).filter((s) => s.source === "human").length;
+    const human = localeValues.filter((s) => s.source === "human").length;
+    const staleCount = localeValues.filter((s) => s.stale).length;
     return {
       id: r.id,
       slug: (r as any).slug ?? null,
@@ -99,9 +137,14 @@ export async function GET(req: Request, { params }: RouteParams) {
       translatedCount: translated,
       totalLocales: TARGET_LOCALES.length,
       humanEditedCount: human,
+      staleCount,
       byLocale: localeStatus,
     };
   });
+
+  if (staleOnly) {
+    items = items.filter((it) => it.staleCount > 0);
+  }
 
   return json({
     ok: true,
