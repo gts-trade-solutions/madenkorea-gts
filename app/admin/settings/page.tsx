@@ -19,7 +19,7 @@ import { toast } from 'sonner';
 
 export default function AdminSettingsPage() {
   const router = useRouter();
-  const { user, hasRole, logout } = useAuth();
+  const { user, hasRole, logout, ready } = useAuth();
 
   const [settings, setSettings] = useState({
     storeName: 'MadenKorea',
@@ -87,7 +87,17 @@ export default function AdminSettingsPage() {
   });
   const [savingEmailVerification, setSavingEmailVerification] = useState(false);
 
+  // Cookie consent banner config — visitors see the banner after EITHER
+  // `delaySeconds` elapse OR after N scroll bursts, whichever first.
+  const [cookieConsentDelay, setCookieConsentDelay] = useState(7);
+  const [cookieConsentScrolls, setCookieConsentScrolls] = useState(1);
+  const [savingCookieConsent, setSavingCookieConsent] = useState(false);
+
   useEffect(() => {
+    // Wait for AuthContext to hydrate before reading hasRole. Without
+    // this guard, a hard reload kicks us back to /admin because the
+    // role is briefly "no user" during context boot.
+    if (!ready) return;
     if (!hasRole('admin')) {
       router.push('/admin');
       return;
@@ -203,7 +213,54 @@ export default function AdminSettingsPage() {
         });
       } catch {}
     })();
-  }, [hasRole, router]);
+
+    // Load cookie consent banner delay.
+    (async () => {
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const token = s?.session?.access_token;
+        const res = await fetch('/api/admin/settings/cookie-consent', {
+          credentials: 'include',
+          headers: token ? { authorization: `Bearer ${token}` } : undefined,
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setCookieConsentDelay(Number(data?.delaySeconds) || 7);
+        setCookieConsentScrolls(Number(data?.scrollThreshold) || 1);
+      } catch {}
+    })();
+  }, [ready, hasRole, router]);
+
+  const handleSaveCookieConsent = async () => {
+    setSavingCookieConsent(true);
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const token = s?.session?.access_token;
+      const res = await fetch('/api/admin/settings/cookie-consent', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'content-type': 'application/json',
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          delaySeconds: cookieConsentDelay,
+          scrollThreshold: cookieConsentScrolls,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body.ok === false) {
+        toast.error(body.error || 'Failed to save');
+        return;
+      }
+      toast.success('Cookie banner delay saved');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to save');
+    } finally {
+      setSavingCookieConsent(false);
+    }
+  };
 
   const handleSaveEmailVerification = async () => {
     setSavingEmailVerification(true);
@@ -286,9 +343,12 @@ export default function AdminSettingsPage() {
     }
   };
 
-  if (!hasRole('admin')) {
-    return null;
-  }
+  // Same hydration guard as the effect above. Returning null while
+  // `ready` is false would flash blank before the page renders, but
+  // returning null only when ready+not-admin keeps the redirect from
+  // racing against the first render.
+  if (!ready) return null;
+  if (!hasRole('admin')) return null;
 
   const handleLogout = async () => {
     await logout();
@@ -582,6 +642,80 @@ export default function AdminSettingsPage() {
                     >
                       <Save className="mr-2 h-4 w-4" />
                       {savingEmailVerification ? 'Saving…' : 'Save email verification settings'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Cookie consent banner</CardTitle>
+                  <CardDescription>
+                    First-time visitors see the banner after EITHER the timer
+                    elapses OR they&apos;ve scrolled the configured number of
+                    times, whichever happens first. Returning visitors who
+                    already accepted/rejected never see the banner.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="cookieDelay">Show banner after</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="cookieDelay"
+                          type="number"
+                          min={1}
+                          max={60}
+                          value={cookieConsentDelay}
+                          onChange={(e) =>
+                            setCookieConsentDelay(Number(e.target.value) || 0)
+                          }
+                        />
+                        <span className="text-sm text-muted-foreground">seconds</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Recommended 5–10 seconds. Fallback for users who
+                        don&apos;t scroll.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label htmlFor="cookieScrolls">Or after</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="cookieScrolls"
+                          type="number"
+                          min={1}
+                          max={20}
+                          value={cookieConsentScrolls}
+                          onChange={(e) =>
+                            setCookieConsentScrolls(Number(e.target.value) || 0)
+                          }
+                        />
+                        <span className="text-sm text-muted-foreground">scrolls</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        One &ldquo;scroll&rdquo; = one continuous scroll
+                        session (a long fast swipe = 1; scroll, pause, scroll
+                        again = 2). Set to 1 to show as soon as the user
+                        starts scrolling.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    Cached for 5 minutes at the edge — changes can take a
+                    few minutes to propagate to live visitors.
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      onClick={handleSaveCookieConsent}
+                      disabled={savingCookieConsent}
+                    >
+                      <Save className="mr-2 h-4 w-4" />
+                      {savingCookieConsent ? 'Saving…' : 'Save cookie banner settings'}
                     </Button>
                   </div>
                 </CardContent>
