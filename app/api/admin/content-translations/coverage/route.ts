@@ -52,32 +52,55 @@ export async function GET(req: Request) {
 
   const summary: Record<string, any> = {};
 
+  // Pre-compute the active TARGET_LOCALES set so we can drop any
+  // stale rows in *_translations whose locale is no longer in the
+  // codebase (e.g., a locale was removed from TARGET_LOCALES). This
+  // is what kept the dashboard from ever exceeding 100% before — the
+  // count is now a tight fraction of (in-scope entities × locales).
+  const targetLocaleSet = new Set<string>(TARGET_LOCALES as readonly string[]);
+
   for (const kind of KIND_KEYS) {
     const cfg = KINDS[kind];
 
-    // Source rows in scope (e.g. only published products).
-    let sourceQ = sb.from(cfg.sourceTable).select("id", { count: "exact", head: true });
+    // 1. In-scope source IDs (e.g., only published products). We need
+    //    both the count AND the actual ids so we can restrict the
+    //    translation counts below to entities that are still in scope.
+    //    Without this, unpublished products that still have
+    //    translation rows from earlier inflate translatedRows past
+    //    the denominator (sourceRows × locales.length), giving >100%.
+    let sourceQ = sb.from(cfg.sourceTable).select("id");
     if (cfg.sourceFilter) {
       for (const [k, v] of Object.entries(cfg.sourceFilter)) {
         sourceQ = sourceQ.eq(k, v as any);
       }
     }
-    const { count: sourceRows } = await sourceQ;
+    const { data: sourceIdRows } = (await sourceQ) as {
+      data: { id: string }[] | null;
+    };
+    const sourceIds = (sourceIdRows ?? []).map((r) => r.id);
+    const sourceRows = sourceIds.length;
+    const sourceIdSet = new Set<string>(sourceIds);
 
-    // All translation rows for this kind (grouped by locale below).
-    // We use template-string interpolation in `select()` which the
-    // Supabase TS parser can't statically resolve, so we cast.
+    // 2. Translation rows for this kind. We pull all of them and then
+    //    filter in-memory by (locale ∈ TARGET_LOCALES) AND
+    //    (entity_id ∈ sourceIdSet) so:
+    //      - locale rows for retired languages don't count
+    //      - rows for unpublished/deleted entities don't count
+    //    Cast on `select()` because template-string interpolation
+    //    confuses the Supabase TS parser.
     const { data: trRows } = (await sb
       .from(cfg.translationsTable)
       .select(`${cfg.fkColumn}, locale`)) as { data: any[] | null };
 
-    // Build per-locale counts and the "fully covered" entity count
-    // (an entity that has translations in every target locale).
     const byLocale: Record<string, number> = {};
     const perEntity: Record<string, Set<string>> = {};
+    let translatedRows = 0;
     for (const row of trRows ?? []) {
       const loc = row.locale as string;
       const eid = (row as any)[cfg.fkColumn] as string;
+      if (!targetLocaleSet.has(loc)) continue;
+      if (!sourceIdSet.has(eid)) continue;
+      translatedRows += 1;
       byLocale[loc] = (byLocale[loc] ?? 0) + 1;
       (perEntity[eid] ??= new Set<string>()).add(loc);
     }
@@ -90,8 +113,8 @@ export async function GET(req: Request) {
 
     summary[kind] = {
       label: cfg.label,
-      sourceRows: sourceRows ?? 0,
-      translatedRows: trRows?.length ?? 0,
+      sourceRows,
+      translatedRows,
       fullyCoveredEntities: fullyCovered,
       byLocale,
     };

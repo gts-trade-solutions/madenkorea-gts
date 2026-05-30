@@ -116,7 +116,15 @@ export default function AdminTranslationsDashboard() {
             const s = data?.summary?.[kind];
             if (!s) return <KindCardSkeleton key={kind} kind={kind} />;
             const total = s.sourceRows * locales.length;
-            const pct = total === 0 ? 0 : Math.round((s.translatedRows / total) * 100);
+            // Defensive clamp: even if the API ever returns a numerator
+            // that's larger than the denominator (stale rows, race
+            // between source/translation queries, etc.), the rendered
+            // value never exceeds 100%. The coverage API is the
+            // primary fix; this is belt-and-suspenders.
+            const pct =
+              total === 0
+                ? 0
+                : Math.min(100, Math.round((s.translatedRows / total) * 100));
             return (
               <Card key={kind} className="hover:shadow-md transition-shadow">
                 <CardHeader>

@@ -59,6 +59,16 @@ export default function AdminTranslationsKindList() {
   const [error, setError] = useState<string | null>(null);
   const [translating, startTranslating] = useTransition();
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Progress state for the bulk translate buttons. `total` is the
+  // entity count the job started with; `done` increments after each
+  // entity finishes (success OR error). null = no job running.
+  const [bulkProgress, setBulkProgress] = useState<{
+    total: number;
+    done: number;
+    translated: number;
+    errors: number;
+    label: string;
+  } | null>(null);
 
   // Redirect bad slugs to the dashboard so we don't render an empty
   // table for unsupported kinds (e.g. someone hits /admin/translations/foo).
@@ -134,38 +144,58 @@ export default function AdminTranslationsKindList() {
     });
   }
 
-  // Bulk retranslate every entity on the current page that has any
-  // stale translations. Runs entities sequentially (each translate call
-  // hits the Anthropic API and we don't want to spike rate limits).
-  // Human-edited rows are skipped by default — that's the translator
-  // script's `force=false` semantic. If you need to overwrite human
-  // edits you have to do it per-entity from the editor with Force.
-  async function retranslateStaleOnPage() {
-    if (!data || !kind) return;
-    const staleItems = data.items.filter((it) => it.staleCount > 0);
-    if (staleItems.length === 0) {
-      toast.info("Nothing stale on this page.");
+  // Entity-level concurrency cap for any bulk translate. Each request
+  // fans out to up to 5 parallel locale calls server-side (see
+  // lib/contentTranslator.ts), so 3 entities at once means ~15
+  // simultaneous Anthropic requests. Well under any plausible tier
+  // limit, ~3x faster than fully sequential.
+  const ENTITY_CONCURRENCY = 3;
+
+  // Predicate for "needs work": entity has either MISSING locales (we
+  // haven't translated everything yet) OR STALE locales (source has
+  // drifted since translation). Both cases use force=false on the
+  // translator, which means:
+  //   - Missing → translate
+  //   - Stale (AI) → retranslate
+  //   - Stale (human) → skip (human-locked); admin can force via editor
+  //   - In sync → skip
+  // So we can run them through one loop without distinguishing.
+  function needsWork(it: Item): boolean {
+    return it.translatedCount < it.totalLocales || it.staleCount > 0;
+  }
+
+  async function runBulkTranslate(items: Item[], label: string) {
+    if (items.length === 0) {
+      toast.info("Nothing to translate.");
       return;
     }
     if (
       !confirm(
-        `Retranslate ${staleItems.length} ${
-          staleItems.length === 1 ? "entity" : "entities"
-        } with stale translations? Human-edited rows are skipped — use the editor's Force re-translate to overwrite those.`
+        `Translate missing + stale locales for ${items.length} ${
+          items.length === 1 ? "entity" : "entities"
+        }? Human-edited rows are skipped — use the editor's Force re-translate to overwrite those.`
       )
     ) {
       return;
     }
     setBulkBusy(true);
+    // Initialise the progress overlay. Live counters live inside the
+    // run loop and we snapshot them into state after every entity so
+    // the progress bar advances roughly per-entity instead of in big
+    // chunks.
+    setBulkProgress({
+      total: items.length,
+      done: 0,
+      translated: 0,
+      errors: 0,
+      label,
+    });
+
     let translated = 0;
     let errors = 0;
+    let done = 0;
 
-    // Entity concurrency — each request fans out to up to 5 parallel
-    // locale calls server-side, so 3 entities at once means at most
-    // ~15 simultaneous Anthropic requests. Well under any plausible
-    // tier limit and ~3x faster than fully sequential.
-    const ENTITY_CONCURRENCY = 3;
-    const runOne = async (it: typeof staleItems[number]) => {
+    const runOne = async (it: Item) => {
       try {
         const res = await fetch("/api/admin/content-translations/translate", {
           method: "POST",
@@ -180,22 +210,81 @@ export default function AdminTranslationsKindList() {
         }
       } catch {
         errors += 1;
+      } finally {
+        done += 1;
+        // Snapshot into React state so the progress bar redraws.
+        // Functional update so we don't read stale state when the
+        // chunked Promise.all calls finish out of order.
+        setBulkProgress((p) =>
+          p
+            ? { ...p, done, translated, errors }
+            : p
+        );
       }
     };
-    for (let i = 0; i < staleItems.length; i += ENTITY_CONCURRENCY) {
-      const chunk = staleItems.slice(i, i + ENTITY_CONCURRENCY);
+    for (let i = 0; i < items.length; i += ENTITY_CONCURRENCY) {
+      const chunk = items.slice(i, i + ENTITY_CONCURRENCY);
       await Promise.all(chunk.map(runOne));
     }
 
     setBulkBusy(false);
     if (errors > 0) {
       toast.error(
-        `Retranslated ${translated} locales, ${errors} entities errored.`
+        `${label}: ${translated} locales translated, ${errors} entities errored.`
       );
     } else {
-      toast.success(`Retranslated ${translated} locales across ${staleItems.length} entities.`);
+      toast.success(
+        `${label}: ${translated} locales translated across ${items.length} entities.`
+      );
     }
+    // Refresh the table data, then clear the progress overlay so the
+    // user can see the final counts before it dismisses.
     await load(appliedQuery, page, showStaleOnly);
+    // Small delay so admins reading the final "X/Y done" tally see it
+    // hit 100% before the bar disappears.
+    setTimeout(() => setBulkProgress(null), 1500);
+  }
+
+  // Page-scoped: catches missing AND stale entities visible on the
+  // current page. Cheap to run — bounded by PAGE_SIZE.
+  async function translatePendingOnPage() {
+    if (!data || !kind) return;
+    const pending = data.items.filter(needsWork);
+    await runBulkTranslate(pending, "On this page");
+  }
+
+  // Full-catalog: fetches every entity that matches the current search
+  // (no pagination, capped at the API's max), filters to those that
+  // need work, and runs them. Used right after adding a new locale or
+  // when the admin wants to clear the entire backlog at once.
+  async function translateAllPending() {
+    if (!kind) return;
+    setBulkBusy(true);
+    try {
+      const url = new URL(
+        `/api/admin/content-translations/${kind}`,
+        window.location.origin
+      );
+      if (appliedQuery.trim()) url.searchParams.set("q", appliedQuery.trim());
+      // Pull a large page; the list API clamps at 200. For larger
+      // catalogs we'd paginate here, but 200 is plenty for now.
+      url.searchParams.set("limit", "200");
+      url.searchParams.set("offset", "0");
+      const res = await fetch(url, { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        toast.error(json?.error || "Failed to fetch entities");
+        setBulkBusy(false);
+        return;
+      }
+      const all: Item[] = (json.items as Item[]) ?? [];
+      const pending = all.filter(needsWork);
+      setBulkBusy(false);
+      await runBulkTranslate(pending, "Across all entities");
+    } catch (err: any) {
+      setBulkBusy(false);
+      toast.error(err?.message ?? "Failed to load entities for bulk translate");
+    }
   }
 
   return (
@@ -245,13 +334,63 @@ export default function AdminTranslationsKindList() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void retranslateStaleOnPage()}
-            disabled={bulkBusy || loading || !data?.items?.some((it) => it.staleCount > 0)}
-            title="Re-runs the translator on every entity in the current page that has stale translations. Human-edited rows are skipped."
+            onClick={() => void translatePendingOnPage()}
+            disabled={bulkBusy || loading || !data?.items?.some(needsWork)}
+            title="Translates missing locales AND retranslates stale ones for every entity on the current page. Human-edited rows are skipped."
           >
-            {bulkBusy ? "Retranslating…" : "Retranslate stale on this page"}
+            {bulkBusy ? "Translating…" : "Translate missing on this page"}
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={() => void translateAllPending()}
+            disabled={bulkBusy || loading}
+            title="Fetches every entity matching the current search and translates missing + stale locales. Use this after adding a new language to fill in the whole catalogue at once."
+          >
+            {bulkBusy ? "Translating…" : "Translate all missing"}
           </Button>
         </div>
+
+        {bulkProgress && (
+          <Card className="border-primary/40 bg-primary/5">
+            <CardContent className="p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium">
+                  {bulkProgress.label}: translating…
+                </span>
+                <span className="tabular-nums text-muted-foreground text-xs">
+                  {bulkProgress.done}/{bulkProgress.total} entities ·{" "}
+                  {bulkProgress.translated} locales translated
+                  {bulkProgress.errors > 0
+                    ? ` · ${bulkProgress.errors} errored`
+                    : ""}
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{
+                    width: `${
+                      bulkProgress.total === 0
+                        ? 0
+                        : Math.min(
+                            100,
+                            Math.round(
+                              (bulkProgress.done / bulkProgress.total) * 100
+                            )
+                          )
+                    }%`,
+                  }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Up to {ENTITY_CONCURRENCY} entities run in parallel; each
+                entity translates up to 5 locales at once. Don&apos;t close
+                this page until the bar reaches 100%.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {error && (
           <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
