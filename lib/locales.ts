@@ -14,6 +14,7 @@ export const SUPPORTED_LOCALES = [
   "en",    // generic English for non-Indian English markets
   "pl",    // Polish — priority 1
   "vi",    // Vietnamese — priority 2
+  "th",    // Thai — added with Thailand market launch
   "fr",    // French
   "de",    // German
   "es",    // Spanish
@@ -48,6 +49,7 @@ export const LOCALE_INFO: Record<SupportedLocale, LocaleInfo> = {
   "en":    { code: "en",    name: "English",         nativeName: "English",         intlTag: "en" },
   "pl":    { code: "pl",    name: "Polish",          nativeName: "Polski",          intlTag: "pl-PL" },
   "vi":    { code: "vi",    name: "Vietnamese",      nativeName: "Tiếng Việt",      intlTag: "vi-VN" },
+  "th":    { code: "th",    name: "Thai",            nativeName: "ไทย",             intlTag: "th-TH" },
   "fr":    { code: "fr",    name: "French",          nativeName: "Français",        intlTag: "fr-FR" },
   "de":    { code: "de",    name: "German",          nativeName: "Deutsch",         intlTag: "de-DE" },
   "es":    { code: "es",    name: "Spanish",         nativeName: "Español",         intlTag: "es-ES" },

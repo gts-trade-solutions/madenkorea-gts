@@ -108,13 +108,14 @@ export const KINDS: Record<TranslatableKind, EntityConfig> = {
 // Must mirror lib/locales.ts. Importing it here would drag a "use
 // client" boundary in via LOCALE_INFO, so we duplicate the small bit
 // we need.
-export const TARGET_LOCALES = ["en", "pl", "vi", "fr", "de", "es", "it", "pt"] as const;
+export const TARGET_LOCALES = ["en", "pl", "vi", "th", "fr", "de", "es", "it", "pt"] as const;
 export type TargetLocale = (typeof TARGET_LOCALES)[number];
 
 const LOCALE_NAME: Record<TargetLocale, string> = {
   en: "English (generic, non-Indian markets)",
   pl: "Polish",
   vi: "Vietnamese",
+  th: "Thai",
   fr: "French (France)",
   de: "German (Germany)",
   es: "Spanish (Spain)",

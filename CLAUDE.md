@@ -12,6 +12,7 @@ Orientation for Claude Code working in this repository. Keep this file lean: dee
 - [MULTILANGUAGE.md](MULTILANGUAGE.md) — Phase 2 (multi-language) reference: i18n architecture, static + dynamic translation pipelines, admin layer, operational guide, loose ends, next phases. Last updated 2026-05-14.
 - [INTERNATIONAL_PAYMENTS.md](INTERNATIONAL_PAYMENTS.md) — Razorpay international checkout build spec: confirmed inputs, currency exponent reference, build plan, deferred items. Status: spec locked, code not started. Last updated 2026-05-16.
 - [COUNTRY_PRICING.md](COUNTRY_PRICING.md) — per-country offer pricing (Phase 1 live, Phase 2 cleanup + Phase 3 extensions planned). Architecture map, files touched, debt being carried, full Phase 2 migration SQL + risk register. Read before touching anything in `lib/pricing.ts`, `product_country_prices`, or the resolver call sites. Last updated 2026-05-21.
+- [COUNTRY_LANGUAGE_REGISTRY.md](COUNTRY_LANGUAGE_REGISTRY.md) — admin-managed country/language/currency catalog spec (the planned `/admin/countries` portal). Three new tables, reader-layer refactor across `lib/countries.ts` / `lib/locales.ts` / `lib/currency.ts`, edge-case matrix, open questions. Status: spec locked, code not started. Last updated 2026-05-29.
 - [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) — historical milestone log (2025-10). Mostly historical; do not assume it reflects current state.
 
 When you fix an issue, update both the issue register status and any relevant notes in CODEBASE_REFERENCE.md.

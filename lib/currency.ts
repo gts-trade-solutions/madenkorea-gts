@@ -21,11 +21,11 @@ export function roundMoney(n: number) {
 }
 
 export type CurrencyCode =
-  | "INR" | "USD" | "EUR" | "GBP" | "PLN"
+  | "INR" | "USD" | "EUR" | "GBP" | "PLN" | "THB"
   | "ZAR" | "VND" | "TZS" | "NGN" | "QAR" | "AED";
 
 export const SUPPORTED_CURRENCIES: CurrencyCode[] = [
-  "INR", "USD", "EUR", "GBP", "PLN",
+  "INR", "USD", "EUR", "GBP", "PLN", "THB",
   "ZAR", "VND", "TZS", "NGN", "QAR", "AED",
 ];
 
@@ -48,6 +48,7 @@ export const FALLBACK_RATES: Record<CurrencyCode, CurrencyRate> = {
   EUR: { code: "EUR", name: "Euro",                 symbol: "€",   decimals: 2, rate_from_inr: 0.011,    active: true },
   GBP: { code: "GBP", name: "British Pound",        symbol: "£",   decimals: 2, rate_from_inr: 0.0095,   active: true },
   PLN: { code: "PLN", name: "Polish Zloty",         symbol: "zł",  decimals: 2, rate_from_inr: 0.048,    active: true },
+  THB: { code: "THB", name: "Thai Baht",            symbol: "฿",   decimals: 2, rate_from_inr: 0.42,     active: true },
   ZAR: { code: "ZAR", name: "South African Rand",   symbol: "R",   decimals: 2, rate_from_inr: 0.22,     active: true },
   VND: { code: "VND", name: "Vietnamese Dong",      symbol: "₫",   decimals: 0, rate_from_inr: 296,      active: true },
   TZS: { code: "TZS", name: "Tanzanian Shilling",   symbol: "TSh", decimals: 0, rate_from_inr: 30,       active: true },
@@ -65,6 +66,7 @@ const FORMAT_LOCALE: Record<CurrencyCode, string> = {
   EUR: "de-DE",  // dot/comma swapped vs US; widely read across EU
   GBP: "en-GB",
   PLN: "pl-PL",
+  THB: "th-TH",
   ZAR: "en-ZA",
   VND: "vi-VN",
   TZS: "sw-TZ",
@@ -101,6 +103,9 @@ export const COUNTRY_TO_CURRENCY: Record<string, CurrencyCode> = {
 
   // Vietnam
   VN: "VND",
+
+  // Thailand
+  TH: "THB",
 
   // Tanzania
   TZ: "TZS",
@@ -183,6 +188,7 @@ const RAZORPAY_EXPONENT: Record<CurrencyCode, number> = {
   QAR: 2,
   AED: 2,
   VND: 0,
+  THB: 2,
 };
 
 /**

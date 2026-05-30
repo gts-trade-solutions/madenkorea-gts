@@ -12,7 +12,7 @@ import type { SupportedLocale } from "@/lib/locales";
 
 export type CountryCode =
   | "IN" | "US" | "GB"
-  | "PL" | "VN"
+  | "PL" | "VN" | "TH"
   | "FR" | "DE" | "ES" | "IT" | "PT"
   | "ZA" | "TZ" | "NG" | "QA" | "AE";
 
@@ -34,6 +34,9 @@ export const COUNTRY_PROFILES: Record<CountryCode, CountryProfile> = {
 
   PL: { code: "PL", name: "Poland",        flag: "🇵🇱", defaultLocale: "pl",    defaultCurrency: "PLN" },
   VN: { code: "VN", name: "Vietnam",       flag: "🇻🇳", defaultLocale: "vi",    defaultCurrency: "VND" },
+  // Thailand — Thai UI bundle landed (messages/th.json). Currency
+  // formatting in THB handled natively by Intl with th-TH locale.
+  TH: { code: "TH", name: "Thailand",      flag: "🇹🇭", defaultLocale: "th",    defaultCurrency: "THB" },
 
   FR: { code: "FR", name: "France",        flag: "🇫🇷", defaultLocale: "fr",    defaultCurrency: "EUR" },
   DE: { code: "DE", name: "Germany",       flag: "🇩🇪", defaultLocale: "de",    defaultCurrency: "EUR" },
