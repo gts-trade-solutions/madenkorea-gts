@@ -27,6 +27,7 @@ export async function SiteJsonLd() {
         "@type": "Organization",
         "@id": `${SITE}#brand`,
         name: profile.brand.legalEntityName,
+        ...(profile.brand.email ? { email: profile.brand.email } : {}),
         ...(profile.brand.registeredAddress
           ? {
               address: {

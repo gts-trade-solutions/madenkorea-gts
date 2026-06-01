@@ -699,7 +699,36 @@ async function clearPromo() {
             })}
           </div>
 
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-4">
+            {!isAuthenticated && (
+              <Card className="border-pink-200 bg-pink-50">
+                <CardContent className="p-4">
+                  <p className="text-sm font-semibold text-pink-900">
+                    {t("anonBannerTitle")}
+                  </p>
+                  <p className="mt-1 text-xs text-pink-800/80">
+                    {t("anonBannerBody")}
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      asChild
+                      size="sm"
+                      className="flex-1 bg-pink-600 hover:bg-pink-700 text-white"
+                    >
+                      <Link href="/auth/register">{t("anonBannerJoin")}</Link>
+                    </Button>
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 border-pink-300 text-pink-900 hover:bg-pink-100"
+                    >
+                      <Link href="/auth/login">{t("anonBannerSignIn")}</Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             <Card className="lg:sticky lg:top-20">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

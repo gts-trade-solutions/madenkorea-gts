@@ -375,7 +375,7 @@ export default async function FAQPage() {
         description="Quick answers to the things customers most often ask. If you don't see your question, email or chat with us at the bottom."
       />
 
-      <div className="container mx-auto px-4 py-10 sm:py-14">
+      <div className="container mx-auto py-10 sm:py-14">
         <div className="max-w-4xl mx-auto">
           <PolicyMeta updated="May 7, 2026" />
 

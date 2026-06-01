@@ -21,7 +21,7 @@ type Props = {
 export function PolicyHero({ eyebrow, title, description }: Props) {
   return (
     <div className="bg-muted/30 border-b">
-      <div className="container mx-auto px-4 py-12 sm:py-16">
+      <div className="container mx-auto py-12 sm:py-16">
         <div className="max-w-3xl mx-auto text-center">
           <p className="text-xs uppercase tracking-[0.2em] text-primary font-semibold mb-3">
             {eyebrow}

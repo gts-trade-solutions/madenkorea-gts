@@ -10,13 +10,23 @@ const config: Config = {
   theme: {
     container: {
       center: true,
-      padding: '1rem',
+      // Tighter horizontal padding on desktop so the header / footer
+      // have more room for nav, brand mark, and CTA cluster. Mobile
+      // keeps 1rem so content does not run flush to the screen edge.
+      padding: {
+        DEFAULT: '1rem',
+        sm: '1rem',
+        md: '0.75rem',
+        lg: '0.5rem',
+        xl: '0.5rem',
+        '2xl': '0.5rem',
+      },
       screens: {
         'sm': '640px',
         'md': '768px',
         'lg': '1024px',
         'xl': '1280px',
-        '2xl': '1400px',
+        '2xl': '1536px',
       },
     },
     extend: {

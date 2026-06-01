@@ -162,7 +162,7 @@ export default function ContactPage() {
         description={t("heroDescription")}
       />
 
-      <div className="container mx-auto px-4 py-10 sm:py-14">
+      <div className="container mx-auto py-10 sm:py-14">
         {/* Main: form (3 cols) + sidebar (2 cols) at lg:+. Form first in
             DOM so it stacks on top on mobile (the primary action). */}
         <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-5 lg:gap-8">
@@ -380,6 +380,16 @@ export default function ContactPage() {
                     {brand.registeredAddress && (
                       <p className="text-muted-foreground whitespace-pre-line">
                         {brand.registeredAddress}
+                      </p>
+                    )}
+                    {brand.email && (
+                      <p>
+                        <a
+                          href={`mailto:${brand.email}`}
+                          className="text-muted-foreground hover:text-foreground hover:underline break-words"
+                        >
+                          {brand.email}
+                        </a>
                       </p>
                     )}
                   </CardContent>

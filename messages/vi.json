@@ -34,7 +34,13 @@
     "shopCategory": "Mua sắm {name}",
     "exploreBrand": "Khám phá {name}",
     "wishlist": "Danh sách yêu thích",
-    "adminPortal": "Quản trị"
+    "adminPortal": "Quản trị",
+    "signIn": "Đăng nhập",
+    "joinFree": "Tham gia miễn phí",
+    "menuAuthHeading": "Chào mừng đến MadenKorea",
+    "menuAuthSubheading": "Đăng nhập hoặc tạo tài khoản miễn phí",
+    "utilityStripBody": "Đăng nhập hoặc tạo tài khoản miễn phí để thanh toán nhanh hơn",
+    "utilityStripDismiss": "Bỏ qua"
   },
   "footer": {
     "tagline": "Các sản phẩm làm đẹp và lối sống Hàn Quốc chính hãng, giao hàng trên khắp Ấn Độ và vận chuyển đến các quốc gia được chọn trên toàn thế giới.",
@@ -117,7 +123,11 @@
     "intlShippingNextTier": "Tầng tiếp theo {label}: +{delta}.",
     "intlShippingMaxTier": "Bạn đang ở tầng vận chuyển quốc tế lớn nhất.",
     "emptyWishlistCta": "Xem danh sách yêu thích của tôi",
-    "promoNotAvailableInRegionToast": "Mã khuyến mãi này không có sẵn ở quốc gia bạn chọn. Hãy thử chuyển đổi quốc gia từ tiêu đề nếu bạn đủ điều kiện."
+    "promoNotAvailableInRegionToast": "Mã khuyến mãi này không có sẵn ở quốc gia bạn chọn. Hãy thử chuyển đổi quốc gia từ tiêu đề nếu bạn đủ điều kiện.",
+    "anonBannerTitle": "Đăng nhập để thanh toán nhanh hơn",
+    "anonBannerBody": "Lưu địa chỉ, theo dõi đơn hàng và nhận thưởng K Plus.",
+    "anonBannerSignIn": "Đăng nhập",
+    "anonBannerJoin": "Tạo tài khoản"
   },
   "auth": {
     "signIn": {
@@ -131,6 +141,7 @@
       "submit": "Đăng nhập",
       "submitting": "Đang đăng nhập…",
       "orContinueWith": "hoặc tiếp tục với",
+      "orWithEmail": "hoặc tiếp tục với email",
       "continueWithGoogle": "Tiếp tục với Google",
       "continueWithFacebook": "Tiếp tục với Facebook",
       "redirectingToGoogle": "Đang chuyển hướng đến Google…",

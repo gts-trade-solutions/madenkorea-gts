@@ -95,6 +95,7 @@ function effectiveUnitPrice(p: ProductRow) {
 export default function WishlistPage() {
   const router = useRouter();
   const t = useTranslations('account');
+  const tc = useTranslations('header');
   const { isAuthenticated, ready: authReady } = useAuth();
   const { addItem } = useCart();
   const { wishlistItems, removeFromWishlist } = useWishlist();
@@ -396,20 +397,35 @@ export default function WishlistPage() {
           </p>
         </div>
 
-        {/* Soft prompt for anonymous users — wishlist works locally,
-            but won't follow them to other devices until they sign in. */}
+        {/* Anonymous-visitor banner — wishlist persists locally, but a
+            real account lets it follow them across devices. Solid card
+            so the value prop is unmissable, vs. the prior dashed hint. */}
         {authReady && !isAuthenticated && hasRows && (
-          <div className="mb-6 flex flex-col gap-3 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm">
-              {t('wishlistAnonPrompt')}
-            </p>
-            <Button asChild size="sm" variant="outline" className="shrink-0">
-              <Link href={`/auth/login?redirect=/wishlist`}>
-                <LogIn className="h-4 w-4 mr-2" />
-                {t('wishlistAnonSignInCta')}
-              </Link>
-            </Button>
-          </div>
+          <Card className="mb-6 border-pink-200 bg-pink-50">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <Heart className="h-5 w-5 text-pink-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-pink-900">
+                    {t('wishlistAnonPrompt')}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button asChild size="sm" className="bg-pink-600 hover:bg-pink-700 text-white">
+                  <Link href={`/auth/register?redirect=/wishlist`}>
+                    {tc('joinFree')}
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="outline" className="border-pink-300 text-pink-900 hover:bg-pink-100">
+                  <Link href={`/auth/login?redirect=/wishlist`}>
+                    <LogIn className="h-4 w-4 mr-2" />
+                    {t('wishlistAnonSignInCta')}
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         <Card className="mb-6">

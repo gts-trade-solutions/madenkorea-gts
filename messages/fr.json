@@ -34,7 +34,13 @@
     "shopCategory": "Découvrir {name}",
     "exploreBrand": "Explorer {name}",
     "wishlist": "Liste de souhaits",
-    "adminPortal": "Admin"
+    "adminPortal": "Admin",
+    "signIn": "Se connecter",
+    "joinFree": "S'inscrire gratuitement",
+    "menuAuthHeading": "Bienvenue chez MadenKorea",
+    "menuAuthSubheading": "Connectez-vous ou créez un compte gratuit",
+    "utilityStripBody": "Connectez-vous ou créez un compte gratuit pour un paiement plus rapide",
+    "utilityStripDismiss": "Fermer"
   },
   "footer": {
     "tagline": "Produits authentiques de beauté et de mode de vie coréens, livrés en Inde et expédiés vers certains pays du monde entier.",
@@ -117,7 +123,11 @@
     "intlShippingNextTier": "Tranche suivante {label} : +{delta}.",
     "intlShippingMaxTier": "Vous êtes dans la plus grande tranche d'expédition internationale.",
     "emptyWishlistCta": "Voir ma liste de souhaits",
-    "promoNotAvailableInRegionToast": "Ce code promo n'est pas disponible dans votre pays sélectionné. Essayez de changer de pays depuis l'en-tête si vous êtes admissible."
+    "promoNotAvailableInRegionToast": "Ce code promo n'est pas disponible dans votre pays sélectionné. Essayez de changer de pays depuis l'en-tête si vous êtes admissible.",
+    "anonBannerTitle": "Connectez-vous pour un paiement plus rapide",
+    "anonBannerBody": "Enregistrez votre adresse, suivez vos commandes et gagnez des récompenses K Plus.",
+    "anonBannerSignIn": "Se connecter",
+    "anonBannerJoin": "Créer un compte"
   },
   "auth": {
     "signIn": {
@@ -131,6 +141,7 @@
       "submit": "Se connecter",
       "submitting": "Connexion en cours…",
       "orContinueWith": "ou continuer avec",
+      "orWithEmail": "ou continuer avec un email",
       "continueWithGoogle": "Continuer avec Google",
       "continueWithFacebook": "Continuer avec Facebook",
       "redirectingToGoogle": "Redirection vers Google…",

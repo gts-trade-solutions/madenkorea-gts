@@ -103,7 +103,7 @@ export default async function AboutPage() {
         description={t("heroDescription")}
       />
 
-      <div className="container mx-auto px-4 py-12 sm:py-16">
+      <div className="container mx-auto py-12 sm:py-16">
         {/* ---- Mission pull-quote ---- */}
         <section className="max-w-3xl mx-auto text-center mb-16 sm:mb-20">
           <Quote className="h-10 w-10 text-primary/40 mx-auto mb-4" aria-hidden />

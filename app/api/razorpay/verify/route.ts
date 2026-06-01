@@ -654,6 +654,10 @@ export async function POST(req: NextRequest) {
             profile.brand.registeredAddress
               ? `<br />${escapeHtml(profile.brand.registeredAddress)}`
               : ""
+          }${
+            profile.brand.email
+              ? `<br /><a href="mailto:${escapeHtml(profile.brand.email)}" style="color: inherit; text-decoration: none">${escapeHtml(profile.brand.email)}</a>`
+              : ""
           }`
         : "";
       const partnerFooterHtml = profile.partner.legalEntityName
@@ -668,7 +672,11 @@ export async function POST(req: NextRequest) {
           }`
         : "";
       const brandFooterText = profile.brand.legalEntityName
-        ? [profile.brand.legalEntityName, profile.brand.registeredAddress]
+        ? [
+            profile.brand.legalEntityName,
+            profile.brand.registeredAddress,
+            profile.brand.email,
+          ]
             .filter(Boolean)
             .join("\n")
         : "";

@@ -34,7 +34,13 @@
     "shopCategory": "Shop {name}",
     "exploreBrand": "Explore {name}",
     "wishlist": "Wishlist",
-    "adminPortal": "Admin"
+    "adminPortal": "Admin",
+    "signIn": "Sign in",
+    "joinFree": "Join free",
+    "menuAuthHeading": "Welcome to MadenKorea",
+    "menuAuthSubheading": "Sign in or create a free account",
+    "utilityStripBody": "Sign in or create a free account for faster checkout",
+    "utilityStripDismiss": "Dismiss"
   },
   "footer": {
     "tagline": "Authentic Korean beauty and lifestyle products, delivered worldwide.",
@@ -117,7 +123,11 @@
     "intlShippingNextTier": "Next tier {label}: +{delta}.",
     "intlShippingMaxTier": "You are in the largest international shipping tier.",
     "emptyWishlistCta": "View my wishlist",
-    "promoNotAvailableInRegionToast": "This promo code is not available in your selected country. Try switching countries from the header if you are eligible."
+    "promoNotAvailableInRegionToast": "This promo code is not available in your selected country. Try switching countries from the header if you are eligible.",
+    "anonBannerTitle": "Sign in for a faster checkout",
+    "anonBannerBody": "Save your address, track orders, and earn K Plus rewards.",
+    "anonBannerSignIn": "Sign in",
+    "anonBannerJoin": "Create account"
   },
   "auth": {
     "signIn": {
@@ -131,6 +141,7 @@
       "submit": "Sign in",
       "submitting": "Signing in…",
       "orContinueWith": "or continue with",
+      "orWithEmail": "or continue with email",
       "continueWithGoogle": "Continue with Google",
       "continueWithFacebook": "Continue with Facebook",
       "redirectingToGoogle": "Redirecting to Google…",

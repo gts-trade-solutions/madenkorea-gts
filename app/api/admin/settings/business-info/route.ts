@@ -46,7 +46,7 @@ export async function GET() {
   const { data: raw } = await supabase
     .from("store_settings")
     .select(
-      "brand_legal_entity_name, brand_registered_address, brand_country_code, partner_role_label"
+      "brand_legal_entity_name, brand_registered_address, brand_country_code, brand_email, partner_role_label"
     )
     .eq("id", 1)
     .maybeSingle();
@@ -55,6 +55,7 @@ export async function GET() {
     brandRegisteredAddress:
       (raw?.brand_registered_address as string | null) ?? null,
     brandCountryCode: (raw?.brand_country_code as string | null) ?? null,
+    brandEmail: (raw?.brand_email as string | null) ?? null,
     partnerRoleLabel:
       (raw?.partner_role_label as string | null) ??
       "Authorized Importer & Distribution Partner",
@@ -103,6 +104,7 @@ export async function POST(req: Request) {
     update.brand_registered_address = clean(body.brandRegisteredAddress);
   if ("brandCountryCode" in body)
     update.brand_country_code = clean(body.brandCountryCode);
+  if ("brandEmail" in body) update.brand_email = clean(body.brandEmail);
   if ("partnerRoleLabel" in body) {
     const v = clean(body.partnerRoleLabel);
     update.partner_role_label =

@@ -34,7 +34,7 @@ const POPULAR = [
 export default function NotFound() {
   return (
     <CustomerLayout>
-      <div className="container mx-auto px-4 py-16 sm:py-24">
+      <div className="container mx-auto py-16 sm:py-24">
         <div className="max-w-2xl mx-auto text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary mb-4">
             Error 404

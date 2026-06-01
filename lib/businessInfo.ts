@@ -60,6 +60,9 @@ export type BusinessProfile = {
     legalEntityName: string | null;
     registeredAddress: string | null;
     countryCode: string | null;
+    /** Public email for the brand company (manufacturer). Surfaced on
+     *  the Contact page brand card. Optional — leave null to hide. */
+    email: string | null;
   };
   partner: {
     roleLabel: string;
@@ -109,7 +112,7 @@ export const DEFAULT_BUSINESS_INFO: BusinessInfo = {
 };
 
 export const DEFAULT_BUSINESS_PROFILE: BusinessProfile = {
-  brand: { legalEntityName: null, registeredAddress: null, countryCode: null },
+  brand: { legalEntityName: null, registeredAddress: null, countryCode: null, email: null },
   partner: {
     roleLabel: DEFAULT_PARTNER_ROLE,
     legalEntityName: null,
@@ -160,7 +163,7 @@ async function loadSnapshot(): Promise<Snapshot> {
       sb
         .from("store_settings")
         .select(
-          "legal_entity_name, registered_address, public_phone, support_email, business_hours, grievance_officer_name, grievance_officer_designation, grievance_officer_email, gstin, cdsco_registration, jurisdiction_city, marketplace_disclosure_enabled, brand_legal_entity_name, brand_registered_address, brand_country_code, partner_role_label"
+          "legal_entity_name, registered_address, public_phone, support_email, business_hours, grievance_officer_name, grievance_officer_designation, grievance_officer_email, gstin, cdsco_registration, jurisdiction_city, marketplace_disclosure_enabled, brand_legal_entity_name, brand_registered_address, brand_country_code, brand_email, partner_role_label"
         )
         .eq("id", 1)
         .maybeSingle(),
@@ -244,6 +247,7 @@ export async function getBusinessProfile(
       legalEntityName: (s.brand_legal_entity_name as string | null) ?? null,
       registeredAddress: (s.brand_registered_address as string | null) ?? null,
       countryCode: (s.brand_country_code as string | null) ?? null,
+      email: firstNonEmpty(s.brand_email as string | null),
     },
     partner: {
       roleLabel:

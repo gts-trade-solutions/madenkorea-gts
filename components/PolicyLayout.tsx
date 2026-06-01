@@ -69,7 +69,7 @@ export function PolicyShell({
   children: ReactNode;
 }) {
   return (
-    <div className="container mx-auto px-4 py-10 sm:py-14">
+    <div className="container mx-auto py-10 sm:py-14">
       <div className="mx-auto max-w-6xl lg:grid lg:grid-cols-12 lg:gap-12">
         {toc && toc.length > 0 && (
           <aside className="hidden lg:block lg:col-span-3">

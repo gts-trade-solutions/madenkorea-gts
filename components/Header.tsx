@@ -91,6 +91,28 @@ export function Header() {
   const tc = useTranslations("common");
 
   const [showSearch, setShowSearch] = useState(false);
+  // Mobile utility strip — surfaces sign in / register prompts above the
+  // ticker for anonymous visitors. Dismissed per session via sessionStorage
+  // so it does not nag returning users mid-session.
+  const [authStripDismissed, setAuthStripDismissed] = useState(true);
+  useEffect(() => {
+    if (isAuthenticated) {
+      setAuthStripDismissed(true);
+      return;
+    }
+    try {
+      const dismissed = sessionStorage.getItem("mk_auth_strip_dismissed") === "1";
+      setAuthStripDismissed(dismissed);
+    } catch {
+      setAuthStripDismissed(false);
+    }
+  }, [isAuthenticated]);
+  const dismissAuthStrip = () => {
+    setAuthStripDismissed(true);
+    try {
+      sessionStorage.setItem("mk_auth_strip_dismissed", "1");
+    } catch {}
+  };
   // Close the search popup on Esc — standard dismissal pattern, paired
   // with the visible X button inside the popup.
   useEffect(() => {
@@ -324,6 +346,29 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      {!isAuthenticated && !authStripDismissed && (
+        <div className="md:hidden border-b border-pink-200 bg-pink-50">
+          <div className="container mx-auto flex items-center gap-2 px-3 py-1.5">
+            <p className="flex-1 text-[11px] leading-tight text-pink-900">
+              {t("utilityStripBody")}
+            </p>
+            <Link
+              href="/auth/login"
+              className="shrink-0 rounded-md bg-pink-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-pink-700"
+            >
+              {t("signIn")}
+            </Link>
+            <button
+              type="button"
+              onClick={dismissAuthStrip}
+              aria-label={t("utilityStripDismiss")}
+              className="shrink-0 rounded p-1 text-pink-900/70 hover:text-pink-900"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
       <div className="overflow-hidden bg-black text-white">
         <div className="container mx-auto">
           {/* `group` so the inner .ticker-marquee can pause on hover via
@@ -431,12 +476,42 @@ export function Header() {
                   </Button>
                 </div>
 
+                {!isAuthenticated && (
+                  <div className="mx-5 mb-3 rounded-lg border border-pink-200 bg-pink-50 p-3">
+                    <p className="text-sm font-semibold text-pink-900">
+                      {t("menuAuthHeading")}
+                    </p>
+                    <p className="mt-0.5 text-xs text-pink-800/80">
+                      {t("menuAuthSubheading")}
+                    </p>
+                    <div className="mt-2.5 flex gap-2">
+                      <Button
+                        asChild
+                        size="sm"
+                        className="flex-1 bg-pink-600 hover:bg-pink-700 text-white"
+                      >
+                        <Link href="/auth/register">{t("joinFree")}</Link>
+                      </Button>
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 border-pink-300 text-pink-900 hover:bg-pink-100"
+                      >
+                        <Link href="/auth/login">{t("signIn")}</Link>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="px-5 pb-3 flex items-center gap-2 md:hidden">
-                  <Button asChild variant="outline" className="flex-1">
-                    <Link href={isAuthenticated ? "/account" : "/auth/login"}>
-                      <User className="mr-2 h-4 w-4" /> {t("account")}
-                    </Link>
-                  </Button>
+                  {isAuthenticated && (
+                    <Button asChild variant="outline" className="flex-1">
+                      <Link href="/account">
+                        <User className="mr-2 h-4 w-4" /> {t("account")}
+                      </Link>
+                    </Button>
+                  )}
                   <Button asChild variant="outline" className="flex-1 relative">
                     <Link href="/wishlist">
                       <Heart className="mr-2 h-4 w-4" /> {t("wishlist")}
@@ -567,9 +642,9 @@ export function Header() {
               <Image
                 src="/logo-gif.gif"
                 alt="MadenKorea"
-                width={133}
-                height={56}
-                className="rounded-md"
+                width={170}
+                height={72}
+                className="rounded-md h-12 w-auto md:h-14 lg:h-16"
                 priority
               />
             </Link>
@@ -774,18 +849,38 @@ export function Header() {
               <CountrySwitcher />
             </div>
 
-            <Button
-              variant="ghost"
-              size="icon"
-              className="hidden md:inline-flex"
-              asChild
-              aria-label={t("account")}
-            >
-              <Link href={isAuthenticated ? "/account" : "/auth/login"}>
-                <User className="h-5 w-5" />
-                <span className="sr-only">{t("account")}</span>
-              </Link>
-            </Button>
+            {isAuthenticated ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="hidden md:inline-flex"
+                asChild
+                aria-label={t("account")}
+              >
+                <Link href="/account">
+                  <User className="h-5 w-5" />
+                  <span className="sr-only">{t("account")}</span>
+                </Link>
+              </Button>
+            ) : (
+              <div className="hidden md:flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className="font-medium"
+                >
+                  <Link href="/auth/login">{t("signIn")}</Link>
+                </Button>
+                <Button
+                  size="sm"
+                  asChild
+                  className="bg-pink-600 hover:bg-pink-700 text-white font-medium"
+                >
+                  <Link href="/auth/register">{t("joinFree")}</Link>
+                </Button>
+              </div>
+            )}
 
             <Button
               variant="ghost"

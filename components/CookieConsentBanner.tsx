@@ -167,7 +167,7 @@ export function CookieConsentBanner() {
           className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-primary bg-background shadow-2xl animate-in slide-in-from-bottom-4 fade-in duration-500"
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
-          <div className="container mx-auto px-4 py-5 sm:py-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-6">
+          <div className="container mx-auto py-5 sm:py-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-6">
             <div className="flex items-start gap-3 flex-1 min-w-0">
               <div className="rounded-full bg-muted p-2 flex-shrink-0">
                 <Cookie className="h-5 w-5" />

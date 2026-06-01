@@ -50,6 +50,7 @@ export default function AdminSettingsPage() {
     brandLegalEntityName: "",
     brandRegisteredAddress: "",
     brandCountryCode: "KR",
+    brandEmail: "",
     partnerRoleLabel: "Authorized Importer & Distribution Partner",
     legalEntityName: "",
     registeredAddress: "",
@@ -149,6 +150,7 @@ export default function AdminSettingsPage() {
           brandLegalEntityName: info.brandLegalEntityName ?? '',
           brandRegisteredAddress: info.brandRegisteredAddress ?? '',
           brandCountryCode: info.brandCountryCode ?? 'KR',
+          brandEmail: info.brandEmail ?? '',
           partnerRoleLabel:
             info.partnerRoleLabel ?? 'Authorized Importer & Distribution Partner',
           legalEntityName: info.legalEntityName ?? '',
@@ -869,6 +871,21 @@ export default function AdminSettingsPage() {
                     }
                     placeholder="Street, City, Country"
                   />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="brandEmail">Brand email</Label>
+                  <Input
+                    id="brandEmail"
+                    type="email"
+                    value={business.brandEmail}
+                    onChange={(e) =>
+                      setBusiness((b) => ({ ...b, brandEmail: e.target.value }))
+                    }
+                    placeholder="info@brand.com"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Public contact email for the brand company. Surfaced on the storefront Contact page brand card.
+                  </p>
                 </div>
                 <div className="flex justify-end pt-2">
                   <Button onClick={handleSaveBusiness} disabled={savingBusiness}>

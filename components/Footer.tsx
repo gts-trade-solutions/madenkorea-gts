@@ -19,7 +19,7 @@ export function Footer() {
       className="text-white"
       style={{ backgroundColor: "rgb(53,159,217)" }}
     >
-      <div className="container mx-auto py-10 px-4">
+      <div className="container mx-auto py-10">
         {/* Mobile: single stacked column. md+: 12-col grid for tighter
             horizontal use of space. */}
         <div className="grid gap-8 md:grid-cols-12">
